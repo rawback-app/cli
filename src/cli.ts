@@ -18,6 +18,44 @@ async function runCommand(
   }
 }
 
+function albumMetadataOptions<T>(command: Argv<T>) {
+  return command
+    .option("description", {
+      describe: "album description (use an empty value to clear it when editing)",
+      type: "string",
+    })
+    .option("permission", {
+      choices: ["private", "protected", "public"] as const,
+      describe: "album visibility",
+      type: "string",
+    })
+    .option("tag-id", {
+      array: true,
+      describe: "tag ID (repeat or comma-separate)",
+      type: "string",
+    })
+    .option("date-from", {
+      describe: "smart-filter start date (YYYY-MM-DD or RFC3339)",
+      type: "string",
+    })
+    .option("date-to", {
+      describe: "smart-filter end date (YYYY-MM-DD or RFC3339)",
+      type: "string",
+    })
+    .option("timezone", {
+      describe: "IANA timezone for smart-filter dates",
+      type: "string",
+    })
+    .option("camera-id", {
+      describe: "smart-filter camera ID",
+      type: "number",
+    })
+    .option("lens-id", {
+      describe: "smart-filter lens ID",
+      type: "number",
+    });
+}
+
 export function createProgram(version: string): Argv {
   return yargs()
     .scriptName("rawback")
@@ -336,6 +374,583 @@ export function createProgram(version: string): Argv {
             },
           )
           .demandCommand(1, "Choose a photos command: list or upload")
+          .strict(),
+      () => {},
+    )
+    .command(
+      "album",
+      "manage albums and album articles",
+      (command) =>
+        command
+          .command(
+            "list",
+            "list albums for the authenticated account",
+            (list) =>
+              list
+                .option("search", {
+                  describe: "search non-secret albums by name",
+                  type: "string",
+                })
+                .option("page", {
+                  default: 1,
+                  describe: "result page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 20,
+                  describe: "albums per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runAlbumList } = await import("./albums.ts");
+              await runCommand(() =>
+                runAlbumList({
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                  ...(args.search !== undefined ? { search: args.search } : {}),
+                }),
+              );
+            },
+          )
+          .command(
+            "view <id>",
+            "show an album and its photos",
+            (view) =>
+              view
+                .positional("id", {
+                  describe: "album ID",
+                  type: "number",
+                })
+                .option("page", {
+                  default: 1,
+                  describe: "album image page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 24,
+                  describe: "album images per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runAlbumView } = await import("./albums.ts");
+              await runCommand(() =>
+                runAlbumView({
+                  id: args.id!,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                }),
+              );
+            },
+          )
+          .command(
+            "create",
+            "create an album",
+            (create) =>
+              albumMetadataOptions(
+                create
+                  .option("name", {
+                    demandOption: true,
+                    describe: "album name",
+                    type: "string",
+                  })
+                  .option("json", {
+                    default: false,
+                    describe: "output machine-readable JSON",
+                    type: "boolean",
+                  }),
+              ).default("permission", "private"),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runAlbumCreate } = await import("./albums.ts");
+              await runCommand(() =>
+                runAlbumCreate({
+                  name: args.name,
+                  permission: args.permission,
+                  json: args.json,
+                  ...(args.description !== undefined ? { description: args.description } : {}),
+                  ...(args.tagId !== undefined ? { tagId: args.tagId } : {}),
+                  ...(args.dateFrom !== undefined ? { dateFrom: args.dateFrom } : {}),
+                  ...(args.dateTo !== undefined ? { dateTo: args.dateTo } : {}),
+                  ...(args.timezone !== undefined ? { timezone: args.timezone } : {}),
+                  ...(args.cameraId !== undefined ? { cameraId: args.cameraId } : {}),
+                  ...(args.lensId !== undefined ? { lensId: args.lensId } : {}),
+                }),
+              );
+            },
+          )
+          .command(
+            "edit <id>",
+            "edit album metadata and smart filters",
+            (edit) =>
+              albumMetadataOptions(
+                edit
+                  .positional("id", {
+                    describe: "album ID",
+                    type: "number",
+                  })
+                  .option("name", {
+                    describe: "album name",
+                    type: "string",
+                  })
+                  .option("cover-image-id", {
+                    describe: "cover image ID",
+                    type: "number",
+                  })
+                  .option("clear-tags", {
+                    default: false,
+                    describe: "remove all smart-filter tags",
+                    type: "boolean",
+                  })
+                  .option("clear-date-from", {
+                    default: false,
+                    describe: "clear the smart-filter start date",
+                    type: "boolean",
+                  })
+                  .option("clear-date-to", {
+                    default: false,
+                    describe: "clear the smart-filter end date",
+                    type: "boolean",
+                  })
+                  .option("clear-timezone", {
+                    default: false,
+                    describe: "clear the smart-filter timezone",
+                    type: "boolean",
+                  })
+                  .option("clear-camera", {
+                    default: false,
+                    describe: "clear the smart-filter camera",
+                    type: "boolean",
+                  })
+                  .option("clear-lens", {
+                    default: false,
+                    describe: "clear the smart-filter lens",
+                    type: "boolean",
+                  })
+                  .option("json", {
+                    default: false,
+                    describe: "output machine-readable JSON",
+                    type: "boolean",
+                  }),
+              ),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runAlbumEdit } = await import("./albums.ts");
+              await runCommand(() =>
+                runAlbumEdit({
+                  id: args.id!,
+                  json: args.json,
+                  clearTags: args.clearTags,
+                  clearDateFrom: args.clearDateFrom,
+                  clearDateTo: args.clearDateTo,
+                  clearTimezone: args.clearTimezone,
+                  clearCamera: args.clearCamera,
+                  clearLens: args.clearLens,
+                  ...(args.name !== undefined ? { name: args.name } : {}),
+                  ...(args.description !== undefined ? { description: args.description } : {}),
+                  ...(args.permission !== undefined ? { permission: args.permission } : {}),
+                  ...(args.coverImageId !== undefined ? { coverImageId: args.coverImageId } : {}),
+                  ...(args.tagId !== undefined ? { tagId: args.tagId } : {}),
+                  ...(args.dateFrom !== undefined ? { dateFrom: args.dateFrom } : {}),
+                  ...(args.dateTo !== undefined ? { dateTo: args.dateTo } : {}),
+                  ...(args.timezone !== undefined ? { timezone: args.timezone } : {}),
+                  ...(args.cameraId !== undefined ? { cameraId: args.cameraId } : {}),
+                  ...(args.lensId !== undefined ? { lensId: args.lensId } : {}),
+                }),
+              );
+            },
+          )
+          .command(
+            "delete <id>",
+            "delete an album",
+            (remove) =>
+              remove
+                .positional("id", {
+                  describe: "album ID",
+                  type: "number",
+                })
+                .option("force", {
+                  default: false,
+                  describe: "delete without confirmation",
+                  type: "boolean",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runAlbumDelete } = await import("./albums.ts");
+              await runCommand(
+                () => runAlbumDelete({ id: args.id!, force: args.force, json: args.json }),
+                "Album operation cancelled.",
+              );
+            },
+          )
+          .command(
+            "image",
+            "manage album photo membership",
+            (image) =>
+              image
+                .command(
+                  "add <album-id> <image-id>",
+                  "add a photo to an album",
+                  (add) =>
+                    add
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .positional("image-id", {
+                        describe: "image ID",
+                        type: "number",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runAlbumImageAdd } = await import("./albums.ts");
+                    await runCommand(() =>
+                      runAlbumImageAdd({
+                        albumId: args.albumId!,
+                        imageId: args.imageId!,
+                        json: args.json,
+                      }),
+                    );
+                  },
+                )
+                .command(
+                  "remove <album-id> <image-id>",
+                  "remove a photo from an album",
+                  (remove) =>
+                    remove
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .positional("image-id", {
+                        describe: "image ID",
+                        type: "number",
+                      })
+                      .option("force", {
+                        default: false,
+                        describe: "remove without confirmation",
+                        type: "boolean",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runAlbumImageRemove } = await import("./albums.ts");
+                    await runCommand(
+                      () =>
+                        runAlbumImageRemove({
+                          albumId: args.albumId!,
+                          imageId: args.imageId!,
+                          force: args.force,
+                          json: args.json,
+                        }),
+                      "Album operation cancelled.",
+                    );
+                  },
+                )
+                .demandCommand(1, "Choose an album image command: add or remove")
+                .strict(),
+            () => {},
+          )
+          .command(
+            "tag",
+            "manage album smart-filter tags",
+            (tag) =>
+              tag
+                .command(
+                  "add <album-id> <tag-ids..>",
+                  "add one or more tags to an album",
+                  (add) =>
+                    add
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .positional("tag-ids", {
+                        array: true,
+                        describe: "tag IDs",
+                        type: "string",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runAlbumTagAdd } = await import("./albums.ts");
+                    await runCommand(() =>
+                      runAlbumTagAdd({
+                        albumId: args.albumId!,
+                        tagIds: args.tagIds ?? [],
+                        json: args.json,
+                      }),
+                    );
+                  },
+                )
+                .command(
+                  "remove <album-id> <tag-ids..>",
+                  "remove one or more tags from an album",
+                  (remove) =>
+                    remove
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .positional("tag-ids", {
+                        array: true,
+                        describe: "tag IDs",
+                        type: "string",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runAlbumTagRemove } = await import("./albums.ts");
+                    await runCommand(() =>
+                      runAlbumTagRemove({
+                        albumId: args.albumId!,
+                        tagIds: args.tagIds ?? [],
+                        json: args.json,
+                      }),
+                    );
+                  },
+                )
+                .demandCommand(1, "Choose an album tag command: add or remove")
+                .strict(),
+            () => {},
+          )
+          .command(
+            "article",
+            "manage album articles",
+            (article) =>
+              article
+                .command(
+                  "list",
+                  "list album articles",
+                  (list) =>
+                    list
+                      .option("page", {
+                        default: 1,
+                        describe: "result page",
+                        type: "number",
+                      })
+                      .option("page-size", {
+                        default: 12,
+                        describe: "articles per page (1-100)",
+                        type: "number",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticleList } = await import("./articles.ts");
+                    await runCommand(() =>
+                      runArticleList({
+                        page: args.page,
+                        pageSize: args.pageSize,
+                        json: args.json,
+                      }),
+                    );
+                  },
+                )
+                .command(
+                  "view <album-id>",
+                  "show an album article",
+                  (view) =>
+                    view
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .option("content-only", {
+                        default: false,
+                        describe: "output only stored Markdown content",
+                        type: "boolean",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      })
+                      .conflicts("content-only", "json"),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticleView } = await import("./articles.ts");
+                    await runCommand(() =>
+                      runArticleView({
+                        albumId: args.albumId!,
+                        contentOnly: args.contentOnly,
+                        json: args.json,
+                      }),
+                    );
+                  },
+                )
+                .command(
+                  "edit <album-id>",
+                  "create or edit an album article",
+                  (edit) =>
+                    edit
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .option("title", {
+                        describe: "article title",
+                        type: "string",
+                      })
+                      .option("content-file", {
+                        describe: "Markdown file, or - to read stdin",
+                        type: "string",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      })
+                      .check((args) => {
+                        if (args.title === undefined && args.contentFile === undefined) {
+                          throw new Error(
+                            "rawback album article edit requires --title or --content-file",
+                          );
+                        }
+                        return true;
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticleEdit } = await import("./articles.ts");
+                    await runCommand(() =>
+                      runArticleEdit({
+                        albumId: args.albumId!,
+                        json: args.json,
+                        ...(args.title !== undefined ? { title: args.title } : {}),
+                        ...(args.contentFile !== undefined
+                          ? { contentFile: args.contentFile }
+                          : {}),
+                      }),
+                    );
+                  },
+                )
+                .command(
+                  "publish <album-id>",
+                  "publish an album article",
+                  (publish) =>
+                    publish
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticlePublish } = await import("./articles.ts");
+                    await runCommand(() =>
+                      runArticlePublish({ albumId: args.albumId!, json: args.json }),
+                    );
+                  },
+                )
+                .command(
+                  "unpublish <album-id>",
+                  "return an album article to draft",
+                  (unpublish) =>
+                    unpublish
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticleUnpublish } = await import("./articles.ts");
+                    await runCommand(() =>
+                      runArticleUnpublish({ albumId: args.albumId!, json: args.json }),
+                    );
+                  },
+                )
+                .command(
+                  "delete <album-id>",
+                  "delete an album article",
+                  (remove) =>
+                    remove
+                      .positional("album-id", {
+                        describe: "album ID",
+                        type: "number",
+                      })
+                      .option("force", {
+                        default: false,
+                        describe: "delete without confirmation",
+                        type: "boolean",
+                      })
+                      .option("json", {
+                        default: false,
+                        describe: "output machine-readable JSON",
+                        type: "boolean",
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return;
+                    const { runArticleDelete } = await import("./articles.ts");
+                    await runCommand(
+                      () =>
+                        runArticleDelete({
+                          albumId: args.albumId!,
+                          force: args.force,
+                          json: args.json,
+                        }),
+                      "Article operation cancelled.",
+                    );
+                  },
+                )
+                .demandCommand(
+                  1,
+                  "Choose an album article command: list, view, edit, publish, unpublish, or delete",
+                )
+                .strict(),
+            () => {},
+          )
+          .demandCommand(
+            1,
+            "Choose an album command: list, view, create, edit, delete, image, tag, or article",
+          )
           .strict(),
       () => {},
     )

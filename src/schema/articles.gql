@@ -1,0 +1,89 @@
+fragment CliArticleImageFields on Image {
+  id
+  displayName
+  filename
+  url
+  thumbnailUrl
+  width
+  height
+  blurhash
+  rotation
+  editedImages {
+    url
+    thumbnailUrl
+    width
+    height
+    blurhash
+    createdAt
+  }
+}
+
+fragment CliArticleFields on Article {
+  id
+  title
+  content
+  status
+  album {
+    id
+    name
+    slug
+  }
+  images {
+    ...CliArticleImageFields
+  }
+  createdAt
+  updatedAt
+}
+
+query CliArticles($pagination: InputPagination!) {
+  me {
+    articles(pagination: $pagination) {
+      edges {
+        ...CliArticleFields
+      }
+      pageInfo {
+        page
+        pageSize
+        totalCount
+        totalPages
+        hasNextPage
+        hasPreviousPage
+      }
+    }
+  }
+}
+
+query CliAlbumArticle($albumId: Int!) {
+  me {
+    album(id: $albumId) {
+      id
+      name
+      slug
+      article {
+        ...CliArticleFields
+      }
+    }
+  }
+}
+
+mutation CliUpsertArticle($input: UpsertArticleInput!) {
+  upsertArticle(input: $input) {
+    ...CliArticleFields
+  }
+}
+
+mutation CliPublishArticle($id: Int!) {
+  publishArticle(id: $id) {
+    ...CliArticleFields
+  }
+}
+
+mutation CliUnpublishArticle($id: Int!) {
+  unpublishArticle(id: $id) {
+    ...CliArticleFields
+  }
+}
+
+mutation CliDeleteArticle($id: Int!) {
+  deleteArticle(id: $id)
+}

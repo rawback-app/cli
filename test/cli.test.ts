@@ -29,6 +29,7 @@ describe("rawback CLI", () => {
     expect(result.stdout).toContain("auth [subcommand]");
     expect(result.stdout).toContain("credentials <subcommand> [id]");
     expect(result.stdout).toContain("photos");
+    expect(result.stdout).toContain("album");
     expect(result.stdout).toContain("uploads");
     expect(result.stdout).toContain("usage");
     expect(result.stdout).toContain("pricing");
