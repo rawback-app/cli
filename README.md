@@ -38,7 +38,7 @@ bun run format:check
 
 ## API clients
 
-Future commands share the clients exported from `src/api.ts`. The factory reads
+Commands share the clients exported from `src/api.ts`. The factory reads
 credentials from `~/.rawback/credentials.json`, configures JSON REST requests,
 and creates an Apollo Client for `/api/v2/graphql`:
 
@@ -102,6 +102,7 @@ need SFTP. Uploads use this nested configuration:
 
 ```yaml
 apiHost: https://api.rawback.app
+webHost: https://rawback.app
 sftp:
   endpoint: sftp://ftp.rawback.app:2222
   username: annatarhe
@@ -112,7 +113,7 @@ sftp:
 
 The endpoint contains only the host and optional port; credentials stay in
 `sftp.username` and `sftp.password`. Because this file contains a password,
-`upload` requires mode `0600` on Unix. An explicit `apiHost` passed to the client
+`photos upload` requires mode `0600` on Unix. An explicit `apiHost` passed to the client
 factory takes precedence over the config file.
 
 ## GraphQL generation
@@ -147,7 +148,12 @@ rawback auth status
 rawback credentials list [--json]
 rawback credentials add [--name <name>] [--json]
 rawback credentials delete <id> [--force] [--json]
-rawback upload --path <file-or-directory> [--concurrency 4] [--dry-run]
+rawback photos list [filters] [--page 1] [--page-size 24] [--json]
+rawback photos upload --path <file-or-directory> [--concurrency 4] [--dry-run]
+rawback uploads [--status <status>] [--page 1] [--page-size 20] [--json]
+rawback usage [--json]
+rawback pricing [--interval all|month|year] [--json]
+rawback web
 rawback [options]
 
 Rawback CLI for humans and AI agents
@@ -184,7 +190,7 @@ immediately because it cannot be retrieved by `list`. Deletion asks for
 confirmation unless `--force` is supplied. Every credentials action supports
 `--json` for automation.
 
-`rawback upload` accepts one supported photo/RAW file or recursively scans a
+`rawback photos upload` accepts one supported photo/RAW file or recursively scans a
 directory, skipping symbolic links. It validates the authenticated account,
 enabled SFTP credentials, username, exact remote duplicates, basename collisions,
 and remaining quota before opening one SFTP connection. Up to `--concurrency`
@@ -200,6 +206,18 @@ The first observed SSH host key is saved in the same database unless
 and skipped counts, bytes, and an ETA based on matching upload history, falling
 back to a labeled 10 Mbps estimate when history is unavailable.
 
+`rawback photos list` displays a table by default and supports the same search,
+status, camera, lens, capture-date, aperture, focal-length, rating, location, and
+GPS filters as the web image library. Use `--json` for a named `photos` and
+`pageInfo` response. `rawback uploads` lists upload sessions with optional status
+filtering. Both commands use page-based pagination.
+
+`rawback usage` reports storage, AI credits, face recognition, daily trends, top
+images, recent operations, and credit costs. `rawback pricing` shows all plans and
+add-ons by default, with optional monthly or yearly filtering. Both support JSON.
+
+`rawback web` opens the authenticated user's overview page. Set `webHost` in the
+config file to override the default `https://rawback.app` host.
 Unknown arguments are reported on stderr and exit with status 1.
 
 ## Releases

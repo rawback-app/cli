@@ -7,6 +7,7 @@ export {
 export {
   ConfigError,
   DEFAULT_CONFIG_PATH,
+  DEFAULT_WEB_HOST,
   readConfig,
   type RawbackConfig,
   type SftpConfig,

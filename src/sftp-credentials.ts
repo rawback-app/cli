@@ -6,6 +6,7 @@ import {
   type CreateSftpCredentialMutation,
   type SftpCredentialsQuery,
 } from "./gql/graphql.ts";
+import { formatTable, formatTimestamp, sanitizeCell } from "./output.ts";
 
 type SftpCredential = SftpCredentialsQuery["sftpCredentials"][number];
 type CreatedSftpCredential = CreateSftpCredentialMutation["createSFTPCredential"];
@@ -138,18 +139,6 @@ function serializeCreatedCredential(credential: CreatedSftpCredential) {
   };
 }
 
-function formatTimestamp(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-  const date = new Date(value * 1000);
-  return Number.isNaN(date.getTime()) ? "—" : date.toISOString();
-}
-
-function sanitizeCell(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 function formatCredentialTable(credentials: SftpCredential[]): string {
   const headers = ["ID", "NAME", "STATUS", "CREATED", "LAST USED"];
   const rows = credentials.map((credential) => [
@@ -159,17 +148,7 @@ function formatCredentialTable(credentials: SftpCredential[]): string {
     formatTimestamp(credential.createdAt),
     formatTimestamp(credential.lastUsedAt),
   ]);
-  const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
-  );
-  const formatRow = (row: string[]) =>
-    row.map((cell, index) => cell.padEnd(widths[index] ?? cell.length)).join("  ");
-
-  return [
-    formatRow(headers),
-    formatRow(widths.map((width) => "-".repeat(width))),
-    ...rows.map(formatRow),
-  ].join("\n");
+  return formatTable(headers, rows);
 }
 
 export async function runSftpCredentialList(
