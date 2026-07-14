@@ -1,33 +1,209 @@
 # Rawback CLI
 
-Command-line tools for Rawback users and AI agents.
+Use [Rawback](https://rawback.app) from a terminal or an automation script. The
+CLI can sign in to your account, upload photo and RAW files, search your library,
+inspect usage, and open your profile in a browser.
 
-## Requirements
+## What you can do
 
-- [Bun 1.3.14](https://bun.sh/)
+- Upload a file or recursively upload a directory over SFTP.
+- Safely resume an interrupted upload and skip files already uploaded.
+- Search photos by metadata, capture date, rating, location, and GPS data.
+- Manage the SFTP credentials associated with your account.
+- Inspect upload sessions, storage usage, AI credits, and pricing.
+- Request machine-readable JSON from read and credential commands.
+
+## Install
+
+### Standalone binary
+
+Download the archive for your operating system and CPU from
+[GitHub Releases](https://github.com/rawback-app/cli/releases). Extract the
+`rawback` binary (`rawback.exe` on Windows), put it in a directory on your
+`PATH`, and verify it.
+
+On Linux or macOS, replace `<archive>` with the downloaded `.tar.gz` filename:
+
+```bash
+tar -xzf <archive>
+mkdir -p ~/.local/bin
+install -m 0755 rawback ~/.local/bin/rawback
+rawback --version
+```
+
+Make sure `~/.local/bin` is on your `PATH`. On Windows, extract the `.zip` in
+PowerShell, then move `rawback.exe` into a directory on `PATH`:
+
+```powershell
+Expand-Archive .\rawback_Windows_x86_64.zip -DestinationPath .
+.\rawback.exe --version
+```
+
+Once installed, view the available commands with:
+
+```bash
+rawback --help
+```
+
+Release archives are available for Linux (x86-64 and arm64), macOS (x86-64 and
+Apple silicon), and Windows (x86-64). The standalone binary does not require Bun.
+
+> Binaries are not currently code-signed or notarized. If your platform blocks
+> the downloaded binary, build it from source instead.
+
+### Build from source
+
+[Bun 1.3.14](https://bun.sh/) is required:
+
+```bash
+git clone https://github.com/rawback-app/cli.git
+cd cli
+bun install --frozen-lockfile
+bun run build
+./dist/rawback --version
+```
+
+Move `dist/rawback` somewhere on your `PATH` if you want to run it outside the
+repository.
+
+## Quick start
+
+### 1. Sign in
+
+```bash
+rawback auth
+rawback auth status
+```
+
+`rawback auth` securely prompts for your email and password. The resulting
+access and refresh tokens are saved in `~/.rawback/credentials.json`. Expired
+access tokens are refreshed automatically when possible.
+
+### 2. Browse your account
+
+These commands work immediately after sign-in:
+
+```bash
+rawback photos list
+rawback uploads
+rawback usage
+rawback pricing
+rawback web
+```
+
+Add `--json` to data-oriented commands when you need structured output:
+
+```bash
+rawback photos list --page-size 10 --json
+rawback usage --json
+```
+
+### 3. Set up uploads
+
+Create an SFTP credential. Its password is displayed only once, so save it
+before continuing:
+
+```bash
+rawback cred add --name "My computer"
+```
+
+Create `~/.rawback/config.yml` with the account slug shown by
+`rawback auth status` and the generated password:
+
+```yaml
+sftp:
+  endpoint: sftp://ftp.rawback.app:2222
+  username: your-account-slug
+  password: "generated-password"
+```
+
+On Linux and macOS, protect the file because it contains a password:
+
+```bash
+chmod 600 ~/.rawback/config.yml
+```
+
+Preview an upload, then run it:
+
+```bash
+rawback photos upload --path ~/Pictures/Export --dry-run
+rawback photos upload --path ~/Pictures/Export
+```
+
+Directories are scanned recursively. Symbolic links and unsupported files are
+skipped. Supported formats are ARW, CR2, CR3, DNG, HEIC, HEIF, JPEG, JPG, NEF,
+PNG, RAF, and WebP.
+
+For host-key pinning, resumable-upload behavior, and troubleshooting, see
+[Configuration and uploads](docs/configuration.md).
+
+## Common examples
+
+```bash
+# Search filenames and metadata
+rawback photos list --search "Iceland"
+
+# Combine filters; repeat or comma-separate multi-value filters
+rawback photos list --camera-make Sony --rate 4,5 --has-gps
+
+# Limit photos to a capture window
+rawback photos list \
+  --captured-after 2026-01-01 \
+  --captured-before 2026-02-01
+
+# Upload up to eight files in parallel
+rawback photos upload --path ./photos --concurrency 8
+
+# Inspect failed upload sessions
+rawback uploads --status failed
+
+# List, create, and revoke SFTP credentials
+rawback cred list
+rawback cred add --name "Home workstation"
+rawback cred del 7
+```
+
+See the [command reference](docs/commands.md) for every command, option, default,
+and automation note. You can also ask the binary for context-specific help:
+
+```bash
+rawback --help
+rawback photos list --help
+rawback photos upload --help
+```
+
+## Files and security
+
+Rawback stores local state under `~/.rawback/`:
+
+| File                     | Purpose                                             |
+| ------------------------ | --------------------------------------------------- |
+| `credentials.json`       | Access and refresh tokens created by `rawback auth` |
+| `config.yml`             | Optional API/web hosts and SFTP upload settings     |
+| `upload-progress.sqlite` | Resume history and trusted SFTP host keys           |
+
+The CLI creates credential and upload-state files with restrictive permissions
+on Unix. You create `config.yml` yourself, so upload commands require it to have
+mode `0600` on Unix. Never commit files from `~/.rawback/` or paste their secrets
+into issues and logs.
 
 ## Development
 
-Install the pinned dependencies:
+Install the pinned dependencies and run the CLI from source:
 
 ```bash
 bun install --frozen-lockfile
-```
-
-Run the CLI from source:
-
-```bash
 bun run dev -- --help
 ```
 
-Run all validation checks and compile a local standalone binary:
+Run the complete local validation suite and smoke-test the compiled binary:
 
 ```bash
 bun run check
 ./dist/rawback --version
 ```
 
-Individual checks are also available:
+Useful focused checks are:
 
 ```bash
 bun run typecheck
@@ -36,199 +212,14 @@ bun run lint
 bun run format:check
 ```
 
-## API clients
-
-Commands share the clients exported from `src/api.ts`. The factory reads
-credentials from `~/.rawback/credentials.json`, configures JSON REST requests,
-and creates an Apollo Client for `/api/v2/graphql`:
-
-```ts
-import { createRawbackClient } from "./api.ts";
-
-const client = await createRawbackClient();
-// Pass generated documents to client.graphql.query or client.graphql.mutate.
-```
-
-GraphQL operations live in `src/schema/**/*.gql`; the auth status query is the
-first generated operation. Regenerate the typed documents after adding more.
-
-The API host is resolved in this order:
-
-1. `apiHost` passed to `createRawbackClient`
-2. `apiHost` in `~/.rawback/config.yml`
-3. `https://api.rawback.app`
-
-Both REST and GraphQL requests send `User-Agent: rawback-cli@<version>`. When
-credentials are present, they also send the saved access token as a Bearer token.
-Apollo queries default to `no-cache` and `errorPolicy: 'all'`, allowing callers to
-inspect partial data and GraphQL errors together.
-
-The REST client only handles JSON in this foundation phase:
-
-```ts
-const response = await client.http.requestJson<MyResponse>("/api/v1/example", {
-  method: "POST",
-  body: { example: true },
-});
-```
-
-Non-successful status codes throw `HttpError` with the parsed response body.
-Malformed JSON throws `JsonResponseError`.
-
-## Credentials
-
-Credentials use this shape and are written atomically with restrictive permissions
-on Unix:
-
-```json
-{
-  "token": "access token",
-  "refreshToken": "refresh token"
-}
-```
-
-Use `readCredentials`, `writeCredentials`, and `deleteCredentials` from
-`src/api.ts`. The credentials directory and file are created only when credentials
-are first saved.
-
-Authenticated clients automatically exchange an expired access token through
-`/api/v1/auth/refresh`, save the rotated token pair, and retry the failed REST or
-GraphQL request once.
-
-## Configuration
-
-All commands read `~/.rawback/config.yml`. The file is optional for commands that do not
-need SFTP. Uploads use this nested configuration:
-
-```yaml
-apiHost: https://api.rawback.app
-webHost: https://rawback.app
-sftp:
-  endpoint: sftp://ftp.rawback.app:2222
-  username: annatarhe
-  password: "generated SFTP credential password"
-  # Optional explicit pin; otherwise the first host key is trusted and saved.
-  # hostFingerprint: SHA256:base64-fingerprint
-```
-
-The endpoint contains only the host and optional port; credentials stay in
-`sftp.username` and `sftp.password`. Because this file contains a password,
-`photos upload` requires mode `0600` on Unix. An explicit `apiHost` passed to the client
-factory takes precedence over the config file.
-
-## GraphQL generation
-
-GraphQL operations are authored in `src/schema/*.gql`. The committed
-`graphql.schema.json` lets standalone CLI checkouts regenerate types
-without cloning the server repository:
-
-```bash
-bun run graphql:generate
-```
-
-When the sibling `../server` repository is available, refresh both the schema
-snapshot and generated client with:
-
-```bash
-bun run g
-```
-
-Generated files under `src/gql/` are ignored and must not be committed. The
-development, build, typecheck, test, and validation scripts regenerate them as
-needed; `bun run graphql:check` also verifies that the output remains ignored.
-
-Install the Git pre-commit hooks with `bun run hooks:install`. The hooks format
-and lint staged TypeScript and JavaScript files using the same tools as CI.
-
-## Usage
-
-```text
-rawback auth [--email <email>] [--password <password>] [--force]
-rawback auth status
-rawback credentials list [--json]
-rawback credentials add [--name <name>] [--json]
-rawback credentials delete <id> [--force] [--json]
-rawback photos list [filters] [--page 1] [--page-size 24] [--json]
-rawback photos upload --path <file-or-directory> [--concurrency 4] [--dry-run]
-rawback uploads [--status <status>] [--page 1] [--page-size 20] [--json]
-rawback usage [--json]
-rawback pricing [--interval all|month|year] [--json]
-rawback web
-rawback [options]
-
-Rawback CLI for humans and AI agents
-
-Options:
-  -h, --help     display help for command    [boolean]
-  -V, --version  output the current version  [boolean]
-```
-
-`rawback auth` prompts for any omitted email or password. If stored credentials
-still authenticate successfully, it asks before replacing them; `--force` skips
-that check and confirmation. Supplying both credentials with `--force` supports
-non-interactive login. Passwords passed with `--password` may be visible in shell
-history and process listings.
-
-`rawback auth status` validates the saved session through the API and prints basic
-account information. Both commands refresh expired access tokens when the stored
-refresh token is still valid.
-
-`rawback credentials` manages the authenticated account's FTP/SFTP upload
-credentials. The command is also available as `rawback cred`, and `delete` can
-be shortened to `del`:
-
-```bash
-rawback cred list
-rawback cred add --name "Home PC"
-rawback cred del 7
-rawback cred del 7 --force --json
-```
-
-`add` prompts for the name when it is omitted. The server always generates the
-password; it cannot be chosen or changed. Save it from the create response
-immediately because it cannot be retrieved by `list`. Deletion asks for
-confirmation unless `--force` is supplied. Every credentials action supports
-`--json` for automation.
-
-`rawback photos upload` accepts one supported photo/RAW file or recursively scans a
-directory, skipping symbolic links. It validates the authenticated account,
-enabled SFTP credentials, username, exact remote duplicates, basename collisions,
-and remaining quota before opening one SFTP connection. Up to `--concurrency`
-(default 4, maximum 16) files stream in parallel over that connection.
-
-Completed files are recorded in `~/.rawback/upload-progress.sqlite` using Bun's
-built-in SQLite support. Re-running the command skips completed files whose path,
-size, and modification time still match; an interrupted file restarts from zero.
-The first observed SSH host key is saved in the same database unless
-`hostFingerprint` pins it explicitly.
-
-`--dry-run` does not connect to SFTP or modify progress state. It reports pending
-and skipped counts, bytes, and an ETA based on matching upload history, falling
-back to a labeled 10 Mbps estimate when history is unavailable.
-
-`rawback photos list` displays a table by default and supports the same search,
-status, camera, lens, capture-date, aperture, focal-length, rating, location, and
-GPS filters as the web image library. Use `--json` for a named `photos` and
-`pageInfo` response. `rawback uploads` lists upload sessions with optional status
-filtering. Both commands use page-based pagination.
-
-`rawback usage` reports storage, AI credits, face recognition, daily trends, top
-images, recent operations, and credit costs. `rawback pricing` shows all plans and
-add-ons by default, with optional monthly or yearly filtering. Both support JSON.
-
-`rawback web` opens the authenticated user's overview page. Set `webHost` in the
-config file to override the default `https://rawback.app` host.
-Unknown arguments are reported on stderr and exit with status 1.
+Install the repository's pre-commit hooks with `bun run hooks:install`. More
+architecture, GraphQL generation, testing, and release notes are in
+[the contributor guide](docs/development.md). Coding agents should also read
+[`AGENTS.md`](AGENTS.md) before making changes.
 
 ## Releases
 
-Release Please maintains versions and the changelog from Conventional Commits.
-When its release PR is merged, GoReleaser compiles and publishes standalone
-archives for:
-
-- Linux x86-64 (baseline) and arm64
-- macOS x86-64 and arm64
-- Windows x86-64 (baseline)
-
-Each GitHub Release includes a `checksums.txt` file. Package-manager publishing,
-code signing, and notarization are not configured yet.
+[Release Please](https://github.com/googleapis/release-please) derives versions
+and changelogs from Conventional Commits. Merging its release PR triggers
+GoReleaser, which builds the platform archives and publishes a
+`checksums.txt` file with each GitHub Release.
