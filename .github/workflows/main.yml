@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Verify generated GraphQL client
+        run: bun run graphql:check
+
       - name: Typecheck
         run: bun run typecheck
 

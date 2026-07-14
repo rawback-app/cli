@@ -1,0 +1,6 @@
+overwrite: true
+schema: "../server/schema/**/*.gql"
+generates:
+  ./graphql.schema.json:
+    plugins:
+      - introspection

@@ -7,18 +7,29 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build --compile --minify --outfile dist/rawback src/index.ts",
+    "g": "bun run graphql:schema && bun run graphql:generate",
+    "graphql:schema": "gql-gen --config codegen.schema.yml",
+    "graphql:generate": "gql-gen --config codegen.yml",
+    "graphql:check": "bun run graphql:generate && git diff --exit-code -- src/gql",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint src test",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "check": "bun run typecheck && bun run test && bun run lint && bun run format:check && bun run build",
+    "check": "bun run graphql:check && bun run typecheck && bun run test && bun run lint && bun run format:check && bun run build",
     "hooks:install": "lefthook install"
   },
   "dependencies": {
+    "@apollo/client": "^4.2.0",
+    "graphql": "^16.14.0",
+    "rxjs": "^7.8.0",
     "yargs": "^18.0.0"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^6.3.1",
+    "@graphql-codegen/client-preset": "^5.3.0",
+    "@graphql-codegen/introspection": "^5.0.2",
+    "@graphql-typed-document-node/core": "^3.2.0",
     "@types/bun": "latest",
     "@types/yargs": "^17.0.35",
     "lefthook": "^2.1.10",
