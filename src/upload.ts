@@ -179,11 +179,16 @@ function canonicalEndpoint(value: string): string {
   return `sftp://${url.hostname}:${url.port || "22"}`;
 }
 
+type RequiredSftpConfig = {
+  [Key in "endpoint" | "username" | "password"]: NonNullable<SftpConfig[Key]>;
+} & {
+  hostFingerprint?: NonNullable<SftpConfig["hostFingerprint"]>;
+};
+
 function requiredSftpConfig(
   config: SftpConfig | undefined,
   configPath: string,
-): Required<Pick<SftpConfig, "endpoint" | "username" | "password">> &
-  Pick<SftpConfig, "hostFingerprint"> {
+): RequiredSftpConfig {
   const missing = (["endpoint", "username", "password"] as const).filter((key) => !config?.[key]);
   if (missing.length > 0) {
     throw new Error(`Missing ${missing.map((key) => `sftp.${key}`).join(", ")} in ${configPath}`);
