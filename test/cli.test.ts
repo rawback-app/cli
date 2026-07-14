@@ -90,10 +90,18 @@ describe("rawback CLI", () => {
     expect(result.stdout).toContain("manage SFTP credentials");
     expect(result.stdout).toContain('choices: "list", "add", "delete", "del"');
     expect(result.stdout).toContain("--name");
-    expect(result.stdout).toContain("--password");
+    expect(result.stdout).not.toContain("--password");
     expect(result.stdout).toContain("--force");
     expect(result.stdout).toContain("--json");
-    expect(result.stdout).toContain("shell history");
+  });
+
+  test("rejects custom SFTP passwords without making a request", () => {
+    const result = runCli("cred", "add", "--name", "Camera", "--password", "custom-password");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Unknown argument: password");
+    expect(result.stderr).not.toContain("unauthorized");
   });
 
   test("rejects options that do not belong to list without making a request", () => {

@@ -1,6 +1,6 @@
 {
   "b1ed2f39e8c0f4be476fc3e5e17a133fc87256ab": "query AuthStatus { me { accountStatus email id name slug subscriptionStatus tier } }",
   "ed0f410bd1da62db1fe9e5d0eddfa41d8b590f9b": "query SftpCredentials { sftpCredentials { createdAt enabled id lastUsedAt name } }",
-  "8021783905f059c8d0f55da26932257be0cd88e9": "mutation CreateSftpCredential($name: String!, $password: String) { createSFTPCredential(name: $name, password: $password) { createdAt id name password } }",
+  "be995c46d47ee9bd48d564a18786084cc0c47198": "mutation CreateSftpCredential($name: String!) { createSFTPCredential(name: $name) { createdAt id name password } }",
   "4cb78c0ab43e8534df63ababc233ece29b2e7598": "mutation DeleteSftpCredential($id: Int!) { deleteSFTPCredential(id: $id) }"
 }

@@ -15,11 +15,11 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  */
 type Documents = {
     "query AuthStatus {\n  me {\n    id\n    name\n    email\n    slug\n    tier\n    subscriptionStatus\n    accountStatus\n  }\n}": typeof types.AuthStatusDocument,
-    "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!, $password: String) {\n  createSFTPCredential(name: $name, password: $password) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}": typeof types.SftpCredentialsDocument,
+    "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!) {\n  createSFTPCredential(name: $name) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}": typeof types.SftpCredentialsDocument,
 };
 const documents: Documents = {
     "query AuthStatus {\n  me {\n    id\n    name\n    email\n    slug\n    tier\n    subscriptionStatus\n    accountStatus\n  }\n}": types.AuthStatusDocument,
-    "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!, $password: String) {\n  createSFTPCredential(name: $name, password: $password) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}": types.SftpCredentialsDocument,
+    "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!) {\n  createSFTPCredential(name: $name) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}": types.SftpCredentialsDocument,
 };
 
 /**
@@ -43,7 +43,7 @@ export function graphql(source: "query AuthStatus {\n  me {\n    id\n    name\n 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!, $password: String) {\n  createSFTPCredential(name: $name, password: $password) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}"): (typeof documents)["query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!, $password: String) {\n  createSFTPCredential(name: $name, password: $password) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}"];
+export function graphql(source: "query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!) {\n  createSFTPCredential(name: $name) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}"): (typeof documents)["query SftpCredentials {\n  sftpCredentials {\n    id\n    name\n    lastUsedAt\n    enabled\n    createdAt\n  }\n}\n\nmutation CreateSftpCredential($name: String!) {\n  createSFTPCredential(name: $name) {\n    id\n    name\n    password\n    createdAt\n  }\n}\n\nmutation DeleteSftpCredential($id: Int!) {\n  deleteSFTPCredential(id: $id)\n}"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

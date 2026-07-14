@@ -31,7 +31,6 @@ export interface SftpCredentialListOptions {
 export interface SftpCredentialAddOptions {
   json?: boolean;
   name?: string;
-  password?: string;
 }
 
 export interface SftpCredentialDeleteOptions {
@@ -90,21 +89,6 @@ function validateName(value: string): string {
     throw new Error("Credential name must be at most 50 characters");
   }
   return name;
-}
-
-function validatePassword(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const byteLength = new TextEncoder().encode(value).byteLength;
-  if (byteLength < 8) {
-    throw new Error("Custom password must be at least 8 bytes");
-  }
-  if (byteLength > 72) {
-    throw new Error("Custom password must be at most 72 bytes");
-  }
-  return value;
 }
 
 function validateId(value: number): number {
@@ -211,14 +195,10 @@ export async function runSftpCredentialAdd(
 ): Promise<void> {
   const prompts = dependencies.prompts ?? defaultPrompts();
   const name = validateName(options.name ?? (await prompts.name()));
-  const password = validatePassword(options.password);
   const client = await createClient(dependencies);
   const result = await client.graphql.mutate({
     mutation: CreateSftpCredentialDocument,
-    variables: {
-      name,
-      ...(password !== undefined ? { password } : {}),
-    },
+    variables: { name },
   });
   if (result.error) {
     throw result.error;

@@ -177,49 +177,7 @@ describe("SFTP credential commands", () => {
     expect(warnings).toEqual(["Save this password now. It will only be shown once."]);
   });
 
-  test("creates a credential with a custom password and emits clean JSON", async () => {
-    const output: string[] = [];
-    const warnings: string[] = [];
-    const dependencies = await temporaryDependencies(
-      (body) => {
-        expect(body.variables).toEqual({
-          name: "Camera",
-          password: "custom-password",
-        });
-        return Response.json({
-          data: {
-            createSFTPCredential: {
-              id: 12,
-              name: "Camera",
-              password: "custom-password",
-              createdAt: 456,
-              __typename: "SFTPCredentialWithPassword",
-            },
-          },
-        });
-      },
-      {
-        prompts: unexpectedPrompts(),
-        stderr: (message) => warnings.push(message),
-        stdout: (message) => output.push(message),
-      },
-    );
-
-    await runSftpCredentialAdd(
-      { json: true, name: "Camera", password: "custom-password" },
-      dependencies,
-    );
-
-    expect(JSON.parse(output.join("\n"))).toEqual({
-      id: 12,
-      name: "Camera",
-      password: "custom-password",
-      createdAt: 456,
-    });
-    expect(warnings).toEqual(["Save this password now. It will only be shown once."]);
-  });
-
-  test("validates add input before creating an API client", async () => {
+  test("validates add names before creating an API client", async () => {
     let requests = 0;
     const dependencies = await temporaryDependencies(
       () => {
@@ -235,12 +193,6 @@ describe("SFTP credential commands", () => {
     expect(runSftpCredentialAdd({ name: "x".repeat(51) }, dependencies)).rejects.toThrow(
       "at most 50 characters",
     );
-    expect(
-      runSftpCredentialAdd({ name: "Camera", password: "1234567" }, dependencies),
-    ).rejects.toThrow("at least 8 bytes");
-    expect(
-      runSftpCredentialAdd({ name: "Camera", password: "界".repeat(25) }, dependencies),
-    ).rejects.toThrow("at most 72 bytes");
     expect(requests).toBe(0);
   });
 

@@ -95,11 +95,6 @@ export function createProgram(version: string): Argv {
             describe: "credential name (prompted when omitted)",
             type: "string",
           })
-          .option("password", {
-            describe:
-              "custom password (may be visible in shell history and process listings; generated when omitted)",
-            type: "string",
-          })
           .option("force", {
             default: false,
             describe: "delete without confirmation",
@@ -112,12 +107,7 @@ export function createProgram(version: string): Argv {
           })
           .check((args) => {
             if (args.subcommand === "list") {
-              if (
-                args.id !== undefined ||
-                args.name !== undefined ||
-                args.password !== undefined ||
-                args.force
-              ) {
+              if (args.id !== undefined || args.name !== undefined || args.force) {
                 throw new Error("rawback cred list only accepts --json");
               }
               return true;
@@ -133,7 +123,7 @@ export function createProgram(version: string): Argv {
             if (args.id === undefined) {
               throw new Error(`rawback cred ${args.subcommand} requires a credential ID`);
             }
-            if (args.name !== undefined || args.password !== undefined) {
+            if (args.name !== undefined) {
               throw new Error(`rawback cred ${args.subcommand} does not accept add options`);
             }
             return true;
@@ -158,7 +148,6 @@ export function createProgram(version: string): Argv {
               runSftpCredentialAdd({
                 json: args.json,
                 ...(args.name !== undefined ? { name: args.name } : {}),
-                ...(args.password !== undefined ? { password: args.password } : {}),
               }),
             "Credential operation cancelled.",
           );
