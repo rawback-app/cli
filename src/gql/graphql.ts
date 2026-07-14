@@ -1,4 +1,5 @@
 /* eslint-disable */
+import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = T | null | undefined;
 export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
@@ -2908,3 +2909,11 @@ export type UserPreferences = {
   visiblePeopleIds: Array<Scalars['Int']['output']>;
   writeGeoToExifIfEmpty: Scalars['Boolean']['output'];
 };
+
+export type AuthStatusQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AuthStatusQuery = { __typename?: 'Query', me: { __typename?: 'User', id: number, name: string, email: string, slug: string, tier: string, subscriptionStatus: string, accountStatus: string } };
+
+
+export const AuthStatusDocument = {"__meta__":{"hash":"b1ed2f39e8c0f4be476fc3e5e17a133fc87256ab"},"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AuthStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"tier"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionStatus"}},{"kind":"Field","name":{"kind":"Name","value":"accountStatus"}}]}}]}}]} as unknown as DocumentNode<AuthStatusQuery, AuthStatusQueryVariables>;

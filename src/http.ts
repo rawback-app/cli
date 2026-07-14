@@ -66,7 +66,7 @@ function getErrorMessage(response: Response, body: unknown): string {
 }
 
 export function resolveApiHost(apiHost?: string): string {
-  const value = apiHost ?? process.env.RAWBACK_API_HOST ?? DEFAULT_API_HOST;
+  const value = apiHost ?? DEFAULT_API_HOST;
   const url = new URL(value);
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {

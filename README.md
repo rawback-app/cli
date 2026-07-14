@@ -49,13 +49,13 @@ const client = await createRawbackClient();
 // Pass generated documents to client.graphql.query or client.graphql.mutate.
 ```
 
-No GraphQL operations are included yet. Add operations to `src/schema/**/*.gql`
-as commands are implemented, then regenerate the typed documents.
+GraphQL operations live in `src/schema/**/*.gql`; the auth status query is the
+first generated operation. Regenerate the typed documents after adding more.
 
 The API host is resolved in this order:
 
 1. `apiHost` passed to `createRawbackClient`
-2. `RAWBACK_API_HOST`
+2. `apiHost` in `~/.rawback/config.yml`
 3. `https://api.rawback.app`
 
 Both REST and GraphQL requests send `User-Agent: rawback-cli@<version>`. When
@@ -91,6 +91,22 @@ Use `readCredentials`, `writeCredentials`, and `deleteCredentials` from
 `src/api.ts`. The credentials directory and file are created only when credentials
 are first saved.
 
+Authenticated clients automatically exchange an expired access token through
+`/api/v1/auth/refresh`, save the rotated token pair, and retry the failed REST or
+GraphQL request once.
+
+## Configuration
+
+All commands read `~/.rawback/config.yml`. The file is optional and may be empty.
+The first supported setting is an API host override:
+
+```yaml
+apiHost: https://api.rawback.app
+```
+
+Only HTTP and HTTPS hosts are accepted. An explicit `apiHost` passed to the client
+factory takes precedence over the config file.
+
 ## GraphQL generation
 
 The committed `graphql.schema.json` lets standalone CLI checkouts regenerate types
@@ -116,6 +132,8 @@ and lint staged TypeScript and JavaScript files using the same tools as CI.
 ## Usage
 
 ```text
+rawback auth [--email <email>] [--password <password>] [--force]
+rawback auth status
 rawback [options]
 
 Rawback CLI for humans and AI agents
@@ -124,6 +142,16 @@ Options:
   -h, --help     display help for command    [boolean]
   -V, --version  output the current version  [boolean]
 ```
+
+`rawback auth` prompts for any omitted email or password. If stored credentials
+still authenticate successfully, it asks before replacing them; `--force` skips
+that check and confirmation. Supplying both credentials with `--force` supports
+non-interactive login. Passwords passed with `--password` may be visible in shell
+history and process listings.
+
+`rawback auth status` validates the saved session through the API and prints basic
+account information. Both commands refresh expired access tokens when the stored
+refresh token is still valid.
 
 Unknown arguments are reported on stderr and exit with status 1.
 
