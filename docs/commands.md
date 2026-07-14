@@ -130,7 +130,8 @@ must form a valid chronological range.
 
 ## `rawback photos upload`
 
-Uploads one supported file or recursively scans and uploads a directory:
+Uploads one supported image or RAW file, or recursively scans and uploads a
+directory:
 
 ```bash
 rawback photos upload --path <file-or-directory> [options]
@@ -138,12 +139,14 @@ rawback photos upload --path <file-or-directory> [options]
 
 | Option                   | Description                                                 | Default |
 | ------------------------ | ----------------------------------------------------------- | ------- |
-| `--path <path>`          | Required file or directory                                  | —       |
+| `--path <path>`          | Required image/RAW file or recursively scanned directory    | —       |
 | `--concurrency <number>` | Parallel uploads; integer from 1 through 16                 | `4`     |
 | `--dry-run`              | Report pending/skipped files, bytes, and estimated duration | `false` |
 
 Upload setup and safety behavior are covered in
-[Configuration and uploads](configuration.md).
+[Configuration and uploads](configuration.md). Unsupported files are skipped
+during directory scans; the command fails if the selected path contains no
+supported files.
 
 ## `rawback uploads`
 

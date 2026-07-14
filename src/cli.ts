@@ -300,7 +300,7 @@ export function createProgram(version: string): Argv {
               upload
                 .option("path", {
                   demandOption: true,
-                  describe: "file or directory to upload recursively",
+                  describe: "image/RAW file or directory to scan recursively",
                   type: "string",
                 })
                 .option("concurrency", {

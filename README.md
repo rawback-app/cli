@@ -131,8 +131,10 @@ rawback photos upload --path ~/Pictures/Export
 ```
 
 Directories are scanned recursively. Symbolic links and unsupported files are
-skipped. Supported formats are ARW, CR2, CR3, DNG, HEIC, HEIF, JPEG, JPG, NEF,
-PNG, RAF, and WebP.
+skipped; the command fails if the selected path contains no supported files.
+Supported image formats are JPEG/JPG, PNG, WebP, GIF, TIFF, HEIC/HEIF, BMP, and
+AVIF. Supported RAW formats are CR2, CR3, NEF, ARW, DNG, RAF, ORF, PEF, RW2,
+SRW, and X3F.
 
 For host-key pinning, resumable-upload behavior, and troubleshooting, see
 [Configuration and uploads](docs/configuration.md).
