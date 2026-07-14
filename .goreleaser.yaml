@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: rawback
+
+builds:
+  - id: rawback
+    builder: bun
+    binary: rawback
+    main: ./src/index.ts
+    targets:
+      - linux-x64-baseline
+      - linux-arm64
+      - darwin-x64
+      - darwin-arm64
+      - windows-x64-baseline
+    flags:
+      - --compile
+      - --minify
+
+archives:
+  - id: rawback
+    ids:
+      - rawback
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  github:
+    owner: rawback-app
+    name: cli
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "v{{ .Version }}"
