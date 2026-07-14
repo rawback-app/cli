@@ -1297,6 +1297,7 @@ export type MutationCreateFacePersonArgs = {
 
 export type MutationCreateSftpCredentialArgs = {
   name: Scalars['String']['input'];
+  password?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -2915,5 +2916,28 @@ export type AuthStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type AuthStatusQuery = { __typename?: 'Query', me: { __typename?: 'User', id: number, name: string, email: string, slug: string, tier: string, subscriptionStatus: string, accountStatus: string } };
 
+export type SftpCredentialsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type SftpCredentialsQuery = { __typename?: 'Query', sftpCredentials: Array<{ __typename?: 'SFTPCredential', id: number, name: string, lastUsedAt?: number | null, enabled: boolean, createdAt: number }> };
+
+export type CreateSftpCredentialMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+  password?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type CreateSftpCredentialMutation = { __typename?: 'Mutation', createSFTPCredential: { __typename?: 'SFTPCredentialWithPassword', id: number, name: string, password: string, createdAt: number } };
+
+export type DeleteSftpCredentialMutationVariables = Exact<{
+  id: Scalars['Int']['input'];
+}>;
+
+
+export type DeleteSftpCredentialMutation = { __typename?: 'Mutation', deleteSFTPCredential: boolean };
+
 
 export const AuthStatusDocument = {"__meta__":{"hash":"b1ed2f39e8c0f4be476fc3e5e17a133fc87256ab"},"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AuthStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"tier"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionStatus"}},{"kind":"Field","name":{"kind":"Name","value":"accountStatus"}}]}}]}}]} as unknown as DocumentNode<AuthStatusQuery, AuthStatusQueryVariables>;
+export const SftpCredentialsDocument = {"__meta__":{"hash":"ed0f410bd1da62db1fe9e5d0eddfa41d8b590f9b"},"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SftpCredentials"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sftpCredentials"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SftpCredentialsQuery, SftpCredentialsQueryVariables>;
+export const CreateSftpCredentialDocument = {"__meta__":{"hash":"8021783905f059c8d0f55da26932257be0cd88e9"},"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateSftpCredential"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"name"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"password"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSFTPCredential"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"name"},"value":{"kind":"Variable","name":{"kind":"Name","value":"name"}}},{"kind":"Argument","name":{"kind":"Name","value":"password"},"value":{"kind":"Variable","name":{"kind":"Name","value":"password"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"password"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateSftpCredentialMutation, CreateSftpCredentialMutationVariables>;
+export const DeleteSftpCredentialDocument = {"__meta__":{"hash":"4cb78c0ab43e8534df63ababc233ece29b2e7598"},"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSftpCredential"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteSFTPCredential"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteSftpCredentialMutation, DeleteSftpCredentialMutationVariables>;

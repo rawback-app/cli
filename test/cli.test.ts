@@ -27,6 +27,7 @@ describe("rawback CLI", () => {
     expect(result.stdout).toContain("rawback [options]");
     expect(result.stdout).toContain("Rawback CLI for humans and AI agents");
     expect(result.stdout).toContain("auth [subcommand]");
+    expect(result.stdout).toContain("credentials <subcommand> [id]");
   });
 
   test.each(["--help", "-h"])("shows help for %s", (flag) => {
@@ -79,5 +80,48 @@ describe("rawback CLI", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("does not accept login options");
+  });
+
+  test.each(["credentials", "cred"])("documents SFTP options through %s", (command) => {
+    const result = runCli(command, "add", "--help");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("manage SFTP credentials");
+    expect(result.stdout).toContain('choices: "list", "add", "delete", "del"');
+    expect(result.stdout).toContain("--name");
+    expect(result.stdout).toContain("--password");
+    expect(result.stdout).toContain("--force");
+    expect(result.stdout).toContain("--json");
+    expect(result.stdout).toContain("shell history");
+  });
+
+  test("rejects options that do not belong to list without making a request", () => {
+    const result = runCli("cred", "list", "--force");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("cred list only accepts --json");
+    expect(result.stderr).not.toContain("unauthorized");
+  });
+
+  test("requires an ID for delete aliases", () => {
+    for (const subcommand of ["delete", "del"]) {
+      const result = runCli("cred", subcommand);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain(`cred ${subcommand} requires a credential ID`);
+      expect(result.stderr).not.toContain("unauthorized");
+    }
+  });
+
+  test("rejects an ID and force option for add", () => {
+    const result = runCli("credentials", "add", "7", "--force");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("cred add does not accept an ID or --force");
+    expect(result.stderr).not.toContain("unauthorized");
   });
 });

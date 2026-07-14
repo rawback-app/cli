@@ -134,6 +134,9 @@ and lint staged TypeScript and JavaScript files using the same tools as CI.
 ```text
 rawback auth [--email <email>] [--password <password>] [--force]
 rawback auth status
+rawback credentials list [--json]
+rawback credentials add [--name <name>] [--password <password>] [--json]
+rawback credentials delete <id> [--force] [--json]
 rawback [options]
 
 Rawback CLI for humans and AI agents
@@ -152,6 +155,25 @@ history and process listings.
 `rawback auth status` validates the saved session through the API and prints basic
 account information. Both commands refresh expired access tokens when the stored
 refresh token is still valid.
+
+`rawback credentials` manages the authenticated account's FTP/SFTP upload
+credentials. The command is also available as `rawback cred`, and `delete` can
+be shortened to `del`:
+
+```bash
+rawback cred list
+rawback cred add --name "Home PC"
+rawback cred add --name "Camera" --password "custom-password"
+rawback cred del 7
+rawback cred del 7 --force --json
+```
+
+`add` prompts for the name when it is omitted. The server generates a password
+unless `--password` is supplied; passwords passed on the command line may be
+visible in shell history and process listings. Save the password from the create
+response immediately because it cannot be retrieved by `list`. Deletion asks for
+confirmation unless `--force` is supplied. Every credentials action supports
+`--json` for automation.
 
 Unknown arguments are reported on stderr and exit with status 1.
 
