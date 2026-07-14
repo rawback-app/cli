@@ -44,12 +44,14 @@ and lint staged TypeScript and JavaScript files using the same tools as CI.
 ```text
 rawback [options]
 
+Rawback CLI for humans and AI agents
+
 Options:
-  -V, --version  output the current version
-  -h, --help     display help for command
+  -h, --help     display help for command    [boolean]
+  -V, --version  output the current version  [boolean]
 ```
 
-Unknown options and commands are reported on stderr and exit with status 1.
+Unknown arguments are reported on stderr and exit with status 1.
 
 ## Releases
 

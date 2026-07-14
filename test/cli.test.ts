@@ -24,7 +24,7 @@ describe("rawback CLI", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Usage: rawback");
+    expect(result.stdout).toContain("rawback [options]");
     expect(result.stdout).toContain("Rawback CLI for humans and AI agents");
   });
 
@@ -33,7 +33,7 @@ describe("rawback CLI", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Usage: rawback");
+    expect(result.stdout).toContain("rawback [options]");
   });
 
   test.each(["--version", "-V"])("shows the package version for %s", (flag) => {
@@ -49,8 +49,8 @@ describe("rawback CLI", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("unknown option '--unknown'");
-    expect(result.stderr).toContain("--help");
+    expect(result.stderr).toContain("Unknown argument: unknown");
+    expect(result.stderr).toContain("-h, --help");
   });
 
   test("rejects unknown commands", () => {
@@ -58,6 +58,6 @@ describe("rawback CLI", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("too many arguments");
+    expect(result.stderr).toContain("Unknown argument: unknown");
   });
 });

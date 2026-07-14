@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 
 import packageJson from "../package.json" with { type: "json" };
+import { hideBin } from "yargs/helpers";
 
 import { createProgram } from "./cli.ts";
 
-await createProgram(packageJson.version).parseAsync();
+const args = hideBin(process.argv);
+const program = createProgram(packageJson.version);
+
+if (args.length === 0) {
+  console.log(await program.getHelp());
+} else {
+  await program.parseAsync(args);
+}
