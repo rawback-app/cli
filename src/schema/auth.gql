@@ -1,0 +1,11 @@
+query AuthStatus {
+  me {
+    id
+    name
+    email
+    slug
+    tier
+    subscriptionStatus
+    accountStatus
+  }
+}

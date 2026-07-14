@@ -26,6 +26,7 @@ describe("rawback CLI", () => {
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("rawback [options]");
     expect(result.stdout).toContain("Rawback CLI for humans and AI agents");
+    expect(result.stdout).toContain("auth [subcommand]");
   });
 
   test.each(["--help", "-h"])("shows help for %s", (flag) => {
@@ -59,5 +60,24 @@ describe("rawback CLI", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Unknown argument: unknown");
+  });
+
+  test("documents auth login options", () => {
+    const result = runCli("auth", "--help");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("--email");
+    expect(result.stdout).toContain("--password");
+    expect(result.stdout).toContain("--force");
+    expect(result.stdout).toContain("shell history");
+  });
+
+  test("rejects login options for auth status", () => {
+    const result = runCli("auth", "status", "--force");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("does not accept login options");
   });
 });

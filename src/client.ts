@@ -1,5 +1,6 @@
 import { ApolloClient, ApolloLink, HttpLink, InMemoryCache, from } from "@apollo/client";
 
+import { type RawbackConfig, DEFAULT_CONFIG_PATH, readConfig } from "./config.ts";
 import { type Credentials, DEFAULT_CREDENTIALS_PATH, readCredentials } from "./credentials.ts";
 import {
   HttpClient,
@@ -8,6 +9,7 @@ import {
   resolveApiUrl,
   USER_AGENT,
 } from "./http.ts";
+import { CredentialSession } from "./session.ts";
 
 declare module "@apollo/client" {
   namespace ApolloClient {
@@ -29,6 +31,8 @@ declare module "@apollo/client" {
 
 export interface RawbackClientOptions {
   apiHost?: string;
+  config?: RawbackConfig;
+  configPath?: string;
   credentials?: Credentials | null;
   credentialsPath?: string;
   fetch?: typeof globalThis.fetch;
@@ -36,6 +40,7 @@ export interface RawbackClientOptions {
 
 export interface RawbackClient {
   credentials: Credentials | null;
+  config: RawbackConfig;
   http: HttpClient;
   graphql: ApolloClient;
 }
@@ -82,20 +87,36 @@ export function createApolloClient(options: HttpClientOptions = {}): ApolloClien
 export async function createRawbackClient(
   options: RawbackClientOptions = {},
 ): Promise<RawbackClient> {
+  const config =
+    options.config === undefined
+      ? await readConfig(options.configPath ?? DEFAULT_CONFIG_PATH)
+      : options.config;
   const credentials =
     options.credentials === undefined
       ? await readCredentials(options.credentialsPath ?? DEFAULT_CREDENTIALS_PATH)
       : options.credentials;
-  const apiHost = resolveApiHost(options.apiHost);
+  const apiHost = resolveApiHost(options.apiHost ?? config.apiHost);
   const token = credentials?.token;
+  const credentialsPath = options.credentialsPath ?? DEFAULT_CREDENTIALS_PATH;
+  const session = credentials
+    ? new CredentialSession({
+        apiHost,
+        credentials,
+        credentialsPath,
+        ...(options.fetch ? { fetch: options.fetch } : {}),
+      })
+    : null;
   const transportOptions: HttpClientOptions = {
     apiHost,
     ...(token ? { token } : {}),
-    ...(options.fetch ? { fetch: options.fetch } : {}),
+    ...(session ? { fetch: session.createFetch() } : options.fetch ? { fetch: options.fetch } : {}),
   };
 
   return {
-    credentials,
+    get credentials() {
+      return session?.credentials ?? credentials;
+    },
+    config,
     graphql: createApolloClient(transportOptions),
     http: new HttpClient(transportOptions),
   };

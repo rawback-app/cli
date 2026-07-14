@@ -4,6 +4,7 @@ export {
   type RawbackClient,
   type RawbackClientOptions,
 } from "./client.ts";
+export { ConfigError, DEFAULT_CONFIG_PATH, readConfig, type RawbackConfig } from "./config.ts";
 export {
   CredentialsError,
   DEFAULT_CREDENTIALS_PATH,

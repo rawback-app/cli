@@ -106,12 +106,12 @@ describe("HttpClient", () => {
     }
   });
 
-  test("resolves host precedence and validates protocols", () => {
+  test("ignores environment host overrides and validates protocols", () => {
     const previous = process.env.RAWBACK_API_HOST;
     process.env.RAWBACK_API_HOST = "http://localhost:23164/";
 
     try {
-      expect(resolveApiHost()).toBe("http://localhost:23164");
+      expect(resolveApiHost()).toBe("https://api.rawback.app");
       expect(resolveApiHost("https://override.example/")).toBe("https://override.example");
       expect(() => resolveApiHost("file:///tmp/rawback")).toThrow("Unsupported API protocol");
     } finally {

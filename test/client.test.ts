@@ -80,4 +80,31 @@ describe("Apollo integration", () => {
     expect(new Headers(requests[0]?.headers).get("authorization")).toBe("Bearer stored-token");
     expect(new Headers(requests[1]?.headers).get("authorization")).toBe("Bearer stored-token");
   });
+
+  test("uses config apiHost unless an explicit option overrides it", async () => {
+    const urls: string[] = [];
+    const fetch = (async (input: FetchInput) => {
+      urls.push(input.toString());
+      return Response.json({});
+    }) as typeof globalThis.fetch;
+    const configured = await createRawbackClient({
+      config: { apiHost: "https://configured.example" },
+      credentials: null,
+      fetch,
+    });
+    const overridden = await createRawbackClient({
+      apiHost: "https://override.example",
+      config: { apiHost: "https://configured.example" },
+      credentials: null,
+      fetch,
+    });
+
+    await configured.http.requestJson("/api/test");
+    await overridden.http.requestJson("/api/test");
+
+    expect(urls).toEqual([
+      "https://configured.example/api/test",
+      "https://override.example/api/test",
+    ]);
+  });
 });
