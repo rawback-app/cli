@@ -3,19 +3,69 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { parse } from "yaml";
+import * as z from "zod";
 
-export interface RawbackConfig {
-  apiHost?: string;
-  webHost?: string;
-  sftp?: SftpConfig;
-}
+const nonEmptyStringSchema = z
+  .string({ error: "must be a non-empty string" })
+  .trim()
+  .min(1, { error: "must be a non-empty string" });
 
-export interface SftpConfig {
-  endpoint?: string;
-  username?: string;
-  password?: string;
-  hostFingerprint?: string;
-}
+const httpHostSchema = nonEmptyStringSchema.pipe(z.url({ error: "must be a valid URL" })).refine(
+  (value) => {
+    const url = URL.parse(value);
+    return url === null || ["http:", "https:"].includes(url.protocol);
+  },
+  { error: "must use HTTP or HTTPS" },
+);
+
+const sftpEndpointSchema = nonEmptyStringSchema
+  .pipe(z.url({ error: "must be a valid URL" }))
+  .refine(
+    (value) => {
+      const endpoint = URL.parse(value);
+      return endpoint === null || endpoint.protocol === "sftp:";
+    },
+    { error: "must use SFTP" },
+  )
+  .refine(
+    (value) => {
+      const endpoint = URL.parse(value);
+      return (
+        endpoint === null ||
+        (!endpoint.username &&
+          !endpoint.password &&
+          !endpoint.search &&
+          !endpoint.hash &&
+          (endpoint.pathname === "" || endpoint.pathname === "/"))
+      );
+    },
+    { error: "must only contain an SFTP host and optional port" },
+  );
+
+const sftpConfigSchema = z.object(
+  {
+    endpoint: sftpEndpointSchema.optional(),
+    username: nonEmptyStringSchema.optional(),
+    password: nonEmptyStringSchema.optional(),
+    hostFingerprint: nonEmptyStringSchema.optional(),
+  },
+  { error: "must contain a YAML mapping" },
+);
+
+const rawbackConfigSchema = z.preprocess(
+  (value) => value ?? {},
+  z.object(
+    {
+      apiHost: httpHostSchema.optional(),
+      webHost: httpHostSchema.optional(),
+      sftp: sftpConfigSchema.optional(),
+    },
+    { error: "must contain a YAML mapping" },
+  ),
+);
+
+export type RawbackConfig = z.infer<typeof rawbackConfigSchema>;
+export type SftpConfig = z.infer<typeof sftpConfigSchema>;
 
 export const DEFAULT_CONFIG_PATH = join(homedir(), ".rawback", "config.yml");
 export const DEFAULT_WEB_HOST = "https://rawback.app";
@@ -34,82 +84,6 @@ function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
-function parseConfig(value: unknown, path: string): RawbackConfig {
-  if (value === null || value === undefined) {
-    return {};
-  }
-
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new ConfigError(`Config at ${path} must contain a YAML mapping`, path);
-  }
-
-  const result: RawbackConfig = {};
-  const configValue = value as Record<string, unknown>;
-  for (const key of ["apiHost", "webHost"] as const) {
-    const field = configValue[key];
-    if (field === undefined) continue;
-    if (typeof field !== "string" || field.trim().length === 0) {
-      throw new ConfigError(`Config ${key} at ${path} must be a non-empty string`, path);
-    }
-    const host = field.trim();
-    let url: URL;
-    try {
-      url = new URL(host);
-    } catch (error) {
-      throw new ConfigError(`Config ${key} at ${path} must be a valid URL`, path, {
-        cause: error,
-      });
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new ConfigError(`Config ${key} at ${path} must use HTTP or HTTPS`, path);
-    }
-    result[key] = host;
-  }
-
-  if ("sftp" in value && value.sftp !== undefined) {
-    if (typeof value.sftp !== "object" || value.sftp === null || Array.isArray(value.sftp)) {
-      throw new ConfigError(`Config sftp at ${path} must contain a YAML mapping`, path);
-    }
-    const sftpValue = value.sftp as Record<string, unknown>;
-    const sftp: SftpConfig = {};
-    for (const key of ["endpoint", "username", "password", "hostFingerprint"] as const) {
-      const field = sftpValue[key];
-      if (field === undefined) continue;
-      if (typeof field !== "string" || field.trim().length === 0) {
-        throw new ConfigError(`Config sftp.${key} at ${path} must be a non-empty string`, path);
-      }
-      sftp[key] = field.trim();
-    }
-    if (sftp.endpoint !== undefined) {
-      let endpoint: URL;
-      try {
-        endpoint = new URL(sftp.endpoint);
-      } catch (error) {
-        throw new ConfigError(`Config sftp.endpoint at ${path} must be a valid URL`, path, {
-          cause: error,
-        });
-      }
-      if (endpoint.protocol !== "sftp:") {
-        throw new ConfigError(`Config sftp.endpoint at ${path} must use SFTP`, path);
-      }
-      if (
-        endpoint.username ||
-        endpoint.password ||
-        endpoint.search ||
-        endpoint.hash ||
-        (endpoint.pathname !== "" && endpoint.pathname !== "/")
-      ) {
-        throw new ConfigError(
-          `Config sftp.endpoint at ${path} must only contain an SFTP host and optional port`,
-          path,
-        );
-      }
-    }
-    result.sftp = sftp;
-  }
-  return result;
-}
-
 export async function readConfig(path = DEFAULT_CONFIG_PATH): Promise<RawbackConfig> {
   let contents: string;
 
@@ -122,14 +96,20 @@ export async function readConfig(path = DEFAULT_CONFIG_PATH): Promise<RawbackCon
     throw new ConfigError(`Unable to read config at ${path}`, path, { cause: error });
   }
 
+  let parsed: unknown;
   try {
-    return parseConfig(parse(contents), path);
+    parsed = parse(contents);
   } catch (error) {
-    if (error instanceof ConfigError) {
-      throw error;
-    }
     throw new ConfigError(`Config at ${path} contains invalid YAML`, path, {
       cause: error,
     });
   }
+
+  const result = rawbackConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ConfigError(`Config at ${path} is invalid:\n${z.prettifyError(result.error)}`, path, {
+      cause: result.error,
+    });
+  }
+  return result.data;
 }

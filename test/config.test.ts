@@ -32,7 +32,7 @@ describe("config", () => {
 
   test("loads apiHost and ignores unknown keys", async () => {
     const path = await temporaryConfigPath();
-    await writeFile(path, "apiHost: https://staging.rawback.app/\nfutureSetting: enabled\n");
+    await writeFile(path, 'apiHost: " https://staging.rawback.app/ "\nfutureSetting: enabled\n');
 
     expect(await readConfig(path)).toEqual({
       apiHost: "https://staging.rawback.app/",
@@ -43,6 +43,7 @@ describe("config", () => {
     ["invalid YAML", "apiHost: [", "invalid YAML"],
     ["a non-mapping document", "- value", "YAML mapping"],
     ["an empty host", 'apiHost: ""', "non-empty string"],
+    ["an invalid URL", "apiHost: not-a-url", "valid URL"],
     ["an unsupported protocol", "apiHost: file:///tmp/rawback", "HTTP or HTTPS"],
   ])("rejects %s", async (_description, contents, expectedMessage) => {
     const path = await temporaryConfigPath();
@@ -92,11 +93,30 @@ describe("SFTP config", () => {
       "sftp:\n  endpoint: sftp://user:secret@ftp.rawback.app:2222",
       "only contain an SFTP host",
     ],
+    [
+      "a path in the endpoint",
+      "sftp:\n  endpoint: sftp://ftp.rawback.app:2222/uploads",
+      "only contain an SFTP host",
+    ],
     ["an empty username", 'sftp:\n  username: ""', "non-empty string"],
   ])("rejects %s", async (_description, contents, expectedMessage) => {
     const path = await temporaryConfigPath();
     await writeFile(path, contents);
 
     await expect(readConfig(path)).rejects.toThrow(expectedMessage);
+  });
+
+  test("does not include invalid credential values in validation errors", async () => {
+    const path = await temporaryConfigPath();
+    await writeFile(path, "sftp:\n  password: 123456\n");
+
+    try {
+      await readConfig(path);
+      throw new Error("Expected config parsing to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError);
+      expect((error as Error).message).toContain("sftp.password");
+      expect((error as Error).message).not.toContain("123456");
+    }
   });
 });
