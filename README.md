@@ -2,13 +2,15 @@
 
 Use [Rawback](https://rawback.app) from a terminal or an automation script. The
 CLI can sign in to your account, upload photo and RAW files, search your library,
-inspect usage, and open your profile in a browser.
+manage albums and their Markdown articles, inspect usage, and open your profile
+in a browser.
 
 ## What you can do
 
 - Upload a file or recursively upload a directory over SFTP.
 - Safely resume an interrupted upload and skip files already uploaded.
 - Search photos by metadata, capture date, rating, location, and GPS data.
+- Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - Manage the SFTP credentials associated with your account.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
 - Request machine-readable JSON from read and credential commands.
@@ -85,6 +87,7 @@ These commands work immediately after sign-in:
 
 ```bash
 rawback photos list
+rawback album list
 rawback uploads
 rawback usage
 rawback pricing
@@ -159,6 +162,15 @@ rawback photos upload --path ./photos --concurrency 8
 # Inspect failed upload sessions
 rawback uploads --status failed
 
+# Create and inspect an album
+rawback album create --name "Iceland" --permission private
+rawback album view 42
+
+# Add a photo and write the album's Markdown article
+rawback album image add 42 108
+rawback album article edit 42 --title "Iceland in winter" --content-file story.md
+rawback album article publish 42
+
 # List, create, and revoke SFTP credentials
 rawback cred list
 rawback cred add --name "Home workstation"
@@ -172,6 +184,8 @@ and automation note. You can also ask the binary for context-specific help:
 rawback --help
 rawback photos list --help
 rawback photos upload --help
+rawback album --help
+rawback album article --help
 ```
 
 ## Files and security

@@ -1,0 +1,150 @@
+fragment CliAlbumFields on Album {
+  id
+  name
+  description
+  slug
+  permission
+  status
+  isSecret
+  coverImage {
+    id
+    filename
+    url
+    thumbnailUrl
+    rotation
+  }
+  imageCount
+  tags {
+    id
+    name
+    slug
+    color
+  }
+  dateFrom
+  dateTo
+  timezone
+  camera {
+    id
+    make
+    model
+  }
+  lens {
+    id
+    make
+    model
+  }
+  createdAt
+  updatedAt
+}
+
+fragment CliAlbumImageFields on Image {
+  id
+  displayName
+  filename
+  url
+  thumbnailUrl
+  status
+  width
+  height
+  blurhash
+  capturedAt
+  cameraMake
+  cameraModel
+  rotation
+  rate
+  editedImages {
+    url
+    thumbnailUrl
+    width
+    height
+    blurhash
+    createdAt
+  }
+}
+
+query CliAlbums($pagination: InputPagination!, $keyword: String) {
+  me {
+    albums(pagination: $pagination, keyword: $keyword) {
+      edges {
+        ...CliAlbumFields
+      }
+      pageInfo {
+        page
+        pageSize
+        totalCount
+        totalPages
+        hasNextPage
+        hasPreviousPage
+      }
+    }
+  }
+}
+
+query CliAlbum($id: Int!, $pagination: InputPagination!) {
+  me {
+    album(id: $id) {
+      ...CliAlbumFields
+      images(pagination: $pagination) {
+        edges {
+          ...CliAlbumImageFields
+        }
+        pageInfo {
+          page
+          pageSize
+          totalCount
+          totalPages
+          hasNextPage
+          hasPreviousPage
+        }
+      }
+    }
+  }
+}
+
+query CliAlbumSummary($id: Int!) {
+  me {
+    album(id: $id) {
+      ...CliAlbumFields
+    }
+  }
+}
+
+mutation CliCreateAlbum($input: CreateAlbumInput!) {
+  createAlbum(input: $input) {
+    ...CliAlbumFields
+  }
+}
+
+mutation CliUpdateAlbum($input: UpdateAlbumInput!) {
+  updateAlbum(input: $input) {
+    ...CliAlbumFields
+  }
+}
+
+mutation CliDeleteAlbum($id: Int!) {
+  deleteAlbum(id: $id)
+}
+
+mutation CliAddImageToAlbum($albumId: Int!, $imageId: Int!) {
+  addImageToAlbum(albumId: $albumId, imageId: $imageId) {
+    ...CliAlbumFields
+  }
+}
+
+mutation CliRemoveImageFromAlbum($albumId: Int!, $imageId: Int!) {
+  removeImageFromAlbum(albumId: $albumId, imageId: $imageId) {
+    ...CliAlbumFields
+  }
+}
+
+mutation CliAddTagsToAlbum($albumId: Int!, $tagIds: [Int!]!) {
+  addTagsToAlbum(albumId: $albumId, tagIds: $tagIds) {
+    ...CliAlbumFields
+  }
+}
+
+mutation CliRemoveTagsFromAlbum($albumId: Int!, $tagIds: [Int!]!) {
+  removeTagsFromAlbum(albumId: $albumId, tagIds: $tagIds) {
+    ...CliAlbumFields
+  }
+}

@@ -148,6 +148,205 @@ Upload setup and safety behavior are covered in
 during directory scans; the command fails if the selected path contains no
 supported files.
 
+## `rawback album`
+
+Manages albums belonging to the authenticated account. Album and nested article
+commands use numeric album IDs; no user-domain argument is needed.
+
+### `album list`
+
+Lists albums as a table or as an `albums` and `pageInfo` JSON object:
+
+```bash
+rawback album list [--search <name>] [--page <number>] [--page-size <number>] [--json]
+```
+
+| Option                 | Description                              | Default |
+| ---------------------- | ---------------------------------------- | ------- |
+| `--search <text>`      | Search non-secret albums by name         | —       |
+| `--page <number>`      | Positive result page                     | `1`     |
+| `--page-size <number>` | Results per page, from 1 through 100     | `20`    |
+| `--json`               | Print machine-readable album information | `false` |
+
+### `album view`
+
+Shows album metadata and a page of its photos:
+
+```bash
+rawback album view <album-id> [--page <number>] [--page-size <number>] [--json]
+```
+
+The default image page is `1` with `24` images. JSON output contains `album`,
+`images`, and `pageInfo` fields.
+
+### `album create`
+
+Creates a non-secret album. The name is required and visibility defaults to
+`private`:
+
+```bash
+rawback album create --name <name> [options]
+```
+
+| Option                  | Description                                        | Default   |
+| ----------------------- | -------------------------------------------------- | --------- |
+| `--name <name>`         | Required album name, up to 100 characters          | —         |
+| `--description <text>`  | Description, up to 500 characters                  | —         |
+| `--permission <value>`  | `private`, `protected`, or `public`                | `private` |
+| `--tag-id <id>`         | Smart-filter tag ID; repeat or comma-separate      | —         |
+| `--date-from <date>`    | Smart-filter start, as YYYY-MM-DD or RFC3339       | —         |
+| `--date-to <date>`      | Smart-filter end, as YYYY-MM-DD or RFC3339         | —         |
+| `--timezone <timezone>` | IANA timezone used to interpret smart-filter dates | —         |
+| `--camera-id <id>`      | Smart-filter camera ID                             | —         |
+| `--lens-id <id>`        | Smart-filter lens ID                               | —         |
+| `--json`                | Print the created album as machine-readable JSON   | `false`   |
+
+For example:
+
+```bash
+rawback album create \
+  --name "Iceland" \
+  --tag-id 3,8 \
+  --date-from 2026-01-01 \
+  --date-to 2026-01-31 \
+  --timezone Atlantic/Reykjavik
+```
+
+### `album edit`
+
+Updates album metadata, cover image, or smart filters. At least one change option
+is required:
+
+```bash
+rawback album edit <album-id> [options]
+```
+
+`album edit` accepts the create metadata options without applying create
+defaults, plus these options:
+
+| Option                  | Description                           |
+| ----------------------- | ------------------------------------- |
+| `--cover-image-id <id>` | Set an owned photo as the album cover |
+| `--clear-tags`          | Remove all smart-filter tags          |
+| `--clear-date-from`     | Clear the smart-filter start date     |
+| `--clear-date-to`       | Clear the smart-filter end date       |
+| `--clear-timezone`      | Clear the smart-filter timezone       |
+| `--clear-camera`        | Clear the smart-filter camera         |
+| `--clear-lens`          | Clear the smart-filter lens           |
+
+A set option and its matching clear option cannot be combined. Supplying one or
+more `--tag-id` values replaces the complete smart-filter tag set; use the
+`album tag` commands for incremental changes. Pass `--description ""` to clear
+the description. Smart-filter changes can temporarily put the album into the
+`collecting` state while its photo membership is recalculated.
+
+### `album delete`
+
+Deletes an album after confirmation:
+
+```bash
+rawback album delete <album-id> [--force] [--json]
+```
+
+`--force` skips confirmation and is required in non-interactive use. JSON output
+reports `{ "deleted": <boolean>, "id": <album-id> }`.
+
+### `album image`
+
+Adds or removes one photo from an album:
+
+```bash
+rawback album image add <album-id> <image-id> [--json]
+rawback album image remove <album-id> <image-id> [--force] [--json]
+```
+
+Removing a photo only changes album membership; it does not delete the photo.
+Removal asks for confirmation unless `--force` is supplied.
+
+### `album tag`
+
+Incrementally adds or removes one or more smart-filter tags in one request:
+
+```bash
+rawback album tag add <album-id> <tag-id> [tag-id...] [--json]
+rawback album tag remove <album-id> <tag-id> [tag-id...] [--json]
+```
+
+IDs must be positive integers and duplicates are ignored. Changing tags causes
+the album's matching photos to be recalculated.
+
+### `album article list`
+
+Lists the authenticated account's album articles, newest updates first:
+
+```bash
+rawback album article list [--page <number>] [--page-size <number>] [--json]
+```
+
+The defaults are page `1` and `12` articles per page. JSON output contains
+`articles` and `pageInfo`.
+
+### `album article view`
+
+Views the single article associated with an album:
+
+```bash
+rawback album article view <album-id> [--content-only | --json]
+```
+
+Human output includes article metadata and stored Markdown. `--content-only`
+prints only the stored Markdown for round trips through a file or pipe and
+cannot be combined with `--json`.
+
+### `album article edit`
+
+Creates an article when the album has none, or updates the existing article:
+
+```bash
+rawback album article edit <album-id> \
+  [--title <title>] \
+  [--content-file <path|->] \
+  [--json]
+```
+
+At least one of `--title` and `--content-file` is required. Use `-` as the path
+to read UTF-8 Markdown from stdin. A title-only edit preserves the current
+content and image associations. An empty content file clears both.
+
+Album photos can be embedded with canonical image tokens:
+
+```markdown
+![Optional alt text](rawback://image/108)
+```
+
+When content is supplied, the CLI extracts valid token IDs in document order,
+removes duplicates, and sends them as the article's image associations. The
+photo must belong to the album; the service ignores IDs that do not. New
+articles start as drafts, while editing an existing article preserves its
+status.
+
+One useful round-trip workflow is:
+
+```bash
+rawback album article view 42 --content-only > story.md
+rawback album article edit 42 --title "Iceland in winter" --content-file story.md
+```
+
+### Article status and deletion
+
+Publish, return to draft, or delete the article belonging to an album:
+
+```bash
+rawback album article publish <album-id> [--json]
+rawback album article unpublish <album-id> [--json]
+rawback album article delete <album-id> [--force] [--json]
+```
+
+The CLI resolves the backend article ID internally. These commands report an
+actionable error when the album has no article. Deletion asks for confirmation
+unless `--force` is supplied; JSON deletion output includes `albumId`,
+`articleId`, and `deleted`.
+
 ## `rawback uploads`
 
 Lists FTP and SFTP upload sessions:

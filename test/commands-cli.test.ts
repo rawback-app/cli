@@ -70,4 +70,74 @@ describe("new command hierarchy", () => {
     expect(range.exitCode).toBe(1);
     expect(range.stderr).toContain("must not be greater");
   });
+
+  test("documents the album command hierarchy", () => {
+    const album = runCli("album", "--help");
+    for (const command of ["list", "view", "create", "edit", "delete", "image", "tag", "article"]) {
+      expect(album.stdout).toContain(command);
+    }
+
+    const create = runCli("album", "create", "--help");
+    for (const flag of [
+      "--name",
+      "--description",
+      "--permission",
+      "--tag-id",
+      "--date-from",
+      "--timezone",
+      "--camera-id",
+      "--json",
+    ]) {
+      expect(create.stdout).toContain(flag);
+    }
+
+    const article = runCli("album", "article", "--help");
+    for (const command of ["list", "view", "edit", "publish", "unpublish", "delete"]) {
+      expect(article.stdout).toContain(command);
+    }
+    const articleEdit = runCli("album", "article", "edit", "7", "--help");
+    expect(articleEdit.stdout).toContain("--title");
+    expect(articleEdit.stdout).toContain("--content-file");
+  });
+
+  test("requires album, membership, and article subcommands", () => {
+    const album = runCli("album");
+    expect(album.exitCode).toBe(1);
+    expect(album.stderr).toContain("Choose an album command");
+
+    const image = runCli("album", "image");
+    expect(image.exitCode).toBe(1);
+    expect(image.stderr).toContain("Choose an album image command");
+
+    const article = runCli("album", "article");
+    expect(article.exitCode).toBe(1);
+    expect(article.stderr).toContain("Choose an album article command");
+  });
+
+  test("validates album edits and article inputs before authentication", () => {
+    const albumEdit = runCli("album", "edit", "7");
+    expect(albumEdit.exitCode).toBe(1);
+    expect(albumEdit.stderr).toContain("requires at least one change option");
+    expect(albumEdit.stderr).not.toContain("Authentication credentials");
+
+    const articleEdit = runCli("album", "article", "edit", "7");
+    expect(articleEdit.exitCode).toBe(1);
+    expect(articleEdit.stderr).toContain("requires --title or --content-file");
+    expect(articleEdit.stderr).not.toContain("Authentication credentials");
+
+    const badId = runCli("album", "view", "0");
+    expect(badId.exitCode).toBe(1);
+    expect(badId.stderr).toContain("Album ID must be a positive integer");
+    expect(badId.stderr).not.toContain("Authentication credentials");
+  });
+
+  test("rejects incompatible album and article options", () => {
+    const clearConflict = runCli("album", "edit", "7", "--camera-id", "2", "--clear-camera");
+    expect(clearConflict.exitCode).toBe(1);
+    expect(clearConflict.stderr).toContain("cannot be used together");
+
+    const outputConflict = runCli("album", "article", "view", "7", "--content-only", "--json");
+    expect(outputConflict.exitCode).toBe(1);
+    expect(outputConflict.stderr).toContain("mutually exclusive");
+  });
 });
