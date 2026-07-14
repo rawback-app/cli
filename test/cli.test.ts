@@ -28,7 +28,11 @@ describe("rawback CLI", () => {
     expect(result.stdout).toContain("Rawback CLI for humans and AI agents");
     expect(result.stdout).toContain("auth [subcommand]");
     expect(result.stdout).toContain("credentials <subcommand> [id]");
-    expect(result.stdout).toContain("upload");
+    expect(result.stdout).toContain("photos");
+    expect(result.stdout).toContain("uploads");
+    expect(result.stdout).toContain("usage");
+    expect(result.stdout).toContain("pricing");
+    expect(result.stdout).toContain("web");
   });
 
   test.each(["--help", "-h"])("shows help for %s", (flag) => {
@@ -135,9 +139,9 @@ describe("rawback CLI", () => {
   });
 });
 
-describe("rawback upload CLI", () => {
+describe("rawback photos upload CLI", () => {
   test("documents upload options", () => {
-    const result = runCli("upload", "--help");
+    const result = runCli("photos", "upload", "--help");
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
@@ -147,14 +151,14 @@ describe("rawback upload CLI", () => {
   });
 
   test("requires an upload path before running preflight", () => {
-    const result = runCli("upload");
+    const result = runCli("photos", "upload");
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Missing required argument: path");
   });
 
   test.each(["0", "17", "1.5"])("rejects invalid upload concurrency %s", (concurrency) => {
-    const result = runCli("upload", "--path", ".", "--concurrency", concurrency);
+    const result = runCli("photos", "upload", "--path", ".", "--concurrency", concurrency);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("integer between 1 and 16");

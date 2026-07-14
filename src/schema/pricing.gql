@@ -1,0 +1,25 @@
+query CliPricing {
+  pricing {
+    tiers {
+      id
+      name
+      price
+      billingInterval
+      storageGB
+      creditsPerMonth
+      faceRecPerMonth
+      sharingPublic
+      sharingRestricted
+      sharingUnlimited
+      priorityProcessing
+    }
+    addOns {
+      id
+      name
+      price
+      kind
+      amount
+      description
+    }
+  }
+}

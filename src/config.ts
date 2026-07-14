@@ -6,6 +6,7 @@ import { parse } from "yaml";
 
 export interface RawbackConfig {
   apiHost?: string;
+  webHost?: string;
   sftp?: SftpConfig;
 }
 
@@ -17,6 +18,7 @@ export interface SftpConfig {
 }
 
 export const DEFAULT_CONFIG_PATH = join(homedir(), ".rawback", "config.yml");
+export const DEFAULT_WEB_HOST = "https://rawback.app";
 
 export class ConfigError extends Error {
   readonly path: string;
@@ -42,23 +44,26 @@ function parseConfig(value: unknown, path: string): RawbackConfig {
   }
 
   const result: RawbackConfig = {};
-  if ("apiHost" in value && value.apiHost !== undefined) {
-    if (typeof value.apiHost !== "string" || value.apiHost.trim().length === 0) {
-      throw new ConfigError(`Config apiHost at ${path} must be a non-empty string`, path);
+  const configValue = value as Record<string, unknown>;
+  for (const key of ["apiHost", "webHost"] as const) {
+    const field = configValue[key];
+    if (field === undefined) continue;
+    if (typeof field !== "string" || field.trim().length === 0) {
+      throw new ConfigError(`Config ${key} at ${path} must be a non-empty string`, path);
     }
-    const apiHost = value.apiHost.trim();
+    const host = field.trim();
     let url: URL;
     try {
-      url = new URL(apiHost);
+      url = new URL(host);
     } catch (error) {
-      throw new ConfigError(`Config apiHost at ${path} must be a valid URL`, path, {
+      throw new ConfigError(`Config ${key} at ${path} must be a valid URL`, path, {
         cause: error,
       });
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new ConfigError(`Config apiHost at ${path} must use HTTP or HTTPS`, path);
+      throw new ConfigError(`Config ${key} at ${path} must use HTTP or HTTPS`, path);
     }
-    result.apiHost = apiHost;
+    result[key] = host;
   }
 
   if ("sftp" in value && value.sftp !== undefined) {

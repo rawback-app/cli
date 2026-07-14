@@ -1,0 +1,38 @@
+import { type RawbackClient, createRawbackClient } from "./client.ts";
+
+export interface ReadCommandDependencies {
+  configPath?: string;
+  credentialsPath?: string;
+  fetch?: typeof globalThis.fetch;
+  stdout?: (message: string) => void;
+}
+
+export function output(dependencies: ReadCommandDependencies, message: string): void {
+  (dependencies.stdout ?? console.log)(message);
+}
+
+export async function createCommandClient(
+  dependencies: ReadCommandDependencies,
+  authenticated = true,
+): Promise<RawbackClient> {
+  const client = await createRawbackClient({
+    ...(dependencies.configPath !== undefined ? { configPath: dependencies.configPath } : {}),
+    ...(dependencies.credentialsPath !== undefined
+      ? { credentialsPath: dependencies.credentialsPath }
+      : {}),
+    ...(dependencies.fetch !== undefined ? { fetch: dependencies.fetch } : {}),
+  });
+  if (authenticated && !client.credentials) {
+    throw new Error("Authentication credentials are missing; run rawback auth");
+  }
+  return client;
+}
+
+export function validatePagination(page: number, pageSize: number): void {
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new Error("--page must be a positive integer");
+  }
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw new Error("--page-size must be an integer between 1 and 100");
+  }
+}

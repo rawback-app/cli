@@ -166,45 +166,262 @@ export function createProgram(version: string): Argv {
       },
     )
     .command(
-      "upload",
-      "upload photos and RAW files over SFTP",
+      "photos",
+      "list and upload photos",
       (command) =>
         command
-          .option("path", {
-            demandOption: true,
-            describe: "file or directory to upload recursively",
+          .command(
+            "list",
+            "list photos in the authenticated library",
+            (list) =>
+              list
+                .option("search", {
+                  describe: "search filenames and photo metadata",
+                  type: "string",
+                })
+                .option("status", {
+                  array: true,
+                  describe: "filter by status (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("camera-make", {
+                  array: true,
+                  describe: "filter by camera make (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("camera-model", {
+                  array: true,
+                  describe: "filter by camera model (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("lens-model", {
+                  array: true,
+                  describe: "filter by lens model (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("captured-after", {
+                  describe: "ISO date/time or Unix timestamp in seconds",
+                  type: "string",
+                })
+                .option("captured-before", {
+                  describe: "ISO date/time or Unix timestamp in seconds",
+                  type: "string",
+                })
+                .option("aperture-min", {
+                  describe: "minimum aperture",
+                  type: "number",
+                })
+                .option("aperture-max", {
+                  describe: "maximum aperture",
+                  type: "number",
+                })
+                .option("focal-length-min", {
+                  describe: "minimum focal length in millimeters",
+                  type: "number",
+                })
+                .option("focal-length-max", {
+                  describe: "maximum focal length in millimeters",
+                  type: "number",
+                })
+                .option("rate", {
+                  array: true,
+                  describe: "ratings 0-5 (default: 3,4,5; repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("city", {
+                  array: true,
+                  describe: "filter by city (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("country", {
+                  array: true,
+                  describe: "filter by country (repeat or comma-separate)",
+                  type: "string",
+                })
+                .option("has-gps", {
+                  default: false,
+                  describe: "only include photos with GPS coordinates",
+                  type: "boolean",
+                })
+                .option("page", {
+                  default: 1,
+                  describe: "result page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 24,
+                  describe: "photos per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runPhotoList } = await import("./photos.ts");
+              await runCommand(() =>
+                runPhotoList({
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                  hasGps: args.hasGps,
+                  ...(args.search !== undefined ? { search: args.search } : {}),
+                  ...(args.status !== undefined ? { status: args.status } : {}),
+                  ...(args.cameraMake !== undefined ? { cameraMake: args.cameraMake } : {}),
+                  ...(args.cameraModel !== undefined ? { cameraModel: args.cameraModel } : {}),
+                  ...(args.lensModel !== undefined ? { lensModel: args.lensModel } : {}),
+                  ...(args.capturedAfter !== undefined
+                    ? { capturedAfter: args.capturedAfter }
+                    : {}),
+                  ...(args.capturedBefore !== undefined
+                    ? { capturedBefore: args.capturedBefore }
+                    : {}),
+                  ...(args.apertureMin !== undefined ? { apertureMin: args.apertureMin } : {}),
+                  ...(args.apertureMax !== undefined ? { apertureMax: args.apertureMax } : {}),
+                  ...(args.focalLengthMin !== undefined
+                    ? { focalLengthMin: args.focalLengthMin }
+                    : {}),
+                  ...(args.focalLengthMax !== undefined
+                    ? { focalLengthMax: args.focalLengthMax }
+                    : {}),
+                  ...(args.rate !== undefined ? { rate: args.rate } : {}),
+                  ...(args.city !== undefined ? { city: args.city } : {}),
+                  ...(args.country !== undefined ? { country: args.country } : {}),
+                }),
+              );
+            },
+          )
+          .command(
+            "upload",
+            "upload photos and RAW files over SFTP",
+            (upload) =>
+              upload
+                .option("path", {
+                  demandOption: true,
+                  describe: "file or directory to upload recursively",
+                  type: "string",
+                })
+                .option("concurrency", {
+                  default: 4,
+                  describe: "number of parallel uploads",
+                  type: "number",
+                })
+                .option("dry-run", {
+                  default: false,
+                  describe: "show upload count, size, and estimated time without uploading",
+                  type: "boolean",
+                })
+                .check((args) => {
+                  if (
+                    !Number.isInteger(args.concurrency) ||
+                    args.concurrency < 1 ||
+                    args.concurrency > 16
+                  ) {
+                    throw new Error("--concurrency must be an integer between 1 and 16");
+                  }
+                  return true;
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runUpload } = await import("./upload.ts");
+              await runCommand(() =>
+                runUpload({
+                  concurrency: args.concurrency,
+                  dryRun: args.dryRun,
+                  path: args.path,
+                }),
+              );
+            },
+          )
+          .demandCommand(1, "Choose a photos command: list or upload")
+          .strict(),
+      () => {},
+    )
+    .command(
+      "uploads",
+      "list FTP and SFTP upload sessions",
+      (command) =>
+        command
+          .option("status", {
+            choices: ["in_progress", "completed", "failed"] as const,
+            describe: "filter by upload status",
             type: "string",
           })
-          .option("concurrency", {
-            default: 4,
-            describe: "number of parallel uploads",
+          .option("page", {
+            default: 1,
+            describe: "result page",
             type: "number",
           })
-          .option("dry-run", {
-            default: false,
-            describe: "show upload count, size, and estimated time without uploading",
-            type: "boolean",
+          .option("page-size", {
+            default: 20,
+            describe: "upload sessions per page (1-100)",
+            type: "number",
           })
-          .check((args) => {
-            if (
-              !Number.isInteger(args.concurrency) ||
-              args.concurrency < 1 ||
-              args.concurrency > 16
-            ) {
-              throw new Error("--concurrency must be an integer between 1 and 16");
-            }
-            return true;
+          .option("json", {
+            default: false,
+            describe: "output machine-readable JSON",
+            type: "boolean",
           }),
       async (args) => {
         if (process.exitCode !== undefined && process.exitCode !== 0) return;
-        const { runUpload } = await import("./upload.ts");
+        const { runUploadSessionList } = await import("./uploads.ts");
         await runCommand(() =>
-          runUpload({
-            concurrency: args.concurrency,
-            dryRun: args.dryRun,
-            path: args.path,
+          runUploadSessionList({
+            page: args.page,
+            pageSize: args.pageSize,
+            json: args.json,
+            ...(args.status !== undefined ? { status: args.status } : {}),
           }),
         );
+      },
+    )
+    .command(
+      "usage",
+      "show storage, AI credit, and face recognition usage",
+      (command) =>
+        command.option("json", {
+          default: false,
+          describe: "output machine-readable JSON",
+          type: "boolean",
+        }),
+      async (args) => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return;
+        const { runUsage } = await import("./usage.ts");
+        await runCommand(() => runUsage({ json: args.json }));
+      },
+    )
+    .command(
+      "pricing",
+      "show Rawback plans and add-ons",
+      (command) =>
+        command
+          .option("interval", {
+            choices: ["all", "month", "year"] as const,
+            default: "all" as const,
+            describe: "filter plans by billing interval",
+            type: "string",
+          })
+          .option("json", {
+            default: false,
+            describe: "output machine-readable JSON",
+            type: "boolean",
+          }),
+      async (args) => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return;
+        const { runPricing } = await import("./pricing.ts");
+        await runCommand(() => runPricing({ interval: args.interval, json: args.json }));
+      },
+    )
+    .command(
+      "web",
+      "open your Rawback profile in a web browser",
+      () => {},
+      async () => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return;
+        const { runWeb } = await import("./web.ts");
+        await runCommand(() => runWeb());
       },
     )
     .strict()

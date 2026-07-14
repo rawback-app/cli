@@ -1,0 +1,72 @@
+query FullUsage {
+  me {
+    id
+    tier
+    usageOverview {
+      storage {
+        usedBytes
+        quotaBytes
+        remainingBytes
+        originalsBytes
+        othersBytes
+        dailySeries {
+          day
+          value
+        }
+        topImages(limit: 10) {
+          id
+          displayName
+          originalFilename
+          sizeBytes
+          thumbnailUrl
+          mimeType
+        }
+      }
+      aiCredits {
+        balance
+        monthlyAllowance
+        resetAt
+        tier
+        dailySeries {
+          day
+          value
+        }
+        recentOperations(limit: 10) {
+          id
+          operationType
+          quotaType
+          creditsUsed
+          creditsBefore
+          creditsAfter
+          referenceType
+          referenceId
+          status
+          createdAt
+          metadata
+        }
+      }
+      faceRecognition {
+        remaining
+        monthlyAllowance
+        resetAt
+        facesCount
+        dailySeries {
+          day
+          value
+        }
+        topFaces(limit: 10) {
+          id
+          name
+          faceCount
+          coverImageUrl
+        }
+      }
+    }
+  }
+  creditCosts {
+    operation
+    cost
+    description
+    quotaType
+  }
+}
