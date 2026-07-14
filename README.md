@@ -31,7 +31,7 @@ Individual checks are also available:
 
 ```bash
 bun run typecheck
-bun test
+bun run test
 bun run lint
 bun run format:check
 ```
@@ -109,7 +109,8 @@ factory takes precedence over the config file.
 
 ## GraphQL generation
 
-The committed `graphql.schema.json` lets standalone CLI checkouts regenerate types
+GraphQL operations are authored in `src/schema/*.gql`. The committed
+`graphql.schema.json` lets standalone CLI checkouts regenerate types
 without cloning the server repository:
 
 ```bash
@@ -123,8 +124,9 @@ snapshot and generated client with:
 bun run g
 ```
 
-`bun run graphql:check` regenerates the client and fails if committed output is
-stale. Generated files under `src/gql` are committed intentionally.
+Generated files under `src/gql/` are ignored and must not be committed. The
+development, build, typecheck, test, and validation scripts regenerate them as
+needed; `bun run graphql:check` also verifies that the output remains ignored.
 
 Install the Git pre-commit hooks with `bun run hooks:install`. The hooks format
 and lint staged TypeScript and JavaScript files using the same tools as CI.
@@ -134,6 +136,9 @@ and lint staged TypeScript and JavaScript files using the same tools as CI.
 ```text
 rawback auth [--email <email>] [--password <password>] [--force]
 rawback auth status
+rawback credentials list [--json]
+rawback credentials add [--name <name>] [--json]
+rawback credentials delete <id> [--force] [--json]
 rawback [options]
 
 Rawback CLI for humans and AI agents
@@ -152,6 +157,23 @@ history and process listings.
 `rawback auth status` validates the saved session through the API and prints basic
 account information. Both commands refresh expired access tokens when the stored
 refresh token is still valid.
+
+`rawback credentials` manages the authenticated account's FTP/SFTP upload
+credentials. The command is also available as `rawback cred`, and `delete` can
+be shortened to `del`:
+
+```bash
+rawback cred list
+rawback cred add --name "Home PC"
+rawback cred del 7
+rawback cred del 7 --force --json
+```
+
+`add` prompts for the name when it is omitted. The server always generates the
+password; it cannot be chosen or changed. Save it from the create response
+immediately because it cannot be retrieved by `list`. Deletion asks for
+confirmation unless `--force` is supplied. Every credentials action supports
+`--json` for automation.
 
 Unknown arguments are reported on stderr and exit with status 1.
 
