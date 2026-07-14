@@ -112,15 +112,18 @@ Before connecting, the CLI verifies:
 
 - The local path is a regular file or directory and not a symbolic link.
 - Recursively discovered files have supported extensions.
+- At least one supported image or RAW file is found.
 - Every file has a unique basename, because the remote upload list is flat.
 - The authenticated account slug matches `sftp.username`.
 - The account has at least one enabled SFTP credential.
 - Remote files with the same basename are skipped.
 - The pending bytes fit in the account's remaining storage quota.
 
-Supported extensions are `.arw`, `.cr2`, `.cr3`, `.dng`, `.heic`, `.heif`,
-`.jpeg`, `.jpg`, `.nef`, `.png`, `.raf`, and `.webp`, matched without regard to
-case. Directory scanning skips symbolic links and unrelated file types.
+Supported image extensions are `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.tif`,
+`.tiff`, `.heic`, `.heif`, `.bmp`, and `.avif`. Supported RAW extensions are
+`.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.raf`, `.orf`, `.pef`, `.rw2`, `.srw`,
+and `.x3f`. Matching is case-insensitive. Directory scanning skips symbolic
+links and unrelated file types, but fails if it finds no supported files.
 
 ## Resume state and interruption
 

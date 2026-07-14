@@ -9,7 +9,32 @@ import type {
   UploadTransport,
   UploadTransportFactory,
 } from "../src/sftp-client.ts";
-import { runUpload, scanUploadPath } from "../src/upload.ts";
+import { runUpload, scanUploadPath, SUPPORTED_UPLOAD_EXTENSIONS } from "../src/upload.ts";
+
+const EXPECTED_UPLOAD_EXTENSIONS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".tif",
+  ".tiff",
+  ".heic",
+  ".heif",
+  ".bmp",
+  ".avif",
+  ".cr2",
+  ".cr3",
+  ".nef",
+  ".arw",
+  ".dng",
+  ".raf",
+  ".orf",
+  ".pef",
+  ".rw2",
+  ".srw",
+  ".x3f",
+];
 
 const temporaryDirectories: string[] = [];
 
@@ -138,6 +163,20 @@ function factoryFor(
 }
 
 describe("upload path scanning", () => {
+  test("accepts every supported image and RAW extension without regard to case", async () => {
+    const directory = await temporaryDirectory();
+    const filenames = EXPECTED_UPLOAD_EXTENSIONS.map(
+      (extension, index) =>
+        `photo-${index}${index % 2 === 0 ? extension : extension.toUpperCase()}`,
+    );
+    await Promise.all(filenames.map((filename) => writeFile(join(directory, filename), filename)));
+
+    const files = await scanUploadPath(directory);
+
+    expect([...SUPPORTED_UPLOAD_EXTENSIONS]).toEqual(EXPECTED_UPLOAD_EXTENSIONS);
+    expect(files.map((file) => file.basename).sort()).toEqual(filenames.sort());
+  });
+
   test("recurses through directories, filters formats, and skips symlinks", async () => {
     const directory = await temporaryDirectory();
     await mkdir(join(directory, "nested"));
@@ -149,6 +188,22 @@ describe("upload path scanning", () => {
     const files = await scanUploadPath(directory);
 
     expect(files.map((file) => file.basename).sort()).toEqual(["first.JPG", "second.cr3"]);
+  });
+
+  test("rejects paths that contain no supported files", async () => {
+    const directory = await temporaryDirectory();
+    const unsupportedFile = join(directory, "notes.txt");
+
+    await expect(scanUploadPath(directory)).rejects.toThrow(
+      "No supported image or RAW files found",
+    );
+
+    await writeFile(unsupportedFile, "ignored");
+
+    await expect(scanUploadPath(directory)).rejects.toThrow("Supported extensions: .jpg");
+    await expect(scanUploadPath(unsupportedFile)).rejects.toThrow(
+      "No supported image or RAW files found",
+    );
   });
 
   test("rejects basename collisions before upload", async () => {

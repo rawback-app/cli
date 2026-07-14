@@ -20,18 +20,28 @@ import {
 import { DEFAULT_UPLOAD_STATE_PATH, UploadState, type UploadStateFile } from "./upload-state.ts";
 
 export const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
-  ".arw",
-  ".cr2",
-  ".cr3",
-  ".dng",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".tif",
+  ".tiff",
   ".heic",
   ".heif",
-  ".jpeg",
-  ".jpg",
+  ".bmp",
+  ".avif",
+  ".cr2",
+  ".cr3",
   ".nef",
-  ".png",
+  ".arw",
+  ".dng",
   ".raf",
-  ".webp",
+  ".orf",
+  ".pef",
+  ".rw2",
+  ".srw",
+  ".x3f",
 ]);
 
 export interface UploadCommandOptions {
@@ -247,6 +257,12 @@ export async function scanUploadPath(path: string): Promise<UploadFile[]> {
   if (rootInfo.isDirectory()) await walk(root);
   else if (rootInfo.isFile()) await addFile(root);
   else throw new Error(`Upload path is not a regular file or directory: ${path}`);
+
+  if (files.length === 0) {
+    throw new Error(
+      `No supported image or RAW files found at ${path}. Supported extensions: ${[...SUPPORTED_UPLOAD_EXTENSIONS].join(", ")}`,
+    );
+  }
 
   files.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
   const names = new Map<string, string>();
