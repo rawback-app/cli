@@ -165,6 +165,48 @@ export function createProgram(version: string): Argv {
         );
       },
     )
+    .command(
+      "upload",
+      "upload photos and RAW files over SFTP",
+      (command) =>
+        command
+          .option("path", {
+            demandOption: true,
+            describe: "file or directory to upload recursively",
+            type: "string",
+          })
+          .option("concurrency", {
+            default: 4,
+            describe: "number of parallel uploads",
+            type: "number",
+          })
+          .option("dry-run", {
+            default: false,
+            describe: "show upload count, size, and estimated time without uploading",
+            type: "boolean",
+          })
+          .check((args) => {
+            if (
+              !Number.isInteger(args.concurrency) ||
+              args.concurrency < 1 ||
+              args.concurrency > 16
+            ) {
+              throw new Error("--concurrency must be an integer between 1 and 16");
+            }
+            return true;
+          }),
+      async (args) => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return;
+        const { runUpload } = await import("./upload.ts");
+        await runCommand(() =>
+          runUpload({
+            concurrency: args.concurrency,
+            dryRun: args.dryRun,
+            path: args.path,
+          }),
+        );
+      },
+    )
     .strict()
     .fail((message, error, parser) => {
       parser.showHelp("error");

@@ -58,3 +58,45 @@ describe("config", () => {
     }
   });
 });
+
+describe("SFTP config", () => {
+  test("loads nested endpoint and credentials", async () => {
+    const path = await temporaryConfigPath();
+    await writeFile(
+      path,
+      [
+        "sftp:",
+        "  endpoint: sftp://ftp.rawback.app:2222",
+        "  username: annatarhe",
+        '  password: "secret"',
+        "  hostFingerprint: SHA256:known-host",
+        "",
+      ].join("\n"),
+    );
+
+    expect(await readConfig(path)).toEqual({
+      sftp: {
+        endpoint: "sftp://ftp.rawback.app:2222",
+        username: "annatarhe",
+        password: "secret",
+        hostFingerprint: "SHA256:known-host",
+      },
+    });
+  });
+
+  test.each([
+    ["a non-mapping SFTP value", "sftp: value", "YAML mapping"],
+    ["an HTTP endpoint", "sftp:\n  endpoint: https://ftp.rawback.app", "must use SFTP"],
+    [
+      "credentials embedded in the endpoint",
+      "sftp:\n  endpoint: sftp://user:secret@ftp.rawback.app:2222",
+      "only contain an SFTP host",
+    ],
+    ["an empty username", 'sftp:\n  username: ""', "non-empty string"],
+  ])("rejects %s", async (_description, contents, expectedMessage) => {
+    const path = await temporaryConfigPath();
+    await writeFile(path, contents);
+
+    await expect(readConfig(path)).rejects.toThrow(expectedMessage);
+  });
+});

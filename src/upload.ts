@@ -1,0 +1,577 @@
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
+
+import type { RawbackClient } from "./client.ts";
+import { createRawbackClient } from "./client.ts";
+import { DEFAULT_CONFIG_PATH, readConfig, type SftpConfig } from "./config.ts";
+import { DEFAULT_CREDENTIALS_PATH } from "./credentials.ts";
+import {
+  ExistingUploadImagesDocument,
+  UploadPreflightDocument,
+  type UploadPreflightQuery,
+} from "./gql/graphql.ts";
+import {
+  createSftpClient,
+  isConnectionFailure,
+  type SftpClientOptions,
+  type UploadTransport,
+  type UploadTransportFactory,
+} from "./sftp-client.ts";
+import { DEFAULT_UPLOAD_STATE_PATH, UploadState, type UploadStateFile } from "./upload-state.ts";
+
+export const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
+  ".arw",
+  ".cr2",
+  ".cr3",
+  ".dng",
+  ".heic",
+  ".heif",
+  ".jpeg",
+  ".jpg",
+  ".nef",
+  ".png",
+  ".raf",
+  ".webp",
+]);
+
+export interface UploadCommandOptions {
+  concurrency: number;
+  dryRun: boolean;
+  path: string;
+}
+
+export interface UploadCommandDependencies {
+  client?: RawbackClient;
+  configPath?: string;
+  credentialsPath?: string;
+  fetch?: typeof globalThis.fetch;
+  sleep?: (milliseconds: number) => Promise<void>;
+  statePath?: string;
+  stderr?: (message: string) => void;
+  stdout?: (message: string) => void;
+  transportFactory?: UploadTransportFactory;
+}
+
+export interface UploadFile {
+  basename: string;
+  canonicalPath: string;
+  mtimeMs: number;
+  path: string;
+  size: number;
+}
+
+interface UploadPreflight {
+  account: string;
+  client: RawbackClient;
+  endpoint: string;
+  files: UploadFile[];
+  password: string;
+  quotaBytes: number;
+  usedBytes: number;
+  username: string;
+}
+
+interface UploadFailure {
+  error: Error;
+  file: UploadFile;
+}
+
+const REMOTE_QUERY_BATCH_SIZE = 200;
+const FALLBACK_BYTES_PER_SECOND = 10_000_000 / 8;
+
+class UploadProgress {
+  private readonly active = new Map<string, number>();
+  private completedBytes = 0;
+  private completedFiles = 0;
+  private lastRender = 0;
+
+  constructor(
+    private readonly totalBytes: number,
+    private readonly totalFiles: number,
+    private readonly dependencies: UploadCommandDependencies,
+  ) {}
+
+  private get interactive(): boolean {
+    return Boolean(process.stdout.isTTY && !this.dependencies.stdout);
+  }
+
+  start(file: UploadFile): void {
+    this.active.set(file.canonicalPath, 0);
+    if (this.interactive) this.render(true);
+    else output(this.dependencies, `Uploading ${file.basename} (${formatBytes(file.size)})`);
+  }
+
+  update(file: UploadFile, bytes: number): void {
+    this.active.set(file.canonicalPath, Math.min(file.size, bytes));
+    this.render(false);
+  }
+
+  complete(file: UploadFile): void {
+    this.active.delete(file.canonicalPath);
+    this.completedBytes += file.size;
+    this.completedFiles += 1;
+    if (this.interactive) this.render(true);
+    else output(this.dependencies, `Uploaded ${file.basename}`);
+  }
+
+  fail(file: UploadFile): void {
+    this.active.delete(file.canonicalPath);
+    if (this.interactive) {
+      process.stdout.write("\r\x1b[2K");
+      this.lastRender = 0;
+    }
+  }
+
+  finish(): void {
+    if (!this.interactive) return;
+    this.render(true);
+    process.stdout.write("\n");
+  }
+
+  private render(force: boolean): void {
+    if (!this.interactive) return;
+    const now = Date.now();
+    if (!force && now - this.lastRender < 100) return;
+    this.lastRender = now;
+    const activeBytes = [...this.active.values()].reduce((sum, bytes) => sum + bytes, 0);
+    const transferred = Math.min(this.totalBytes, this.completedBytes + activeBytes);
+    const percent = this.totalBytes === 0 ? 100 : Math.floor((transferred / this.totalBytes) * 100);
+    process.stdout.write(
+      `\rUploading ${this.completedFiles}/${this.totalFiles} files — ${formatBytes(transferred)}/${formatBytes(this.totalBytes)} (${percent}%)`,
+    );
+  }
+}
+
+function output(dependencies: UploadCommandDependencies, message: string): void {
+  (dependencies.stdout ?? console.log)(message);
+}
+
+function warn(dependencies: UploadCommandDependencies, message: string): void {
+  (dependencies.stderr ?? console.error)(message);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = "B";
+  for (const candidate of units) {
+    value /= 1024;
+    unit = candidate;
+    if (value < 1024) break;
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds)) return "unknown";
+  const rounded = Math.max(0, Math.ceil(seconds));
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const remainingSeconds = rounded % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function canonicalEndpoint(value: string): string {
+  const url = new URL(value);
+  return `sftp://${url.hostname}:${url.port || "22"}`;
+}
+
+function requiredSftpConfig(
+  config: SftpConfig | undefined,
+  configPath: string,
+): Required<Pick<SftpConfig, "endpoint" | "username" | "password">> &
+  Pick<SftpConfig, "hostFingerprint"> {
+  const missing = (["endpoint", "username", "password"] as const).filter((key) => !config?.[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing ${missing.map((key) => `sftp.${key}`).join(", ")} in ${configPath}`);
+  }
+  return {
+    endpoint: config!.endpoint!,
+    username: config!.username!,
+    password: config!.password!,
+    ...(config!.hostFingerprint ? { hostFingerprint: config!.hostFingerprint } : {}),
+  };
+}
+
+async function checkConfigPermissions(path: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const information = await stat(path);
+  if ((information.mode & 0o077) !== 0) {
+    throw new Error(
+      `Config ${path} contains an SFTP password and must not be accessible by group or others; run chmod 600 ${path}`,
+    );
+  }
+}
+
+export async function scanUploadPath(path: string): Promise<UploadFile[]> {
+  const root = resolve(path);
+  const rootInfo = await lstat(root);
+  if (rootInfo.isSymbolicLink())
+    throw new Error(`Upload path must not be a symbolic link: ${path}`);
+
+  const files: UploadFile[] = [];
+  const addFile = async (filePath: string) => {
+    const name = basename(filePath);
+    const extensionIndex = name.lastIndexOf(".");
+    const extension = extensionIndex < 0 ? "" : name.slice(extensionIndex).toLowerCase();
+    if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) return;
+    const information = await stat(filePath);
+    files.push({
+      basename: name,
+      canonicalPath: await realpath(filePath),
+      mtimeMs: information.mtimeMs,
+      path: filePath,
+      size: information.size,
+    });
+  };
+
+  const walk = async (directory: string): Promise<void> => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const entryPath = join(directory, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) await walk(entryPath);
+      else if (entry.isFile()) await addFile(entryPath);
+    }
+  };
+
+  if (rootInfo.isDirectory()) await walk(root);
+  else if (rootInfo.isFile()) await addFile(root);
+  else throw new Error(`Upload path is not a regular file or directory: ${path}`);
+
+  files.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
+  const names = new Map<string, string>();
+  for (const file of files) {
+    const previous = names.get(file.basename);
+    if (previous) {
+      throw new Error(
+        `Files must have unique basenames because the SFTP server stores a flat upload list: ${previous} and ${file.path}`,
+      );
+    }
+    names.set(file.basename, file.path);
+  }
+  return files;
+}
+
+async function createClient(dependencies: UploadCommandDependencies): Promise<RawbackClient> {
+  if (dependencies.client) return dependencies.client;
+  return createRawbackClient({
+    configPath: dependencies.configPath ?? DEFAULT_CONFIG_PATH,
+    credentialsPath: dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
+    ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
+  });
+}
+
+function requireAccount(data: UploadPreflightQuery): NonNullable<UploadPreflightQuery["me"]> {
+  if (!data.me) throw new Error("Authentication check did not return an account; run rawback auth");
+  return data.me;
+}
+
+async function preflight(
+  options: UploadCommandOptions,
+  dependencies: UploadCommandDependencies,
+): Promise<UploadPreflight> {
+  const configPath = dependencies.configPath ?? DEFAULT_CONFIG_PATH;
+  const config = await readConfig(configPath);
+  const sftp = requiredSftpConfig(config.sftp, configPath);
+  await checkConfigPermissions(configPath);
+  const client = await createClient(dependencies);
+  if (!client.credentials)
+    throw new Error("Authentication credentials are missing; run rawback auth");
+
+  const result = await client.graphql.query({ query: UploadPreflightDocument });
+  if (result.error) throw result.error;
+  if (!result.data) throw new Error("Upload preflight did not return account data");
+  const account = requireAccount(result.data);
+  if (sftp.username !== account.slug) {
+    throw new Error(
+      `Config sftp.username is ${sftp.username}, but the authenticated account username is ${account.slug}`,
+    );
+  }
+  if (!result.data.sftpCredentials.some((credential) => credential.enabled)) {
+    throw new Error(
+      "The authenticated account has no enabled SFTP credential; run rawback cred add",
+    );
+  }
+
+  return {
+    account: account.slug,
+    client,
+    endpoint: canonicalEndpoint(sftp.endpoint),
+    files: await scanUploadPath(options.path),
+    password: sftp.password,
+    quotaBytes: Number(account.storageQuotaBytes),
+    usedBytes: Number(account.storageUsedBytes),
+    username: sftp.username,
+  };
+}
+
+async function remoteFilenames(client: RawbackClient, files: UploadFile[]): Promise<Set<string>> {
+  const result = new Set<string>();
+  for (let index = 0; index < files.length; index += REMOTE_QUERY_BATCH_SIZE) {
+    const filenames = files
+      .slice(index, index + REMOTE_QUERY_BATCH_SIZE)
+      .map((file) => file.basename);
+    const response = await client.graphql.query({
+      query: ExistingUploadImagesDocument,
+      variables: { filenames },
+    });
+    if (response.error) throw response.error;
+    if (!response.data) throw new Error("Remote duplicate check did not return image data");
+    const requested = new Set(filenames);
+    for (const image of response.data.imagesByFilenames) {
+      if (requested.has(image.originalFilename)) result.add(image.originalFilename);
+    }
+  }
+  return result;
+}
+
+function stateFile(preflightResult: UploadPreflight, file: UploadFile): UploadStateFile {
+  return {
+    account: preflightResult.account,
+    endpoint: preflightResult.endpoint,
+    path: file.canonicalPath,
+    size: file.size,
+    mtimeMs: file.mtimeMs,
+  };
+}
+
+async function retryConnect(
+  transport: UploadTransport,
+  dependencies: UploadCommandDependencies,
+): Promise<void> {
+  const sleep = dependencies.sleep ?? ((milliseconds) => Bun.sleep(milliseconds));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await transport.connect();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isConnectionFailure(error) || attempt === 2) throw error;
+      await sleep(attempt === 0 ? 250 : 1_000);
+    }
+  }
+  throw lastError;
+}
+
+async function uploadRound(
+  files: UploadFile[],
+  concurrency: number,
+  transport: UploadTransport,
+  state: UploadState,
+  preflightResult: UploadPreflight,
+  dependencies: UploadCommandDependencies,
+  progress: UploadProgress,
+  shouldStop: () => boolean,
+): Promise<{ failures: UploadFailure[]; uploadedBytes: number }> {
+  const failures: UploadFailure[] = [];
+  let uploadedBytes = 0;
+  let next = 0;
+  const worker = async () => {
+    while (!shouldStop()) {
+      const file = files[next++];
+      if (!file) return;
+      const persisted = stateFile(preflightResult, file);
+      state.setFileStatus(persisted, "in_progress");
+      progress.start(file);
+      try {
+        await transport.upload(file.path, `/${file.basename}`, (bytes) => {
+          progress.update(file, bytes);
+        });
+        state.setFileStatus(persisted, "completed");
+        uploadedBytes += file.size;
+        progress.complete(file);
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        progress.fail(file);
+        state.setFileStatus(persisted, "failed", failure.message);
+        failures.push({ error: failure, file });
+        warn(dependencies, `Failed ${file.basename}: ${failure.message}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
+  return { failures, uploadedBytes };
+}
+
+function transportOptions(
+  preflightResult: UploadPreflight,
+  state: UploadState,
+  configured: SftpConfig,
+): SftpClientOptions {
+  return {
+    endpoint: preflightResult.endpoint,
+    username: preflightResult.username,
+    password: preflightResult.password,
+    knownHosts: state,
+    ...(configured.hostFingerprint ? { hostFingerprint: configured.hostFingerprint } : {}),
+  };
+}
+
+export async function runUpload(
+  options: UploadCommandOptions,
+  dependencies: UploadCommandDependencies = {},
+): Promise<void> {
+  const preflightResult = await preflight(options, dependencies);
+  const config = await readConfig(dependencies.configPath ?? DEFAULT_CONFIG_PATH);
+  const statePath = dependencies.statePath ?? DEFAULT_UPLOAD_STATE_PATH;
+  const state = options.dryRun
+    ? await UploadState.openReadonly(statePath)
+    : await UploadState.open(statePath);
+
+  try {
+    const locallyCompleted = new Set(
+      state
+        ? preflightResult.files
+            .filter((file) => state.isCompleted(stateFile(preflightResult, file)))
+            .map((file) => file.canonicalPath)
+        : [],
+    );
+    const localPending = preflightResult.files.filter(
+      (file) => !locallyCompleted.has(file.canonicalPath),
+    );
+    const remote = await remoteFilenames(preflightResult.client, localPending);
+    const pending = localPending.filter((file) => !remote.has(file.basename));
+    const pendingBytes = pending.reduce((sum, file) => sum + file.size, 0);
+    const remainingQuota = Math.max(0, preflightResult.quotaBytes - preflightResult.usedBytes);
+    if (pendingBytes > remainingQuota) {
+      throw new Error(
+        `Upload needs ${formatBytes(pendingBytes)}, but the account only has ${formatBytes(remainingQuota)} remaining`,
+      );
+    }
+
+    if (options.dryRun) {
+      const estimate = state?.throughput(
+        preflightResult.account,
+        preflightResult.endpoint,
+        options.concurrency,
+      );
+      const rate = estimate?.bytesPerSecond ?? FALLBACK_BYTES_PER_SECOND;
+      const source = estimate?.source ?? "10 Mbps fallback";
+      output(
+        dependencies,
+        `Dry run: ${pending.length} file${pending.length === 1 ? "" : "s"} (${formatBytes(pendingBytes)}) would upload.`,
+      );
+      output(
+        dependencies,
+        `Skipped ${locallyCompleted.size} completed and ${remote.size} existing remote file${remote.size === 1 ? "" : "s"}.`,
+      );
+      output(
+        dependencies,
+        `Estimated upload time: ${formatDuration(pendingBytes / rate)} at ${formatBytes(rate)}/s (${source}).`,
+      );
+      return;
+    }
+
+    if (!state) throw new Error("Unable to open upload progress database");
+    if (pending.length === 0) {
+      output(
+        dependencies,
+        "Nothing to upload; all supported files are already complete or remote.",
+      );
+      return;
+    }
+
+    state.acquireLock(preflightResult.account, preflightResult.endpoint);
+    let transport: UploadTransport | null = null;
+    let interrupted = false;
+    let signalCount = 0;
+    const onInterrupt = () => {
+      signalCount += 1;
+      interrupted = true;
+      if (signalCount === 1) {
+        warn(
+          dependencies,
+          "Interrupt received; finishing active uploads. Press Ctrl-C again to disconnect.",
+        );
+      } else void transport?.close();
+    };
+    process.on("SIGINT", onInterrupt);
+
+    try {
+      state.resetInterrupted(preflightResult.account, preflightResult.endpoint);
+      for (const file of pending) state.prepareFile(stateFile(preflightResult, file));
+      const runId = state.beginRun(
+        preflightResult.account,
+        preflightResult.endpoint,
+        options.concurrency,
+      );
+      const factory = dependencies.transportFactory ?? createSftpClient;
+      transport = factory(transportOptions(preflightResult, state, config.sftp ?? {}));
+      await retryConnect(transport, dependencies);
+
+      let remaining = pending;
+      let totalUploaded = 0;
+      const progress = new UploadProgress(pendingBytes, pending.length, dependencies);
+      const permanentFailures: UploadFailure[] = [];
+      for (let round = 0; round < 3 && remaining.length > 0 && !interrupted; round += 1) {
+        const result = await uploadRound(
+          remaining,
+          options.concurrency,
+          transport,
+          state,
+          preflightResult,
+          dependencies,
+          progress,
+          () => interrupted,
+        );
+        totalUploaded += result.uploadedBytes;
+        const reconnectable = result.failures.filter(({ error }) => isConnectionFailure(error));
+        permanentFailures.push(
+          ...result.failures.filter(({ error }) => !isConnectionFailure(error)),
+        );
+        remaining = reconnectable.map(({ file }) => file);
+        if (remaining.length > 0 && round < 2 && !interrupted) {
+          warn(
+            dependencies,
+            `Connection dropped; reconnecting to retry ${remaining.length} file(s).`,
+          );
+          await transport.close();
+          await retryConnect(transport, dependencies);
+        }
+      }
+      if (!interrupted) {
+        permanentFailures.push(
+          ...remaining.map((file) => ({
+            file,
+            error: new Error("SFTP connection retry limit reached"),
+          })),
+        );
+      }
+      progress.finish();
+      for (const failure of permanentFailures) {
+        state.setFileStatus(
+          stateFile(preflightResult, failure.file),
+          "failed",
+          failure.error.message,
+        );
+      }
+
+      const status = interrupted
+        ? "cancelled"
+        : permanentFailures.length > 0
+          ? "partial"
+          : "completed";
+      state.finishRun(runId, totalUploaded, status);
+      output(
+        dependencies,
+        `Upload summary: ${formatBytes(totalUploaded)} uploaded; ${permanentFailures.length} failed${interrupted ? "; cancelled" : ""}.`,
+      );
+      if (interrupted) throw new Error("Upload cancelled");
+      if (permanentFailures.length > 0) {
+        throw new Error(`Upload completed with ${permanentFailures.length} failed file(s)`);
+      }
+    } finally {
+      process.removeListener("SIGINT", onInterrupt);
+      await transport?.close();
+      state.releaseLock(preflightResult.account, preflightResult.endpoint);
+    }
+  } finally {
+    state?.close();
+  }
+}

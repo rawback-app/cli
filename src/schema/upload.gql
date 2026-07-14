@@ -1,0 +1,19 @@
+query UploadPreflight {
+  me {
+    id
+    slug
+    storageUsedBytes
+    storageQuotaBytes
+  }
+  sftpCredentials {
+    id
+    enabled
+  }
+}
+
+query ExistingUploadImages($filenames: [String!]!) {
+  imagesByFilenames(filenames: $filenames) {
+    id
+    originalFilename
+  }
+}

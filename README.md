@@ -97,14 +97,22 @@ GraphQL request once.
 
 ## Configuration
 
-All commands read `~/.rawback/config.yml`. The file is optional and may be empty.
-The first supported setting is an API host override:
+All commands read `~/.rawback/config.yml`. The file is optional for commands that do not
+need SFTP. Uploads use this nested configuration:
 
 ```yaml
 apiHost: https://api.rawback.app
+sftp:
+  endpoint: sftp://ftp.rawback.app:2222
+  username: annatarhe
+  password: "generated SFTP credential password"
+  # Optional explicit pin; otherwise the first host key is trusted and saved.
+  # hostFingerprint: SHA256:base64-fingerprint
 ```
 
-Only HTTP and HTTPS hosts are accepted. An explicit `apiHost` passed to the client
+The endpoint contains only the host and optional port; credentials stay in
+`sftp.username` and `sftp.password`. Because this file contains a password,
+`upload` requires mode `0600` on Unix. An explicit `apiHost` passed to the client
 factory takes precedence over the config file.
 
 ## GraphQL generation
@@ -139,6 +147,7 @@ rawback auth status
 rawback credentials list [--json]
 rawback credentials add [--name <name>] [--json]
 rawback credentials delete <id> [--force] [--json]
+rawback upload --path <file-or-directory> [--concurrency 4] [--dry-run]
 rawback [options]
 
 Rawback CLI for humans and AI agents
@@ -174,6 +183,22 @@ password; it cannot be chosen or changed. Save it from the create response
 immediately because it cannot be retrieved by `list`. Deletion asks for
 confirmation unless `--force` is supplied. Every credentials action supports
 `--json` for automation.
+
+`rawback upload` accepts one supported photo/RAW file or recursively scans a
+directory, skipping symbolic links. It validates the authenticated account,
+enabled SFTP credentials, username, exact remote duplicates, basename collisions,
+and remaining quota before opening one SFTP connection. Up to `--concurrency`
+(default 4, maximum 16) files stream in parallel over that connection.
+
+Completed files are recorded in `~/.rawback/upload-progress.sqlite` using Bun's
+built-in SQLite support. Re-running the command skips completed files whose path,
+size, and modification time still match; an interrupted file restarts from zero.
+The first observed SSH host key is saved in the same database unless
+`hostFingerprint` pins it explicitly.
+
+`--dry-run` does not connect to SFTP or modify progress state. It reports pending
+and skipped counts, bytes, and an ETA based on matching upload history, falling
+back to a labeled 10 Mbps estimate when history is unavailable.
 
 Unknown arguments are reported on stderr and exit with status 1.
 
