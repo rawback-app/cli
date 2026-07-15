@@ -17,29 +17,48 @@ in a browser.
 
 ## Install
 
-### Standalone binary
+### Installer script
 
-Download the archive for your operating system and CPU from
-[GitHub Releases](https://github.com/rawback-app/cli/releases). Extract the
-`rawback` binary (`rawback.exe` on Windows), put it in a directory on your
-`PATH`, and verify it.
-
-On Linux or macOS, replace `<archive>` with the downloaded `.tar.gz` filename:
+On Linux and macOS, download the matching release, verify its SHA-256 checksum,
+and install it into `~/.local/bin`:
 
 ```bash
-tar -xzf <archive>
-mkdir -p ~/.local/bin
-install -m 0755 rawback ~/.local/bin/rawback
-rawback --version
+curl -fsSL https://raw.githubusercontent.com/rawback-app/cli/main/install.sh | sh
 ```
 
-Make sure `~/.local/bin` is on your `PATH`. On Windows, extract the `.zip` in
-PowerShell, then move `rawback.exe` into a directory on `PATH`:
+The installer does not edit shell startup files. If `~/.local/bin` is not on
+`PATH`, add it yourself. To choose another user-owned directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rawback-app/cli/main/install.sh | \
+  RAWBACK_INSTALL_DIR="$HOME/bin" sh
+```
+
+On Windows, run the PowerShell installer:
 
 ```powershell
-Expand-Archive .\rawback_Windows_x86_64.zip -DestinationPath .
-.\rawback.exe --version
+irm https://raw.githubusercontent.com/rawback-app/cli/main/install.ps1 | iex
 ```
+
+It installs to `$HOME\.local\bin` and warns if that directory is not on
+`PATH`. Set `$env:RAWBACK_INSTALL_DIR` before running it to select another
+directory.
+
+### Homebrew
+
+On macOS, install the signed and notarized binary from the Rawback tap:
+
+```bash
+brew install --cask rawback-app/tap/rawback
+```
+
+Upgrade it later with `brew upgrade --cask rawback-app/tap/rawback`.
+
+### Manual download
+
+Download the archive for your operating system and CPU, plus `checksums.txt`,
+from [GitHub Releases](https://github.com/rawback-app/cli/releases). Verify the
+archive, extract `rawback` (`rawback.exe` on Windows), and put it on `PATH`.
 
 Once installed, view the available commands with:
 
@@ -47,11 +66,9 @@ Once installed, view the available commands with:
 rawback --help
 ```
 
-Release archives are available for Linux (x86-64 and arm64), macOS (x86-64 and
-Apple silicon), and Windows (x86-64). The standalone binary does not require Bun.
-
-> Binaries are not currently code-signed or notarized. If your platform blocks
-> the downloaded binary, build it from source instead.
+Release archives are available for Linux, macOS, and Windows on both x86-64 and
+arm64. The standalone binary does not require Bun. macOS binaries are Developer
+ID-signed and notarized; Windows binaries are not currently Authenticode-signed.
 
 ### Build from source
 
@@ -67,6 +84,12 @@ bun run build
 
 Move `dist/rawback` somewhere on your `PATH` if you want to run it outside the
 repository.
+
+To cross-compile every release target locally, install GoReleaser 2.17 and run:
+
+```bash
+bun run build:all
+```
 
 ## Quick start
 
@@ -237,5 +260,6 @@ architecture, GraphQL generation, testing, and release notes are in
 
 [Release Please](https://github.com/googleapis/release-please) derives versions
 and changelogs from Conventional Commits. Merging its release PR triggers
-GoReleaser, which builds the platform archives and publishes a
-`checksums.txt` file with each GitHub Release.
+GoReleaser, which builds all six platform archives, signs and notarizes the
+macOS binaries, publishes the Homebrew Cask, and includes a `checksums.txt`
+file with each GitHub Release.

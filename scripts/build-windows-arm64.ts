@@ -1,0 +1,43 @@
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { zipSync } from "fflate";
+
+const artifactDirectory = join(import.meta.dir, "..", ".release-artifacts");
+const archivePath = join(artifactDirectory, "rawback_Windows_arm64.zip");
+const temporaryDirectory = await mkdtemp(join(tmpdir(), "rawback-windows-arm64-"));
+const executablePath = join(temporaryDirectory, "rawback.exe");
+
+try {
+  const result = await Bun.build({
+    entrypoints: [join(import.meta.dir, "..", "src", "index.ts")],
+    compile: {
+      target: "bun-windows-arm64",
+      outfile: executablePath,
+    },
+    minify: true,
+  });
+
+  if (!result.success) {
+    for (const log of result.logs) {
+      console.error(log);
+    }
+
+    throw new Error("Failed to build the Windows arm64 executable");
+  }
+
+  const executable = await readFile(executablePath);
+  const archive = zipSync(
+    {
+      "rawback.exe": executable,
+    },
+    { level: 9 },
+  );
+
+  await mkdir(artifactDirectory, { recursive: true });
+  await Bun.write(archivePath, archive);
+  console.log(`Created ${archivePath}`);
+} finally {
+  await rm(temporaryDirectory, { recursive: true, force: true });
+}

@@ -3,6 +3,11 @@ version: 2
 
 project_name: rawback
 
+before:
+  hooks:
+    - bun run graphql:generate
+    - bun run scripts/build-windows-arm64.ts
+
 builds:
   - id: rawback
     builder: bun
@@ -11,7 +16,7 @@ builds:
     targets:
       - linux-x64-baseline
       - linux-arm64
-      - darwin-x64
+      - darwin-x64-baseline
       - darwin-arm64
       - windows-x64-baseline
     flags:
@@ -36,6 +41,8 @@ archives:
 
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: ./.release-artifacts/rawback_Windows_arm64.zip
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -53,5 +60,59 @@ release:
     name: cli
   draft: false
   prerelease: auto
+  extra_files:
+    - glob: ./.release-artifacts/rawback_Windows_arm64.zip
   mode: replace
+  header: |
+    ## Rawback CLI {{ .Tag }}
+
+    Install or upgrade on Linux and macOS:
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/rawback-app/cli/main/install.sh | sh
+    ```
+
+    Install on macOS with Homebrew:
+
+    ```bash
+    brew install --cask rawback-app/tap/rawback
+    ```
   name_template: "v{{ .Version }}"
+
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - rawback
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+
+homebrew_casks:
+  - name: rawback
+    ids:
+      - rawback
+    binaries:
+      - rawback
+    repository:
+      owner: rawback-app
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://rawback.app"
+    description: "Rawback CLI for managing photo libraries and uploads"
+    skip_upload: auto
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    caveats: |
+      Authenticate after installation:
+        rawback auth
+
+      View available commands with:
+        rawback --help
