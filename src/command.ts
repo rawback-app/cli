@@ -1,14 +1,15 @@
 import { type RawbackClient, createRawbackClient } from "./client.ts";
+import { CommandOutput, type CommandOutputOptions } from "./ui/output.tsx";
 
-export interface ReadCommandDependencies {
+export interface ReadCommandDependencies extends CommandOutputOptions {
   configPath?: string;
   credentialsPath?: string;
   fetch?: typeof globalThis.fetch;
-  stdout?: (message: string) => void;
+  output?: CommandOutput;
 }
 
-export function output(dependencies: ReadCommandDependencies, message: string): void {
-  (dependencies.stdout ?? console.log)(message);
+export function commandOutput(dependencies: ReadCommandDependencies): CommandOutput {
+  return dependencies.output ?? new CommandOutput(dependencies);
 }
 
 export async function createCommandClient(

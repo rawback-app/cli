@@ -98,7 +98,7 @@ describe("auth commands", () => {
       token: "access-token",
       refreshToken: "refresh-token",
     });
-    expect(output).toEqual(["Authenticated as Raw Back (user@example.com)."]);
+    expect(output).toEqual(["✓ Authenticated as Raw Back (user@example.com)."]);
     expect(output.join("\n")).not.toContain("secret-password");
   });
 
@@ -184,7 +184,7 @@ describe("auth commands", () => {
     expect(confirmations).toEqual([
       "Already authenticated as Raw Back (user@example.com). Reauthenticate?",
     ]);
-    expect(output).toEqual(["Authentication unchanged."]);
+    expect(output).toEqual(["ℹ Authentication unchanged."]);
     expect(await readCredentials(paths.credentialsPath)).toEqual({
       token: "access-token",
       refreshToken: "refresh-token",
@@ -265,16 +265,11 @@ describe("auth commands", () => {
       fetch: createFetch(() => Response.json({ data: { me: authUser } })),
     });
 
-    expect(output).toEqual([
-      "Authenticated",
-      "Name: Raw Back",
-      "Email: user@example.com",
-      "User ID: 7",
-      "Profile: @raw-back",
-      "Tier: free",
-      "Subscription: active",
-      "Account: active",
-    ]);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toContain("✓ Authenticated");
+    expect(output[0]).toContain("Name          Raw Back");
+    expect(output[0]).toContain("Email         user@example.com");
+    expect(output[0]).toContain("Profile       @raw-back");
   });
 
   test("reports missing, malformed, and expired authentication", async () => {

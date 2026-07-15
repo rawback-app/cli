@@ -58,7 +58,7 @@ describe("rawback CLI", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Unknown argument: unknown");
-    expect(result.stderr).toContain("-h, --help");
+    expect(result.stderr).toContain("Hint: Run 'rawback --help' for usage.");
   });
 
   test("rejects unknown commands", () => {
@@ -94,7 +94,8 @@ describe("rawback CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("manage SFTP credentials");
-    expect(result.stdout).toContain('choices: "list", "add", "delete", "del"');
+    expect(result.stdout).toContain('choices: "list", "add"');
+    expect(result.stdout).toContain('"delete", "del"');
     expect(result.stdout).toContain("--name");
     expect(result.stdout).not.toContain("--password");
     expect(result.stdout).toContain("--force");

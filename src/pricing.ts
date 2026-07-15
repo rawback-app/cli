@@ -1,6 +1,6 @@
-import { createCommandClient, output, type ReadCommandDependencies } from "./command.ts";
+import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
+import { pricingDocument } from "./features/pricing/view.ts";
 import { CliPricingDocument, type CliPricingQuery } from "./gql/graphql.ts";
-import { formatBoolean, formatJson, formatTable } from "./output.ts";
 
 export type PricingInterval = "all" | "month" | "year";
 
@@ -12,10 +12,6 @@ export interface PricingOptions {
 export type PricingDependencies = ReadCommandDependencies;
 type PricingTier = CliPricingQuery["pricing"]["tiers"][number];
 type PricingAddOn = CliPricingQuery["pricing"]["addOns"][number];
-
-function currency(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 function serializeTier(tier: PricingTier) {
   return {
@@ -52,8 +48,15 @@ export async function runPricing(
   if (!(["all", "month", "year"] as const).includes(interval)) {
     throw new Error("--interval must be one of: all, month, year");
   }
-  const client = await createCommandClient(dependencies, false);
-  const result = await client.graphql.query({ query: CliPricingDocument });
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading pricing…",
+    async () => {
+      const client = await createCommandClient(dependencies, false);
+      return client.graphql.query({ query: CliPricingDocument });
+    },
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The pricing response did not include pricing data");
 
@@ -62,65 +65,14 @@ export async function runPricing(
     (tier) => interval === "all" || tier.price === 0 || tier.billingInterval === interval,
   );
   if (options.json) {
-    output(
-      dependencies,
-      formatJson({
-        pricing: {
-          tiers: tiers.map(serializeTier),
-          addOns: addOns.map(serializeAddOn),
-        },
-      }),
-    );
+    ui.json({
+      pricing: {
+        tiers: tiers.map(serializeTier),
+        addOns: addOns.map(serializeAddOn),
+      },
+    });
     return;
   }
 
-  const sections: string[] = [];
-  sections.push(
-    tiers.length === 0
-      ? "PLANS\nNo pricing plans found."
-      : `PLANS\n${formatTable(
-          [
-            "ID",
-            "NAME",
-            "PRICE",
-            "INTERVAL",
-            "STORAGE",
-            "CREDITS/MO",
-            "FACE REC/MO",
-            "PUBLIC",
-            "RESTRICTED",
-            "UNLIMITED",
-            "PRIORITY",
-          ],
-          tiers.map((tier) => [
-            tier.id,
-            tier.name,
-            currency(tier.price),
-            tier.price === 0 ? "forever" : tier.billingInterval,
-            `${tier.storageGB} GB`,
-            String(tier.creditsPerMonth),
-            String(tier.faceRecPerMonth),
-            formatBoolean(tier.sharingPublic),
-            formatBoolean(tier.sharingRestricted),
-            formatBoolean(tier.sharingUnlimited),
-            formatBoolean(tier.priorityProcessing),
-          ]),
-        )}`,
-  );
-  sections.push(
-    addOns.length === 0
-      ? "ADD-ONS\nNo pricing add-ons found."
-      : `ADD-ONS\n${formatTable(
-          ["ID", "NAME", "KIND", "AMOUNT", "PRICE", "DESCRIPTION"],
-          addOns.map((addOn) => [
-            addOn.id,
-            addOn.name,
-            addOn.kind,
-            String(addOn.amount),
-            currency(addOn.price),
-            addOn.description,
-          ]),
-        )}`,
-  );
-  output(dependencies, sections.join("\n\n"));
+  ui.document(pricingDocument(tiers, addOns));
 }

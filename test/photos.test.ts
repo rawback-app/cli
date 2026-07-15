@@ -157,9 +157,9 @@ describe("photos list", () => {
       lines,
     );
     await runPhotoList({ page: 1, pageSize: 24 }, deps);
-    expect(lines[0]).toContain("ID  FILENAME");
+    expect(lines[0]).toContain("ID  Filename");
     expect(lines[0]).toContain("Sony A7");
-    expect(lines[1]).toBe("Page 1 of 1 (1 total photos).");
+    expect(lines[0]).toContain("Page 1 of 1 · 1 total");
   });
 
   test("rejects invalid filters before making a request", async () => {

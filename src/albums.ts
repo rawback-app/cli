@@ -1,10 +1,11 @@
 import {
   createCommandClient,
-  output,
+  commandOutput,
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
 import { type FragmentType, useFragment } from "./gql/fragment-masking.ts";
+import { albumListDocument, albumViewDocument } from "./features/albums/view.ts";
 import {
   AlbumPermission,
   type CliAlbumFieldsFragment,
@@ -24,7 +25,6 @@ import {
   type CreateAlbumInput,
   type UpdateAlbumInput,
 } from "./gql/graphql.ts";
-import { formatJson, formatTable, formatTimestamp, sanitizeCell } from "./output.ts";
 
 export interface AlbumPrompts {
   confirm(message: string): Promise<boolean>;
@@ -346,60 +346,6 @@ function serializeImage(image: CliAlbumImageFieldsFragment) {
   };
 }
 
-function albumTable(albums: CliAlbumFieldsFragment[]): string {
-  return formatTable(
-    ["ID", "NAME", "STATUS", "PERMISSION", "IMAGES", "TAGS", "UPDATED"],
-    albums.map((album) => [
-      String(album.id),
-      sanitizeCell(album.name),
-      album.status,
-      album.permission,
-      String(album.imageCount),
-      album.tags.map((tag) => sanitizeCell(tag.name)).join(", ") || "—",
-      formatTimestamp(album.updatedAt),
-    ]),
-  );
-}
-
-function imageTable(images: CliAlbumImageFieldsFragment[]): string {
-  return formatTable(
-    ["ID", "NAME", "STATUS", "RATING", "CAPTURED", "DIMENSIONS"],
-    images.map((image) => [
-      String(image.id),
-      sanitizeCell(image.displayName || image.filename),
-      image.status,
-      image.rate === null || image.rate === undefined ? "—" : String(image.rate),
-      formatTimestamp(image.capturedAt),
-      image.width && image.height ? `${image.width}×${image.height}` : "—",
-    ]),
-  );
-}
-
-function albumDetails(album: CliAlbumFieldsFragment): string {
-  return formatTable(
-    ["FIELD", "VALUE"],
-    [
-      ["ID", String(album.id)],
-      ["Name", sanitizeCell(album.name)],
-      ["Description", sanitizeCell(album.description) || "—"],
-      ["Slug", album.slug],
-      ["Permission", album.permission],
-      ["Status", album.status],
-      ["Images", String(album.imageCount)],
-      ["Tags", album.tags.map((tag) => sanitizeCell(tag.name)).join(", ") || "—"],
-      ["Date from", formatTimestamp(album.dateFrom)],
-      ["Date to", formatTimestamp(album.dateTo)],
-      ["Timezone", album.timezone ?? "—"],
-      [
-        "Camera",
-        album.camera ? [album.camera.make, album.camera.model].filter(Boolean).join(" ") : "—",
-      ],
-      ["Lens", album.lens ? [album.lens.make, album.lens.model].filter(Boolean).join(" ") : "—"],
-      ["Updated", formatTimestamp(album.updatedAt)],
-    ],
-  );
-}
-
 function fragmentAlbum(
   value: FragmentType<typeof CliAlbumFieldsFragmentDoc>,
 ): CliAlbumFieldsFragment {
@@ -435,7 +381,12 @@ function mutationOutput(
   dependencies: AlbumCommandDependencies,
   message: string,
 ): void {
-  output(dependencies, options.json ? formatJson(serializeAlbum(album)) : message);
+  const ui = commandOutput(dependencies);
+  if (options.json) {
+    ui.json(serializeAlbum(album));
+  } else {
+    ui.success(message);
+  }
 }
 
 export async function runAlbumList(
@@ -444,29 +395,30 @@ export async function runAlbumList(
 ): Promise<void> {
   validatePagination(options.page, options.pageSize);
   const search = options.search?.trim();
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({
-    query: CliAlbumsDocument,
-    variables: {
-      pagination: { page: options.page, pageSize: options.pageSize },
-      ...(search ? { keyword: search } : {}),
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading albums…",
+    async () => {
+      const client = await createCommandClient(dependencies);
+      return client.graphql.query({
+        query: CliAlbumsDocument,
+        variables: {
+          pagination: { page: options.page, pageSize: options.pageSize },
+          ...(search ? { keyword: search } : {}),
+        },
+      });
     },
-  });
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The albums response did not include album data");
   const albums = result.data.me.albums.edges.map(fragmentAlbum);
   const pagination = pageInfo(result.data.me.albums.pageInfo);
   if (options.json) {
-    output(dependencies, formatJson({ albums: albums.map(serializeAlbum), pageInfo: pagination }));
-  } else if (albums.length === 0) {
-    output(dependencies, "No albums found.");
-  } else {
-    output(dependencies, albumTable(albums));
-    output(
-      dependencies,
-      `Page ${pagination.page} of ${pagination.totalPages} (${pagination.totalCount} total albums).`,
-    );
+    ui.json({ albums: albums.map(serializeAlbum), pageInfo: pagination });
+    return;
   }
+  ui.document(albumListDocument(albums, pagination));
 }
 
 export async function runAlbumView(
@@ -475,11 +427,18 @@ export async function runAlbumView(
 ): Promise<void> {
   const id = validatePositiveId(options.id, "Album ID");
   validatePagination(options.page, options.pageSize);
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({
-    query: CliAlbumDocument,
-    variables: { id, pagination: { page: options.page, pageSize: options.pageSize } },
-  });
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading album…",
+    async () => {
+      const client = await createCommandClient(dependencies);
+      return client.graphql.query({
+        query: CliAlbumDocument,
+        variables: { id, pagination: { page: options.page, pageSize: options.pageSize } },
+      });
+    },
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The album response did not include album data");
   const resultAlbum = result.data.me.album;
@@ -490,26 +449,14 @@ export async function runAlbumView(
   );
   const pagination = pageInfo(resultAlbum.images.pageInfo);
   if (options.json) {
-    output(
-      dependencies,
-      formatJson({
-        album: serializeAlbum(album),
-        images: images.map(serializeImage),
-        pageInfo: pagination,
-      }),
-    );
+    ui.json({
+      album: serializeAlbum(album),
+      images: images.map(serializeImage),
+      pageInfo: pagination,
+    });
     return;
   }
-  output(dependencies, albumDetails(album));
-  if (images.length === 0) {
-    output(dependencies, "No photos in this album.");
-    return;
-  }
-  output(dependencies, imageTable(images));
-  output(
-    dependencies,
-    `Image page ${pagination.page} of ${pagination.totalPages} (${pagination.totalCount} total images).`,
-  );
+  ui.document(albumViewDocument(album, images, pagination));
 }
 
 export async function runAlbumCreate(
@@ -559,10 +506,12 @@ export async function runAlbumDelete(
       "Deleting an album requires an interactive terminal unless --force is provided.",
     );
     if (!confirmed) {
-      output(
-        dependencies,
-        options.json ? formatJson({ deleted: false, id }) : "Deletion cancelled.",
-      );
+      const ui = commandOutput(dependencies);
+      if (options.json) {
+        ui.json({ deleted: false, id });
+      } else {
+        ui.info("Deletion cancelled.");
+      }
       return;
     }
   }
@@ -575,7 +524,12 @@ export async function runAlbumDelete(
   if (result.data?.deleteAlbum !== true) {
     throw new Error("The delete album response did not confirm deletion");
   }
-  output(dependencies, options.json ? formatJson({ deleted: true, id }) : `Deleted album ${id}.`);
+  const ui = commandOutput(dependencies);
+  if (options.json) {
+    ui.json({ deleted: true, id });
+  } else {
+    ui.success(`Deleted album ${id}.`);
+  }
 }
 
 export async function runAlbumImageAdd(
@@ -615,12 +569,12 @@ export async function runAlbumImageRemove(
       "Removing an image from an album requires an interactive terminal unless --force is provided.",
     );
     if (!confirmed) {
-      output(
-        dependencies,
-        options.json
-          ? formatJson({ albumId, imageId, removed: false })
-          : "Image removal cancelled.",
-      );
+      const ui = commandOutput(dependencies);
+      if (options.json) {
+        ui.json({ albumId, imageId, removed: false });
+      } else {
+        ui.info("Image removal cancelled.");
+      }
       return;
     }
   }

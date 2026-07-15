@@ -245,7 +245,7 @@ describe("album commands", () => {
     await runAlbumEdit({ id: 7, coverImageId: 11, clearTimezone: true }, dependencies);
 
     expect(JSON.parse(output[0] ?? "")).toMatchObject({ id: 7, name: "New album" });
-    expect(output[1]).toBe("Updated album 7 (Iceland).");
+    expect(output[1]).toBe("✓ Updated album 7 (Iceland).");
   });
 
   test("manages image and tag membership", async () => {

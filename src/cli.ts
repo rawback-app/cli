@@ -1,19 +1,22 @@
 import yargs from "yargs";
 import type { Argv } from "yargs";
 
+import { CommandOutput } from "./ui/output.tsx";
+
 async function runCommand(
   action: () => Promise<void>,
   cancellationMessage = "Authentication cancelled.",
 ): Promise<void> {
+  const output = new CommandOutput();
   try {
     await action();
   } catch (error) {
     if (error instanceof Error && error.name === "ExitPromptError") {
-      console.error(cancellationMessage);
+      output.info(cancellationMessage);
       process.exitCode = 130;
       return;
     }
-    console.error(error instanceof Error ? error.message : String(error));
+    output.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   }
 }
@@ -56,7 +59,7 @@ function albumMetadataOptions<T>(command: Argv<T>) {
     });
 }
 
-export function createProgram(version: string): Argv {
+export function createProgram(version: string, output = new CommandOutput()): Argv {
   return yargs()
     .scriptName("rawback")
     .usage("$0 [options]\n\nRawback CLI for humans and AI agents")
@@ -1040,9 +1043,8 @@ export function createProgram(version: string): Argv {
       },
     )
     .strict()
-    .fail((message, error, parser) => {
-      parser.showHelp("error");
-      console.error(error?.message ?? message);
+    .fail((message, error) => {
+      output.error(error?.message ?? message, "Run 'rawback --help' for usage.");
       process.exitCode = 1;
     });
 }
