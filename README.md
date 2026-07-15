@@ -11,6 +11,7 @@ in a browser.
 - Safely resume an interrupted upload and skip files already uploaded.
 - Search photos by metadata, capture date, rating, location, and GPS data.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
+- List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Manage the SFTP credentials associated with your account.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
 - Request machine-readable JSON from read and credential commands.
@@ -110,6 +111,7 @@ These commands work immediately after sign-in:
 
 ```bash
 rawback photos list
+rawback dream list
 rawback album list
 rawback uploads
 rawback usage
@@ -121,7 +123,9 @@ Add `--json` to data-oriented commands when you need structured output:
 
 ```bash
 rawback photos list --page-size 10 --json
+rawback dream get 42 --json
 rawback usage --json
+```
 
 Human-facing output uses a compact terminal UI with responsive columns, status
 notices, and activity indicators. During uploads, an interactive terminal shows
@@ -129,7 +133,6 @@ aggregate progress, transfer speed, ETA, and the active files. Redirected output
 stays line-oriented and does not contain cursor-control sequences. `--json`,
 article `--content-only`, and `--version` remain undecorated for scripts and
 other tools.
-```
 
 ### 3. Set up uploads
 
@@ -192,6 +195,13 @@ rawback photos upload --path ./photos --concurrency 8
 # Inspect failed upload sessions
 rawback uploads --status failed
 
+# List and inspect daily dream recaps
+rawback dream list
+rawback dream get 42
+
+# Retry a failed dream after an AI-credit warning
+rawback dream retry 42
+
 # Create and inspect an album
 rawback album create --name "Iceland" --permission private
 rawback album view 42
@@ -214,6 +224,7 @@ and automation note. You can also ask the binary for context-specific help:
 rawback --help
 rawback photos list --help
 rawback photos upload --help
+rawback dream --help
 rawback album --help
 rawback album article --help
 ```

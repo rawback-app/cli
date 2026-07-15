@@ -148,6 +148,63 @@ Upload setup and safety behavior are covered in
 during directory scans; the command fails if the selected path contains no
 supported files.
 
+## `rawback dream`
+
+Lists, inspects, and retries daily AI-generated photo recaps. Lists contain
+dreams owned by the authenticated account; `get` can also inspect a dream shared
+directly with that account.
+
+### `dream list`
+
+Lists dream summaries newest first:
+
+```bash
+rawback dream list [--page <number>] [--page-size <number>] [--json]
+```
+
+| Option                 | Description                            | Default |
+| ---------------------- | -------------------------------------- | ------- |
+| `--page <number>`      | Positive result page                   | `1`     |
+| `--page-size <number>` | Results per page, from 1 through 100   | `30`    |
+| `--json`               | Print machine-readable dream summaries | `false` |
+
+JSON output contains `dreams` and `pageInfo` fields. Each summary includes the
+dream ID, date, status, title, cover URL, photo count, and creation timestamp.
+
+### `dream get` and `dream view`
+
+Shows complete dream metadata plus a rate-first page of contributing photos.
+`view` is an alias of `get`:
+
+```bash
+rawback dream get <dream-id> [--page <number>] [--page-size <number>] [--json]
+rawback dream view <dream-id> [--page <number>] [--page-size <number>] [--json]
+```
+
+| Option                 | Description                              | Default |
+| ---------------------- | ---------------------------------------- | ------- |
+| `--page <number>`      | Positive contributing-photo page         | `1`     |
+| `--page-size <number>` | Photos per page, from 1 through 100      | `24`    |
+| `--json`               | Print machine-readable dream information | `false` |
+
+Human output includes status or failure details, stored Markdown, cover
+metadata, places, cameras, and a photo table. JSON output contains `dream`,
+`photos`, and `pageInfo` fields and normalizes missing values to `null`.
+
+### `dream retry`
+
+Retries a failed dream owned by the authenticated account:
+
+```bash
+rawback dream retry <dream-id> [--force] [--json]
+```
+
+Retrying can consume 30 AI credits. The command asks for confirmation unless
+`--force` is supplied; `--force` is required for non-interactive automation.
+The server rejects missing, shared, pending, or completed dreams. JSON output
+reports `retried`, `id`, and `status`; a declined retry reports `status: null`
+without making an API request.
+
 ## `rawback album`
 
 Manages albums belonging to the authenticated account. Album and nested article

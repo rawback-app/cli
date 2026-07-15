@@ -47,10 +47,33 @@ describe("new command hierarchy", () => {
     expect(runCli("web", "--help").stdout).toContain("open your Rawback profile");
   });
 
+  test("documents the dream command hierarchy and view alias", () => {
+    const dream = runCli("dream", "--help");
+    for (const command of ["list", "get", "view", "retry"]) {
+      expect(dream.stdout).toContain(command);
+    }
+
+    for (const command of ["get", "view"]) {
+      const detail = runCli("dream", command, "7", "--help");
+      expect(detail.exitCode).toBe(0);
+      expect(detail.stdout).toContain("--page-size");
+      expect(detail.stdout).toContain("--json");
+    }
+    const retry = runCli("dream", "retry", "7", "--help");
+    expect(retry.stdout).toContain("--force");
+    expect(retry.stdout).toContain("--json");
+  });
+
   test("requires a photos subcommand", () => {
     const result = runCli("photos");
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Choose a photos command");
+  });
+
+  test("requires a dream subcommand", () => {
+    const result = runCli("dream");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Choose a dream command");
   });
 
   test("removes the old top-level upload command", () => {
@@ -69,6 +92,25 @@ describe("new command hierarchy", () => {
     const range = runCli("photos", "list", "--aperture-min", "8", "--aperture-max", "2");
     expect(range.exitCode).toBe(1);
     expect(range.stderr).toContain("must not be greater");
+  });
+
+  test("validates dream arguments and retry safety before authentication", () => {
+    const page = runCli("dream", "list", "--page", "0");
+    expect(page.exitCode).toBe(1);
+    expect(page.stderr).toContain("--page must be a positive integer");
+    expect(page.stderr).not.toContain("Authentication credentials");
+
+    for (const command of ["get", "view", "retry"]) {
+      const id = runCli("dream", command, "0");
+      expect(id.exitCode).toBe(1);
+      expect(id.stderr).toContain("Dream ID must be a positive integer");
+      expect(id.stderr).not.toContain("Authentication credentials");
+    }
+
+    const retry = runCli("dream", "retry", "7");
+    expect(retry.exitCode).toBe(1);
+    expect(retry.stderr).toContain("requires an interactive terminal unless --force is provided");
+    expect(retry.stderr).not.toContain("Authentication credentials");
   });
 
   test("documents the album command hierarchy", () => {
