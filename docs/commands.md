@@ -397,6 +397,11 @@ The URL uses `webHost` from `~/.rawback/config.yml`, or
 
 Use `--json` when available instead of parsing human-readable tables. JSON is
 written to standard output. Errors and warnings are written to standard error.
+Human output uses responsive Ink layouts, so lower-priority table columns may be
+omitted in narrow terminals. Interactive terminals show transient activity
+indicators; redirected output is deterministic and contains no cursor-control
+sequences. JSON, `--content-only`, and version output are never decorated with
+icons or prose.
 
 The CLI exits with status `0` on success, `1` for validation, API, filesystem, or
 upload failures, and `130` when an interactive prompt is cancelled. Scripts

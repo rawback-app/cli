@@ -106,6 +106,11 @@ rawback photos upload --path /path/to/photos --concurrency 4
 ```
 
 Concurrency defaults to `4` and accepts integers from `1` through `16`. All
+
+While an upload is running in an interactive terminal, the CLI shows aggregate
+bytes and files, transfer speed, ETA, and up to four active filenames. When
+stdout is redirected, it emits line-oriented file status and a final summary
+instead of terminal animation.
 workers share one SFTP connection.
 
 Before connecting, the CLI verifies:

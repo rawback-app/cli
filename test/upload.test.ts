@@ -247,7 +247,7 @@ describe("upload command", () => {
       password: "upload-secret",
       username: "annatarhe",
     });
-    expect(lines.at(-1)).toContain("0 failed");
+    expect(lines.at(-1)).toContain("Failed       0");
 
     await runUpload({ concurrency: 3, dryRun: false, path: directory }, dependencies);
     expect(transport.uploads).toHaveLength(3);
@@ -275,9 +275,9 @@ describe("upload command", () => {
       },
     );
 
-    expect(lines[0]).toContain("1 file");
-    expect(lines[1]).toContain("1 existing remote");
-    expect(lines[2]).toContain("10 Mbps fallback");
+    expect(lines[0]).toContain("Files           1");
+    expect(lines[0]).toContain("Remote          1");
+    expect(lines[0]).toContain("10 Mbps fallback");
     await expect(stat(statePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 

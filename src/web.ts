@@ -1,4 +1,4 @@
-import { createCommandClient, output, type ReadCommandDependencies } from "./command.ts";
+import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
 import { DEFAULT_CONFIG_PATH, DEFAULT_WEB_HOST, readConfig } from "./config.ts";
 import { AuthStatusDocument } from "./gql/graphql.ts";
 
@@ -24,8 +24,11 @@ export function browserCommand(platform: NodeJS.Platform, url: string): [string,
 
 export async function runWeb(dependencies: WebCommandDependencies = {}): Promise<void> {
   const config = await readConfig(dependencies.configPath ?? DEFAULT_CONFIG_PATH);
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({ query: AuthStatusDocument });
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity("Loading profile…", async () => {
+    const client = await createCommandClient(dependencies);
+    return client.graphql.query({ query: AuthStatusDocument });
+  });
   if (result.error) throw result.error;
   if (!result.data?.me?.slug) {
     throw new Error("The account response did not include a profile slug");
@@ -43,5 +46,5 @@ export async function runWeb(dependencies: WebCommandDependencies = {}): Promise
   if (exitCode !== 0) {
     throw new Error(`Unable to open ${url}: ${command} exited with status ${exitCode}`);
   }
-  output(dependencies, `Opened ${url}.`);
+  ui.success(`Opened ${url}.`);
 }

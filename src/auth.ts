@@ -1,4 +1,6 @@
 import { CombinedGraphQLErrors, ServerError } from "@apollo/client";
+import { commandOutput, type ReadCommandDependencies } from "./command.ts";
+import { authStatusDocument } from "./features/auth/view.ts";
 import { type RawbackClient, createRawbackClient } from "./client.ts";
 import { type RawbackConfig, readConfig } from "./config.ts";
 import {
@@ -29,13 +31,8 @@ export interface AuthPrompts {
   password(): Promise<string>;
 }
 
-export interface AuthCommandDependencies {
-  configPath?: string;
-  credentialsPath?: string;
-  fetch?: typeof globalThis.fetch;
+export interface AuthCommandDependencies extends ReadCommandDependencies {
   prompts?: AuthPrompts;
-  stdout?: (message: string) => void;
-  stderr?: (message: string) => void;
 }
 
 export interface AuthCommandOptions {
@@ -50,14 +47,6 @@ type StatusResult =
   | { kind: "authenticated"; user: AuthUser }
   | { kind: "invalid" }
   | { kind: "missing" };
-
-function output(dependencies: AuthCommandDependencies, message: string): void {
-  (dependencies.stdout ?? console.log)(message);
-}
-
-function warn(dependencies: AuthCommandDependencies, message: string): void {
-  (dependencies.stderr ?? console.error)(message);
-}
 
 function defaultPrompts(): AuthPrompts {
   const ensureInteractive = (message: string) => {
@@ -162,7 +151,7 @@ async function readStoredCredentials(
     return await readCredentials(dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH);
   } catch (error) {
     if (tolerateInvalid && error instanceof CredentialsError) {
-      warn(dependencies, error.message + "; continuing with authentication.");
+      commandOutput(dependencies).warning(error.message + "; continuing with authentication.");
       return null;
     }
     throw error;
@@ -223,12 +212,15 @@ export async function runAuth(
   dependencies: AuthCommandDependencies = {},
 ): Promise<void> {
   const config = await readConfig(dependencies.configPath);
+  const ui = commandOutput(dependencies);
   const prompts = dependencies.prompts ?? defaultPrompts();
   let existingUser: AuthUser | undefined;
 
   if (!options.force) {
     const credentials = await readStoredCredentials(dependencies, true);
-    const status = await queryStatus(config, credentials, dependencies);
+    const status = await ui.withActivity("Checking authentication…", () =>
+      queryStatus(config, credentials, dependencies),
+    );
 
     if (status.kind === "authenticated") {
       existingUser = status.user;
@@ -240,25 +232,24 @@ export async function runAuth(
           "). Reauthenticate?",
       );
       if (!shouldReauthenticate) {
-        output(dependencies, "Authentication unchanged.");
+        ui.info("Authentication unchanged.");
         return;
       }
     } else if (status.kind === "invalid") {
-      warn(
-        dependencies,
-        "Stored credentials are expired or invalid; continuing with authentication.",
-      );
+      ui.warning("Stored credentials are expired or invalid; continuing with authentication.");
     }
   }
 
   const email = validateEmail(options.email ?? (await prompts.email(existingUser?.email)));
   const password = validatePassword(options.password ?? (await prompts.password()));
   const client = await createClient(config, null, dependencies);
-  const envelope = await client.http.requestJson<ApiEnvelope<LoginResponse>>("/api/v1/auth/login", {
-    authenticated: false,
-    body: { email, password },
-    method: "POST",
-  });
+  const envelope = await ui.withActivity("Signing in…", () =>
+    client.http.requestJson<ApiEnvelope<LoginResponse>>("/api/v1/auth/login", {
+      authenticated: false,
+      body: { email, password },
+      method: "POST",
+    }),
+  );
   const response = parseLoginResponse(envelope.data);
   await writeCredentials(
     {
@@ -267,14 +258,12 @@ export async function runAuth(
     },
     dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
   );
-  output(
-    dependencies,
-    "Authenticated as " + response.user.name + " (" + response.user.email + ").",
-  );
+  ui.success("Authenticated as " + response.user.name + " (" + response.user.email + ").");
 }
 
 export async function runAuthStatus(dependencies: AuthCommandDependencies = {}): Promise<void> {
   const config = await readConfig(dependencies.configPath);
+  const ui = commandOutput(dependencies);
   let credentials: Credentials | null;
   try {
     credentials = await readStoredCredentials(dependencies, false);
@@ -286,7 +275,9 @@ export async function runAuthStatus(dependencies: AuthCommandDependencies = {}):
     }
     throw error;
   }
-  const status = await queryStatus(config, credentials, dependencies);
+  const status = await ui.withActivity("Checking authentication…", () =>
+    queryStatus(config, credentials, dependencies),
+  );
 
   if (status.kind === "missing") {
     throw new Error("Not authenticated. Run 'rawback auth' to sign in.");
@@ -295,12 +286,5 @@ export async function runAuthStatus(dependencies: AuthCommandDependencies = {}):
     throw new Error("Authentication has expired. Run 'rawback auth --force' to sign in again.");
   }
 
-  output(dependencies, "Authenticated");
-  output(dependencies, "Name: " + status.user.name);
-  output(dependencies, "Email: " + status.user.email);
-  output(dependencies, "User ID: " + status.user.id);
-  output(dependencies, "Profile: @" + status.user.slug);
-  output(dependencies, "Tier: " + status.user.tier);
-  output(dependencies, "Subscription: " + status.user.subscriptionStatus);
-  output(dependencies, "Account: " + status.user.accountStatus);
+  ui.document(authStatusDocument(status.user));
 }

@@ -1,11 +1,11 @@
 import {
   createCommandClient,
-  output,
+  commandOutput,
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
 import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from "./gql/graphql.ts";
-import { formatBytes, formatDuration, formatJson, formatTable, formatTimestamp } from "./output.ts";
+import { uploadSessionListDocument } from "./features/uploads/view.ts";
 
 const UPLOAD_STATUSES = new Set<string>(Object.values(UploadStatus));
 
@@ -53,23 +53,6 @@ function serializeUpload(upload: UploadSession) {
   };
 }
 
-function uploadTable(uploads: UploadSession[]): string {
-  return formatTable(
-    ["ID", "STATUS", "SOURCE", "CREDENTIAL", "FILES", "FAILED", "SIZE", "STARTED", "DURATION"],
-    uploads.map((upload) => [
-      String(upload.id),
-      upload.status,
-      upload.sourceKind.toUpperCase(),
-      upload.credential?.name ?? "—",
-      `${upload.processedFiles}/${upload.totalFiles}`,
-      String(upload.failedFiles),
-      formatBytes(upload.totalBytes),
-      formatTimestamp(upload.createdAt),
-      formatDuration((upload.completedAt ?? upload.updatedAt) - upload.createdAt),
-    ]),
-  );
-}
-
 export async function runUploadSessionList(
   options: UploadSessionListOptions,
   dependencies: UploadSessionListDependencies = {},
@@ -79,14 +62,21 @@ export async function runUploadSessionList(
     throw new Error(`--status must be one of: ${[...UPLOAD_STATUSES].join(", ")}`);
   }
 
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({
-    query: UploadSessionsDocument,
-    variables: {
-      pagination: { page: options.page, pageSize: options.pageSize },
-      ...(options.status !== undefined ? { status: options.status as UploadStatus } : {}),
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading upload sessions…",
+    async () => {
+      const client = await createCommandClient(dependencies);
+      return client.graphql.query({
+        query: UploadSessionsDocument,
+        variables: {
+          pagination: { page: options.page, pageSize: options.pageSize },
+          ...(options.status !== undefined ? { status: options.status as UploadStatus } : {}),
+        },
+      });
     },
-  });
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The upload sessions response did not include upload data");
 
@@ -100,19 +90,8 @@ export async function runUploadSessionList(
     hasPreviousPage: pageInfo.hasPreviousPage,
   };
   if (options.json) {
-    output(
-      dependencies,
-      formatJson({ uploads: edges.map(serializeUpload), pageInfo: serializedPageInfo }),
-    );
+    ui.json({ uploads: edges.map(serializeUpload), pageInfo: serializedPageInfo });
     return;
   }
-  if (edges.length === 0) {
-    output(dependencies, "No upload sessions found.");
-    return;
-  }
-  output(dependencies, uploadTable(edges));
-  output(
-    dependencies,
-    `Page ${pageInfo.page} of ${pageInfo.totalPages} (${pageInfo.totalCount} total upload sessions).`,
-  );
+  ui.document(uploadSessionListDocument(edges, pageInfo));
 }

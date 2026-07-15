@@ -1,11 +1,11 @@
 import {
   createCommandClient,
-  output,
+  commandOutput,
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
 import { type ImageFilter, ImageStatus, PhotosDocument, type PhotosQuery } from "./gql/graphql.ts";
-import { formatJson, formatTable, formatTimestamp } from "./output.ts";
+import { photoListDocument } from "./features/photos/view.ts";
 
 const IMAGE_STATUSES = new Set<string>(Object.values(ImageStatus));
 
@@ -145,31 +145,26 @@ function serializePhoto(photo: Photo) {
   };
 }
 
-function photoTable(photos: Photo[]): string {
-  return formatTable(
-    ["ID", "FILENAME", "STATUS", "RATING", "CAPTURED", "CAMERA", "DIMENSIONS"],
-    photos.map((photo) => [
-      String(photo.id),
-      photo.filename,
-      photo.status,
-      photo.rate === null || photo.rate === undefined ? "—" : String(photo.rate),
-      formatTimestamp(photo.capturedAt),
-      [photo.cameraMake, photo.cameraModel].filter(Boolean).join(" ") || "—",
-      photo.width && photo.height ? `${photo.width}×${photo.height}` : "—",
-    ]),
-  );
-}
-
 export async function runPhotoList(
   options: PhotoListOptions,
   dependencies: PhotoListDependencies = {},
 ): Promise<void> {
   const filter = createPhotoFilter(options);
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({
-    query: PhotosDocument,
-    variables: { filter, pagination: { page: options.page, pageSize: options.pageSize } },
-  });
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading photos…",
+    async () => {
+      const client = await createCommandClient(dependencies);
+      return client.graphql.query({
+        query: PhotosDocument,
+        variables: {
+          filter,
+          pagination: { page: options.page, pageSize: options.pageSize },
+        },
+      });
+    },
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The photos response did not include photo data");
 
@@ -183,19 +178,8 @@ export async function runPhotoList(
     hasPreviousPage: pageInfo.hasPreviousPage,
   };
   if (options.json) {
-    output(
-      dependencies,
-      formatJson({ photos: edges.map(serializePhoto), pageInfo: serializedPageInfo }),
-    );
+    ui.json({ photos: edges.map(serializePhoto), pageInfo: serializedPageInfo });
     return;
   }
-  if (edges.length === 0) {
-    output(dependencies, "No photos found.");
-    return;
-  }
-  output(dependencies, photoTable(edges));
-  output(
-    dependencies,
-    `Page ${pageInfo.page} of ${pageInfo.totalPages} (${pageInfo.totalCount} total photos).`,
-  );
+  ui.document(photoListDocument(edges, pageInfo));
 }

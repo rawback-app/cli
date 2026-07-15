@@ -174,9 +174,9 @@ describe("usage", () => {
     });
     const human: string[] = [];
     await runUsage({}, { ...paths, fetch, stdout: (message) => human.push(message) });
-    expect(human[0]).toContain("STORAGE — LAST 30 DAYS");
-    expect(human[0]).toContain("RECENT AI OPERATIONS");
-    expect(human[0]).toContain("TOP FACE MATCHES");
+    expect(human[0]).toContain("Storage · last 30 days");
+    expect(human[0]).toContain("Recent AI operations");
+    expect(human[0]).toContain("Top face matches");
 
     const json: string[] = [];
     await runUsage({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) });

@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises";
 
 import {
   createCommandClient,
-  output,
+  commandOutput,
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
 import { type FragmentType, useFragment } from "./gql/fragment-masking.ts";
+import { articleListDocument, articleViewDocument } from "./features/articles/view.ts";
 import {
   type CliAlbumArticleQuery,
   CliAlbumArticleDocument,
@@ -21,7 +22,6 @@ import {
   CliUpsertArticleDocument,
   type UpsertArticleInput,
 } from "./gql/graphql.ts";
-import { formatJson, formatTable, formatTimestamp, sanitizeCell } from "./output.ts";
 import { validatePositiveId } from "./albums.ts";
 
 export interface ArticlePrompts {
@@ -143,36 +143,6 @@ export function serializeArticle(article: CliArticleFieldsFragment) {
   };
 }
 
-function articleTable(articles: CliArticleFieldsFragment[]): string {
-  return formatTable(
-    ["ID", "ALBUM ID", "ALBUM", "STATUS", "TITLE", "UPDATED"],
-    articles.map((article) => [
-      String(article.id),
-      String(article.album.id),
-      sanitizeCell(article.album.name),
-      article.status,
-      sanitizeCell(article.title) || "—",
-      formatTimestamp(article.updatedAt),
-    ]),
-  );
-}
-
-function articleDetails(article: CliArticleFieldsFragment): string {
-  return formatTable(
-    ["FIELD", "VALUE"],
-    [
-      ["ID", String(article.id)],
-      ["Album ID", String(article.album.id)],
-      ["Album", sanitizeCell(article.album.name)],
-      ["Title", sanitizeCell(article.title) || "—"],
-      ["Status", article.status],
-      ["Images", String(article.images.length)],
-      ["Created", formatTimestamp(article.createdAt)],
-      ["Updated", formatTimestamp(article.updatedAt)],
-    ],
-  );
-}
-
 async function queryAlbumArticle(
   albumId: number,
   dependencies: ArticleCommandDependencies,
@@ -223,7 +193,12 @@ function writeArticle(
   dependencies: ArticleCommandDependencies,
   message: string,
 ): void {
-  output(dependencies, json ? formatJson(serializeArticle(article)) : message);
+  const ui = commandOutput(dependencies);
+  if (json) {
+    ui.json(serializeArticle(article));
+  } else {
+    ui.success(message);
+  }
 }
 
 export async function runArticleList(
@@ -231,29 +206,27 @@ export async function runArticleList(
   dependencies: ArticleCommandDependencies = {},
 ): Promise<void> {
   validatePagination(options.page, options.pageSize);
-  const client = await createCommandClient(dependencies);
-  const result = await client.graphql.query({
-    query: CliArticlesDocument,
-    variables: { pagination: { page: options.page, pageSize: options.pageSize } },
-  });
+  const ui = commandOutput(dependencies);
+  const result = await ui.withActivity(
+    "Loading articles…",
+    async () => {
+      const client = await createCommandClient(dependencies);
+      return client.graphql.query({
+        query: CliArticlesDocument,
+        variables: { pagination: { page: options.page, pageSize: options.pageSize } },
+      });
+    },
+    !options.json,
+  );
   if (result.error) throw result.error;
   if (!result.data) throw new Error("The articles response did not include article data");
   const articles = result.data.me.articles.edges.map(articleFragment);
   const pagination = pageInfo(result.data.me.articles.pageInfo);
   if (options.json) {
-    output(
-      dependencies,
-      formatJson({ articles: articles.map(serializeArticle), pageInfo: pagination }),
-    );
-  } else if (articles.length === 0) {
-    output(dependencies, "No articles found.");
-  } else {
-    output(dependencies, articleTable(articles));
-    output(
-      dependencies,
-      `Page ${pagination.page} of ${pagination.totalPages} (${pagination.totalCount} total articles).`,
-    );
+    ui.json({ articles: articles.map(serializeArticle), pageInfo: pagination });
+    return;
   }
+  ui.document(articleListDocument(articles, pagination));
 }
 
 export async function runArticleView(
@@ -264,14 +237,18 @@ export async function runArticleView(
   if (options.contentOnly && options.json) {
     throw new Error("--content-only and --json cannot be used together");
   }
-  const article = requireArticle(await queryAlbumArticle(albumId, dependencies));
+  const ui = commandOutput(dependencies);
+  const article = await ui.withActivity(
+    "Loading article…",
+    async () => requireArticle(await queryAlbumArticle(albumId, dependencies)),
+    !options.contentOnly && !options.json,
+  );
   if (options.contentOnly) {
-    output(dependencies, article.content);
+    ui.raw(article.content);
   } else if (options.json) {
-    output(dependencies, formatJson(serializeArticle(article)));
+    ui.json(serializeArticle(article));
   } else {
-    output(dependencies, articleDetails(article));
-    output(dependencies, article.content || "No article content.");
+    ui.document(articleViewDocument(article));
   }
 }
 
@@ -371,12 +348,12 @@ export async function runArticleDelete(
       `Delete article "${article.title || article.album.name}" (ID ${article.id}) from album ${albumId}?`,
     );
     if (!confirmed) {
-      output(
-        dependencies,
-        options.json
-          ? formatJson({ albumId, articleId: article.id, deleted: false })
-          : "Deletion cancelled.",
-      );
+      const ui = commandOutput(dependencies);
+      if (options.json) {
+        ui.json({ albumId, articleId: article.id, deleted: false });
+      } else {
+        ui.info("Deletion cancelled.");
+      }
       return;
     }
   }
@@ -389,10 +366,10 @@ export async function runArticleDelete(
   if (result.data?.deleteArticle !== true) {
     throw new Error("The delete article response did not confirm deletion");
   }
-  output(
-    dependencies,
-    options.json
-      ? formatJson({ albumId, articleId: article.id, deleted: true })
-      : `Deleted article ${article.id} from album ${albumId}.`,
-  );
+  const ui = commandOutput(dependencies);
+  if (options.json) {
+    ui.json({ albumId, articleId: article.id, deleted: true });
+  } else {
+    ui.success(`Deleted article ${article.id} from album ${albumId}.`);
+  }
 }

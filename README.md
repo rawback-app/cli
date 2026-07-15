@@ -122,6 +122,13 @@ Add `--json` to data-oriented commands when you need structured output:
 ```bash
 rawback photos list --page-size 10 --json
 rawback usage --json
+
+Human-facing output uses a compact terminal UI with responsive columns, status
+notices, and activity indicators. During uploads, an interactive terminal shows
+aggregate progress, transfer speed, ETA, and the active files. Redirected output
+stays line-oriented and does not contain cursor-control sequences. `--json`,
+article `--content-only`, and `--version` remain undecorated for scripts and
+other tools.
 ```
 
 ### 3. Set up uploads

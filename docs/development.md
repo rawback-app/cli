@@ -26,8 +26,10 @@ The extra `--` separates arguments for the package script from CLI arguments.
 
 | Path                  | Purpose                                              |
 | --------------------- | ---------------------------------------------------- |
-| `src/index.ts`        | Executable entry point and argument parsing          |
+| `src/index.ts`        | Minimal executable entry point                       |
 | `src/cli.ts`          | Yargs command hierarchy, options, and dispatch       |
+| `src/features/*`      | Feature-specific presenters and UI controllers       |
+| `src/ui/*`            | Shared Ink components, output ports, and formatters  |
 | `src/api.ts`          | Public re-exports for API and credential clients     |
 | `src/client.ts`       | Shared REST/GraphQL client factory                   |
 | `src/session.ts`      | Token refresh and one-time request retry             |
@@ -39,9 +41,15 @@ The extra `--` separates arguments for the package script from CLI arguments.
 | `src/gql/`            | Generated, ignored GraphQL client                    |
 | `test/*.test.ts`      | Bun unit and CLI integration tests                   |
 
-Command modules keep user-facing formatting separate from the CLI declaration.
-Injectable dependency objects let tests replace network clients, prompts, output,
-filesystem paths, and SFTP transports.
+Command modules keep behavior separate from the CLI declaration and build
+feature-specific UI documents for human output. Shared Ink components render
+those documents as responsive tables, fields, notices, help, and activity
+states. `CommandOutput` is the stdout/stderr boundary: JSON and raw content
+bypass Ink decoration, while interactive-only animations are disabled for
+injected or redirected output.
+
+Injectable dependency objects let tests replace network clients, prompts,
+output, filesystem paths, and SFTP transports.
 
 ## Validation
 

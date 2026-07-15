@@ -4,6 +4,10 @@ import { basename, join, resolve } from "node:path";
 import type { RawbackClient } from "./client.ts";
 import { createRawbackClient } from "./client.ts";
 import { DEFAULT_CONFIG_PATH, readConfig, type SftpConfig } from "./config.ts";
+import { commandOutput, type ReadCommandDependencies } from "./command.ts";
+import { UploadProgressController } from "./features/upload/progress.tsx";
+import { uploadDryRunDocument, uploadSummaryDocument } from "./features/upload/view.ts";
+import { formatBytes } from "./ui/format.ts";
 import { DEFAULT_CREDENTIALS_PATH } from "./credentials.ts";
 import {
   ExistingUploadImagesDocument,
@@ -50,15 +54,10 @@ export interface UploadCommandOptions {
   path: string;
 }
 
-export interface UploadCommandDependencies {
+export interface UploadCommandDependencies extends ReadCommandDependencies {
   client?: RawbackClient;
-  configPath?: string;
-  credentialsPath?: string;
-  fetch?: typeof globalThis.fetch;
   sleep?: (milliseconds: number) => Promise<void>;
   statePath?: string;
-  stderr?: (message: string) => void;
-  stdout?: (message: string) => void;
   transportFactory?: UploadTransportFactory;
 }
 
@@ -88,101 +87,6 @@ interface UploadFailure {
 
 const REMOTE_QUERY_BATCH_SIZE = 200;
 const FALLBACK_BYTES_PER_SECOND = 10_000_000 / 8;
-
-class UploadProgress {
-  private readonly active = new Map<string, number>();
-  private completedBytes = 0;
-  private completedFiles = 0;
-  private lastRender = 0;
-
-  constructor(
-    private readonly totalBytes: number,
-    private readonly totalFiles: number,
-    private readonly dependencies: UploadCommandDependencies,
-  ) {}
-
-  private get interactive(): boolean {
-    return Boolean(process.stdout.isTTY && !this.dependencies.stdout);
-  }
-
-  start(file: UploadFile): void {
-    this.active.set(file.canonicalPath, 0);
-    if (this.interactive) this.render(true);
-    else output(this.dependencies, `Uploading ${file.basename} (${formatBytes(file.size)})`);
-  }
-
-  update(file: UploadFile, bytes: number): void {
-    this.active.set(file.canonicalPath, Math.min(file.size, bytes));
-    this.render(false);
-  }
-
-  complete(file: UploadFile): void {
-    this.active.delete(file.canonicalPath);
-    this.completedBytes += file.size;
-    this.completedFiles += 1;
-    if (this.interactive) this.render(true);
-    else output(this.dependencies, `Uploaded ${file.basename}`);
-  }
-
-  fail(file: UploadFile): void {
-    this.active.delete(file.canonicalPath);
-    if (this.interactive) {
-      process.stdout.write("\r\x1b[2K");
-      this.lastRender = 0;
-    }
-  }
-
-  finish(): void {
-    if (!this.interactive) return;
-    this.render(true);
-    process.stdout.write("\n");
-  }
-
-  private render(force: boolean): void {
-    if (!this.interactive) return;
-    const now = Date.now();
-    if (!force && now - this.lastRender < 100) return;
-    this.lastRender = now;
-    const activeBytes = [...this.active.values()].reduce((sum, bytes) => sum + bytes, 0);
-    const transferred = Math.min(this.totalBytes, this.completedBytes + activeBytes);
-    const percent = this.totalBytes === 0 ? 100 : Math.floor((transferred / this.totalBytes) * 100);
-    process.stdout.write(
-      `\rUploading ${this.completedFiles}/${this.totalFiles} files — ${formatBytes(transferred)}/${formatBytes(this.totalBytes)} (${percent}%)`,
-    );
-  }
-}
-
-function output(dependencies: UploadCommandDependencies, message: string): void {
-  (dependencies.stdout ?? console.log)(message);
-}
-
-function warn(dependencies: UploadCommandDependencies, message: string): void {
-  (dependencies.stderr ?? console.error)(message);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KiB", "MiB", "GiB", "TiB"];
-  let value = bytes;
-  let unit = "B";
-  for (const candidate of units) {
-    value /= 1024;
-    unit = candidate;
-    if (value < 1024) break;
-  }
-  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
-}
-
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds)) return "unknown";
-  const rounded = Math.max(0, Math.ceil(seconds));
-  if (rounded < 60) return `${rounded}s`;
-  const minutes = Math.floor(rounded / 60);
-  const remainingSeconds = rounded % 60;
-  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
-}
 
 function canonicalEndpoint(value: string): string {
   const url = new URL(value);
@@ -387,7 +291,7 @@ async function uploadRound(
   state: UploadState,
   preflightResult: UploadPreflight,
   dependencies: UploadCommandDependencies,
-  progress: UploadProgress,
+  progress: UploadProgressController,
   shouldStop: () => boolean,
 ): Promise<{ failures: UploadFailure[]; uploadedBytes: number }> {
   const failures: UploadFailure[] = [];
@@ -412,7 +316,7 @@ async function uploadRound(
         progress.fail(file);
         state.setFileStatus(persisted, "failed", failure.message);
         failures.push({ error: failure, file });
-        warn(dependencies, `Failed ${file.basename}: ${failure.message}`);
+        commandOutput(dependencies).warning(`Failed ${file.basename}: ${failure.message}`);
       }
     }
   };
@@ -438,7 +342,10 @@ export async function runUpload(
   options: UploadCommandOptions,
   dependencies: UploadCommandDependencies = {},
 ): Promise<void> {
-  const preflightResult = await preflight(options, dependencies);
+  const ui = commandOutput(dependencies);
+  const preflightResult = await ui.withActivity("Preparing upload…", () =>
+    preflight(options, dependencies),
+  );
   const config = await readConfig(dependencies.configPath ?? DEFAULT_CONFIG_PATH);
   const statePath = dependencies.statePath ?? DEFAULT_UPLOAD_STATE_PATH;
   const state = options.dryRun
@@ -474,27 +381,23 @@ export async function runUpload(
       );
       const rate = estimate?.bytesPerSecond ?? FALLBACK_BYTES_PER_SECOND;
       const source = estimate?.source ?? "10 Mbps fallback";
-      output(
-        dependencies,
-        `Dry run: ${pending.length} file${pending.length === 1 ? "" : "s"} (${formatBytes(pendingBytes)}) would upload.`,
-      );
-      output(
-        dependencies,
-        `Skipped ${locallyCompleted.size} completed and ${remote.size} existing remote file${remote.size === 1 ? "" : "s"}.`,
-      );
-      output(
-        dependencies,
-        `Estimated upload time: ${formatDuration(pendingBytes / rate)} at ${formatBytes(rate)}/s (${source}).`,
+      ui.document(
+        uploadDryRunDocument({
+          completed: locallyCompleted.size,
+          estimatedSeconds: pendingBytes / rate,
+          existingRemote: remote.size,
+          files: pending.length,
+          rate,
+          rateSource: source,
+          totalBytes: pendingBytes,
+        }),
       );
       return;
     }
 
     if (!state) throw new Error("Unable to open upload progress database");
     if (pending.length === 0) {
-      output(
-        dependencies,
-        "Nothing to upload; all supported files are already complete or remote.",
-      );
+      ui.info("Nothing to upload; all supported files are already complete or remote.");
       return;
     }
 
@@ -506,8 +409,7 @@ export async function runUpload(
       signalCount += 1;
       interrupted = true;
       if (signalCount === 1) {
-        warn(
-          dependencies,
+        ui.warning(
           "Interrupt received; finishing active uploads. Press Ctrl-C again to disconnect.",
         );
       } else void transport?.close();
@@ -528,7 +430,7 @@ export async function runUpload(
 
       let remaining = pending;
       let totalUploaded = 0;
-      const progress = new UploadProgress(pendingBytes, pending.length, dependencies);
+      const progress = new UploadProgressController(pendingBytes, pending.length, ui);
       const permanentFailures: UploadFailure[] = [];
       for (let round = 0; round < 3 && remaining.length > 0 && !interrupted; round += 1) {
         const result = await uploadRound(
@@ -548,10 +450,7 @@ export async function runUpload(
         );
         remaining = reconnectable.map(({ file }) => file);
         if (remaining.length > 0 && round < 2 && !interrupted) {
-          warn(
-            dependencies,
-            `Connection dropped; reconnecting to retry ${remaining.length} file(s).`,
-          );
+          ui.warning(`Connection dropped; reconnecting to retry ${remaining.length} file(s).`);
           await transport.close();
           await retryConnect(transport, dependencies);
         }
@@ -564,7 +463,7 @@ export async function runUpload(
           })),
         );
       }
-      progress.finish();
+      await progress.finish();
       for (const failure of permanentFailures) {
         state.setFileStatus(
           stateFile(preflightResult, failure.file),
@@ -579,9 +478,12 @@ export async function runUpload(
           ? "partial"
           : "completed";
       state.finishRun(runId, totalUploaded, status);
-      output(
-        dependencies,
-        `Upload summary: ${formatBytes(totalUploaded)} uploaded; ${permanentFailures.length} failed${interrupted ? "; cancelled" : ""}.`,
+      ui.document(
+        uploadSummaryDocument({
+          cancelled: interrupted,
+          failedFiles: permanentFailures.length,
+          totalBytes: totalUploaded,
+        }),
       );
       if (interrupted) throw new Error("Upload cancelled");
       if (permanentFailures.length > 0) {

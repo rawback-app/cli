@@ -3,18 +3,8 @@
 import packageJson from "../package.json" with { type: "json" };
 import { hideBin } from "yargs/helpers";
 
-import { createProgram } from "./cli.ts";
+import { runCli } from "./features/cli/runtime.ts";
 
 const args = hideBin(process.argv);
-const parseArgs =
-  args[0] === "upload"
-    ? args.filter((argument) => argument !== "--help" && argument !== "-h")
-    : args;
 
-const program = createProgram(packageJson.version);
-
-if (args.length === 0) {
-  console.log(await program.getHelp());
-} else {
-  await program.parseAsync(parseArgs);
-}
+await runCli(args, packageJson.version);

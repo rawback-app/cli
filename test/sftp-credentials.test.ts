@@ -86,13 +86,13 @@ describe("SFTP credential commands", () => {
     await runSftpCredentialList({}, dependencies);
 
     expect(output).toHaveLength(1);
-    expect(output[0]).toContain("ID  NAME");
+    expect(output[0]).toContain("ID  Name");
     expect(output[0]).toContain("7   Home PC");
     expect(output[0]).toContain("enabled");
     expect(output[0]).toContain("disabled");
-    expect(output[0]).toContain("2024-01-01T00:00:00.000Z");
-    expect(output[0]).toContain("2024-01-02T00:00:00.000Z");
-    expect(output[0]).toContain("—");
+    expect(output[0]).toContain("2024-01-01");
+    expect(output[0]).toContain("2024-01-02");
+    expect(output[0]).toContain("never");
   });
 
   test("lists credentials as stable JSON and reports an empty human list", async () => {
@@ -133,7 +133,8 @@ describe("SFTP credential commands", () => {
       { stdout: (message) => emptyOutput.push(message) },
     );
     await runSftpCredentialList({}, emptyDependencies);
-    expect(emptyOutput).toEqual(["No SFTP credentials found."]);
+    expect(emptyOutput).toHaveLength(1);
+    expect(emptyOutput[0]).toContain("No SFTP credentials found.");
   });
 
   test("creates a credential with a generated password and prompts for a missing name", async () => {
@@ -173,8 +174,10 @@ describe("SFTP credential commands", () => {
     await runSftpCredentialAdd({}, dependencies);
 
     expect(promptCalls).toEqual(["name"]);
-    expect(output).toEqual(["Created SFTP credential 11 (Home PC).", "Password: generated-secret"]);
-    expect(warnings).toEqual(["Save this password now. It will only be shown once."]);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toContain("SFTP credential created");
+    expect(output[0]).toContain("Password  generated-secret");
+    expect(warnings).toEqual(["! Save this password now. It will only be shown once."]);
   });
 
   test("validates add names before creating an API client", async () => {
@@ -266,7 +269,7 @@ describe("SFTP credential commands", () => {
     await runSftpCredentialDelete({ id: 8 }, dependencies);
 
     expect(operations).toEqual(["SftpCredentials", "DeleteSftpCredential"]);
-    expect(output).toEqual(["Deleted SFTP credential 8."]);
+    expect(output).toEqual(["✓ Deleted SFTP credential 8."]);
   });
 
   test("force deletes without listing or prompting", async () => {

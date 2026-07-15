@@ -1,4 +1,6 @@
 import { type RawbackClient, createRawbackClient } from "./client.ts";
+import { commandOutput, type ReadCommandDependencies } from "./command.ts";
+import { credentialListDocument, createdCredentialDocument } from "./features/credentials/view.ts";
 import {
   CreateSftpCredentialDocument,
   DeleteSftpCredentialDocument,
@@ -6,7 +8,6 @@ import {
   type CreateSftpCredentialMutation,
   type SftpCredentialsQuery,
 } from "./gql/graphql.ts";
-import { formatTable, formatTimestamp, sanitizeCell } from "./output.ts";
 
 type SftpCredential = SftpCredentialsQuery["sftpCredentials"][number];
 type CreatedSftpCredential = CreateSftpCredentialMutation["createSFTPCredential"];
@@ -16,13 +17,8 @@ export interface SftpCredentialPrompts {
   name(): Promise<string>;
 }
 
-export interface SftpCredentialCommandDependencies {
-  configPath?: string;
-  credentialsPath?: string;
-  fetch?: typeof globalThis.fetch;
+export interface SftpCredentialCommandDependencies extends ReadCommandDependencies {
   prompts?: SftpCredentialPrompts;
-  stderr?: (message: string) => void;
-  stdout?: (message: string) => void;
 }
 
 export interface SftpCredentialListOptions {
@@ -38,14 +34,6 @@ export interface SftpCredentialDeleteOptions {
   force?: boolean;
   id: number;
   json?: boolean;
-}
-
-function output(dependencies: SftpCredentialCommandDependencies, message: string): void {
-  (dependencies.stdout ?? console.log)(message);
-}
-
-function warn(dependencies: SftpCredentialCommandDependencies, message: string): void {
-  (dependencies.stderr ?? console.error)(message);
 }
 
 function ensureInteractive(message: string): void {
@@ -139,33 +127,21 @@ function serializeCreatedCredential(credential: CreatedSftpCredential) {
   };
 }
 
-function formatCredentialTable(credentials: SftpCredential[]): string {
-  const headers = ["ID", "NAME", "STATUS", "CREATED", "LAST USED"];
-  const rows = credentials.map((credential) => [
-    String(credential.id),
-    sanitizeCell(credential.name),
-    credential.enabled ? "enabled" : "disabled",
-    formatTimestamp(credential.createdAt),
-    formatTimestamp(credential.lastUsedAt),
-  ]);
-  return formatTable(headers, rows);
-}
-
 export async function runSftpCredentialList(
   options: SftpCredentialListOptions = {},
   dependencies: SftpCredentialCommandDependencies = {},
 ): Promise<void> {
-  const credentials = await queryCredentials(await createClient(dependencies));
+  const ui = commandOutput(dependencies);
+  const credentials = await ui.withActivity(
+    "Loading SFTP credentials…",
+    async () => queryCredentials(await createClient(dependencies)),
+    !options.json,
+  );
   if (options.json) {
-    output(dependencies, JSON.stringify(credentials.map(serializeCredential), null, 2));
+    ui.json(credentials.map(serializeCredential));
     return;
   }
-
-  if (credentials.length === 0) {
-    output(dependencies, "No SFTP credentials found.");
-    return;
-  }
-  output(dependencies, formatCredentialTable(credentials));
+  ui.document(credentialListDocument(credentials));
 }
 
 export async function runSftpCredentialAdd(
@@ -173,12 +149,19 @@ export async function runSftpCredentialAdd(
   dependencies: SftpCredentialCommandDependencies = {},
 ): Promise<void> {
   const prompts = dependencies.prompts ?? defaultPrompts();
+  const ui = commandOutput(dependencies);
   const name = validateName(options.name ?? (await prompts.name()));
-  const client = await createClient(dependencies);
-  const result = await client.graphql.mutate({
-    mutation: CreateSftpCredentialDocument,
-    variables: { name },
-  });
+  const result = await ui.withActivity(
+    "Creating SFTP credential…",
+    async () => {
+      const client = await createClient(dependencies);
+      return client.graphql.mutate({
+        mutation: CreateSftpCredentialDocument,
+        variables: { name },
+      });
+    },
+    !options.json,
+  );
   if (result.error) {
     throw result.error;
   }
@@ -188,12 +171,11 @@ export async function runSftpCredentialAdd(
   }
 
   if (options.json) {
-    output(dependencies, JSON.stringify(serializeCreatedCredential(credential), null, 2));
+    ui.json(serializeCreatedCredential(credential));
   } else {
-    output(dependencies, `Created SFTP credential ${credential.id} (${credential.name}).`);
-    output(dependencies, `Password: ${credential.password}`);
+    ui.document(createdCredentialDocument(credential));
   }
-  warn(dependencies, "Save this password now. It will only be shown once.");
+  ui.warning("Save this password now. It will only be shown once.");
 }
 
 export async function runSftpCredentialDelete(
@@ -202,6 +184,7 @@ export async function runSftpCredentialDelete(
 ): Promise<void> {
   const id = validateId(options.id);
   const client = await createClient(dependencies);
+  const ui = commandOutput(dependencies);
   if (!options.force) {
     const credentials = await queryCredentials(client);
     const credential = credentials.find((item) => item.id === id);
@@ -215,9 +198,9 @@ export async function runSftpCredentialDelete(
     );
     if (!confirmed) {
       if (options.json) {
-        output(dependencies, JSON.stringify({ deleted: false, id }, null, 2));
+        ui.json({ deleted: false, id });
       } else {
-        output(dependencies, "Deletion cancelled.");
+        ui.info("Deletion cancelled.");
       }
       return;
     }
@@ -235,8 +218,8 @@ export async function runSftpCredentialDelete(
   }
 
   if (options.json) {
-    output(dependencies, JSON.stringify({ deleted: true, id }, null, 2));
+    ui.json({ deleted: true, id });
   } else {
-    output(dependencies, `Deleted SFTP credential ${id}.`);
+    ui.success(`Deleted SFTP credential ${id}.`);
   }
 }
