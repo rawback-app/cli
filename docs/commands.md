@@ -404,6 +404,100 @@ actionable error when the album has no article. Deletion asks for confirmation
 unless `--force` is supplied; JSON deletion output includes `albumId`,
 `articleId`, and `deleted`.
 
+## `rawback shares`
+
+Browses direct shares in both directions and manages existing photo or album
+link shares. Direct shares grant another Rawback user access to a photo, album,
+or dream. Link shares have a public/restricted URL and numeric share ID.
+
+### `shares list`
+
+Lists content you shared by default. Use `--scope with-me` for resources other
+users shared directly with you:
+
+```bash
+rawback shares list [options]
+rawback shares list --scope with-me --type dream
+rawback shares list --status archived
+```
+
+| Option                 | Description                                                 | Default  |
+| ---------------------- | ----------------------------------------------------------- | -------- |
+| `--scope <value>`      | `by-me` or `with-me`                                        | `by-me`  |
+| `--type <value>`       | `photo`, `album`, or `dream`                                | —        |
+| `--kind <value>`       | Outgoing `link` or `direct` shares                          | —        |
+| `--status <value>`     | Outgoing `active` or `archived` shares                      | `active` |
+| `--enabled`            | Include only enabled link shares                            | —        |
+| `--no-enabled`         | Include only disabled link shares                           | —        |
+| `--access <value>`     | Link access type: `public` or `restricted`                  | —        |
+| `--expiry <value>`     | Link expiration: `valid`, `expired`, or `never`             | —        |
+| `--after <time>`       | Created on/after an ISO value or Unix timestamp in seconds  | —        |
+| `--before <time>`      | Created on/before an ISO value or Unix timestamp in seconds | —        |
+| `--page <number>`      | Positive result page                                        | `1`      |
+| `--page-size <number>` | Results per page, from 1 through 100                        | `20`     |
+| `--json`               | Print `{ scope, shares, pageInfo }` JSON                    | `false`  |
+
+Dates apply to when the share or direct grant was created. A date without a
+time covers the corresponding UTC day, and both boundaries are inclusive.
+Filters unsupported by the API are applied after loading matching pages so
+filtered totals and pagination remain accurate.
+
+Incoming shares are always direct, while archived, enabled, access, and expiry
+filters apply only to outgoing link shares. Dreams can be shared directly but
+cannot have link shares. Incompatible combinations fail before an API request.
+
+### `shares get` and `shares view`
+
+Shows an existing link share's resource, URL, access settings, enabled/archive
+state, expiration, permissions, views, and recipient count. `view` is an alias
+of `get`:
+
+```bash
+rawback shares get <share-id> [--json]
+rawback shares view <share-id> [--json]
+```
+
+### Link state actions
+
+Archive, restore, enable, or disable a numeric link share ID:
+
+```bash
+rawback shares archive <share-id> [--json]
+rawback shares unarchive <share-id> [--json]
+rawback shares enable <share-id> [--json]
+rawback shares disable <share-id> [--json]
+```
+
+Archiving is organizational and does not disable the URL. Likewise, enabling or
+disabling a share does not change its archive status. Expired shares cannot be
+enabled; changing their expiration remains available in the web application.
+
+### Recipients and links
+
+List the email recipients associated with a restricted link share, or print its
+URL:
+
+```bash
+rawback shares recipients <share-id> [--json]
+rawback shares link <share-id> [--copy] [--json]
+```
+
+Recipient output includes recipient ID, email, added time, and last access time;
+access tokens are never exposed. `shares link` prints only the raw URL unless
+`--copy` or `--json` is used. Clipboard copying uses `pbcopy` on macOS,
+`clip.exe` on Windows, or an installed `wl-copy`, `xclip`, or `xsel` on Linux.
+
+### `shares delete`
+
+Permanently removes a link share and its email recipients:
+
+```bash
+rawback shares delete <share-id> [--force] [--json]
+```
+
+Deletion asks for confirmation. `--force` skips confirmation and is required in
+non-interactive use. JSON reports `{ "deleted": <boolean>, "id": <share-id> }`.
+
 ## `rawback uploads`
 
 Lists FTP and SFTP upload sessions:

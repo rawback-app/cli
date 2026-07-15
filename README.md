@@ -12,6 +12,7 @@ in a browser.
 - Search photos by metadata, capture date, rating, location, and GPS data.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
+- Browse content shared with you and manage your outgoing share links.
 - Manage the SFTP credentials associated with your account.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
 - Request machine-readable JSON from read and credential commands.
@@ -113,6 +114,7 @@ These commands work immediately after sign-in:
 rawback photos list
 rawback dream list
 rawback album list
+rawback shares list
 rawback uploads
 rawback usage
 rawback pricing
@@ -124,6 +126,7 @@ Add `--json` to data-oriented commands when you need structured output:
 ```bash
 rawback photos list --page-size 10 --json
 rawback dream get 42 --json
+rawback shares list --scope with-me --type album --json
 rawback usage --json
 ```
 
@@ -211,6 +214,13 @@ rawback album image add 42 108
 rawback album article edit 42 --title "Iceland in winter" --content-file story.md
 rawback album article publish 42
 
+# Browse incoming shares and manage an outgoing link
+rawback shares list --scope with-me --type photo
+rawback shares list --kind link --access restricted --expiry valid
+rawback shares recipients 7
+rawback shares link 7 --copy
+rawback shares disable 7
+
 # List, create, and revoke SFTP credentials
 rawback cred list
 rawback cred add --name "Home workstation"
@@ -227,6 +237,7 @@ rawback photos upload --help
 rawback dream --help
 rawback album --help
 rawback album article --help
+rawback shares list --help
 ```
 
 ## Files and security
