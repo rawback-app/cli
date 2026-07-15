@@ -381,6 +381,117 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       () => {},
     )
     .command(
+      "dream",
+      "list, inspect, and retry daily photo recaps",
+      (command) =>
+        command
+          .command(
+            "list",
+            "list dreams for the authenticated account",
+            (list) =>
+              list
+                .option("page", {
+                  default: 1,
+                  describe: "result page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 30,
+                  describe: "dreams per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runDreamList } = await import("./dreams.ts");
+              await runCommand(() =>
+                runDreamList({
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                }),
+              );
+            },
+          )
+          .command(
+            ["get <id>", "view <id>"],
+            "show a dream and its contributing photos",
+            (get) =>
+              get
+                .positional("id", {
+                  describe: "dream ID",
+                  type: "number",
+                })
+                .option("page", {
+                  default: 1,
+                  describe: "dream photo page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 24,
+                  describe: "dream photos per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runDreamGet } = await import("./dreams.ts");
+              await runCommand(() =>
+                runDreamGet({
+                  id: args.id!,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                }),
+              );
+            },
+          )
+          .command(
+            "retry <id>",
+            "retry a failed dream",
+            (retry) =>
+              retry
+                .positional("id", {
+                  describe: "dream ID",
+                  type: "number",
+                })
+                .option("force", {
+                  default: false,
+                  describe: "retry without confirmation",
+                  type: "boolean",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runDreamRetry } = await import("./dreams.ts");
+              await runCommand(
+                () =>
+                  runDreamRetry({
+                    id: args.id!,
+                    force: args.force,
+                    json: args.json,
+                  }),
+                "Dream retry cancelled.",
+              );
+            },
+          )
+          .demandCommand(1, "Choose a dream command: list, get, view, or retry")
+          .strict(),
+      () => {},
+    )
+    .command(
       "album",
       "manage albums and album articles",
       (command) =>
