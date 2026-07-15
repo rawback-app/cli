@@ -10,6 +10,9 @@ bun install --frozen-lockfile
 bun run hooks:install
 ```
 
+GoReleaser 2.17 is required only for all-platform builds and release validation;
+the normal development and `bun run check` workflow requires only Bun.
+
 Run the TypeScript entry point through the development script:
 
 ```bash
@@ -143,7 +146,29 @@ throws `JsonResponseError`.
 ## Releases
 
 Pushes to `main` update the Release Please PR. Merging that PR creates a version
-tag; the release workflow validates the tag and uses GoReleaser's Bun builder to
-publish Linux, macOS, and Windows archives plus `checksums.txt`.
+tag; the release workflow validates the commit and uses GoReleaser's Bun builder
+to publish Linux, macOS, and Windows archives for x86-64 and arm64 plus
+`checksums.txt`. Run the same cross-build locally with:
 
-Package-manager publishing, code signing, and notarization are not configured.
+```bash
+bun run build:all
+goreleaser release --snapshot --clean
+```
+
+Snapshot releases generate unsigned local artifacts and never update Homebrew.
+Production releases sign and notarize both macOS binaries, then publish
+`Casks/rawback.rb` to `rawback-app/homebrew-tap`.
+
+The release workflow requires these repository secrets and stops before uploading
+assets if any are missing:
+
+- `MACOS_SIGN_P12`: base64-encoded Developer ID Application certificate.
+- `MACOS_SIGN_PASSWORD`: password for that certificate.
+- `MACOS_NOTARY_KEY`: base64-encoded App Store Connect API key.
+- `MACOS_NOTARY_KEY_ID`: App Store Connect key ID.
+- `MACOS_NOTARY_ISSUER_ID`: App Store Connect issuer UUID.
+- `HOMEBREW_TAP_GITHUB_TOKEN`: fine-grained token with Contents write access to
+  `rawback-app/homebrew-tap`.
+
+Never print these values or place them in repository files. Windows binaries are
+released without Authenticode signatures.

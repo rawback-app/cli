@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "bun run graphql:generate && bun run src/index.ts",
     "build": "bun run graphql:generate && bun build --compile --minify --outfile dist/rawback src/index.ts",
+    "build:windows-arm64": "bun run graphql:generate && bun run scripts/build-windows-arm64.ts",
+    "build:all": "goreleaser build --snapshot --clean",
     "g": "bun run graphql:schema && bun run graphql:generate",
     "graphql:schema": "gql-gen --config codegen.schema.yml",
     "graphql:generate": "gql-gen --config codegen.yml",
@@ -37,6 +39,7 @@
     "@types/bun": "latest",
     "@types/ssh2": "^1.15.5",
     "@types/yargs": "^17.0.35",
+    "fflate": "^0.8.3",
     "lefthook": "^2.1.10",
     "oxfmt": "^0.58.0",
     "oxlint": "^1.73.0",
