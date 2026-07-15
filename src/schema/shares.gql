@@ -1,0 +1,169 @@
+fragment CliShareRecipientFields on ShareRecipient {
+  id
+  email
+  lastAccessedAt
+  createdAt
+}
+
+fragment CliShareUserFields on User {
+  id
+  name
+  avatar
+  slug
+}
+
+fragment CliShareImageFields on Image {
+  id
+  filename
+  displayName
+  thumbnailUrl
+}
+
+fragment CliShareAlbumFields on Album {
+  id
+  name
+  imageCount
+  coverImage {
+    id
+    thumbnailUrl
+  }
+}
+
+fragment CliShareDreamFields on Dream {
+  id
+  title
+  dreamDate
+  photoCount
+  imageUrl
+}
+
+fragment CliLinkShareFields on Share {
+  id
+  code
+  shareType
+  accessType
+  title
+  description
+  frameKind
+  showExif
+  minRating
+  permission {
+    allowDownload
+    allowOriginalDownload
+  }
+  expiresAt
+  isExpired
+  viewCount
+  enabled
+  status
+  url
+  image {
+    ...CliShareImageFields
+  }
+  album {
+    ...CliShareAlbumFields
+  }
+  recipients {
+    ...CliShareRecipientFields
+  }
+  createdAt
+  updatedAt
+}
+
+query CliSharedByMe($resourceType: ShareResourceType, $pagination: InputPagination!) {
+  sharedByMe(resourceType: $resourceType, pagination: $pagination) {
+    edges {
+      id
+      kind
+      resourceType
+      createdAt
+      recipientCount
+      recipients {
+        ...CliShareUserFields
+      }
+      image {
+        ...CliShareImageFields
+      }
+      album {
+        ...CliShareAlbumFields
+      }
+      dream {
+        ...CliShareDreamFields
+      }
+      link {
+        ...CliLinkShareFields
+      }
+    }
+    pageInfo {
+      page
+      pageSize
+      totalCount
+      totalPages
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
+query CliSharedWithMe($resourceType: ShareResourceType, $pagination: InputPagination!) {
+  sharedWithMe(resourceType: $resourceType, pagination: $pagination) {
+    edges {
+      id
+      resourceType
+      resourceId
+      createdAt
+      owner {
+        ...CliShareUserFields
+      }
+      image {
+        ...CliShareImageFields
+      }
+      album {
+        ...CliShareAlbumFields
+      }
+      dream {
+        ...CliShareDreamFields
+      }
+    }
+    pageInfo {
+      page
+      pageSize
+      totalCount
+      totalPages
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
+query CliShares($status: ShareStatus, $pagination: InputPagination!) {
+  shares(status: $status, pagination: $pagination) {
+    edges {
+      ...CliLinkShareFields
+    }
+    pageInfo {
+      page
+      pageSize
+      totalCount
+      totalPages
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
+query CliShare($id: Int!) {
+  share(id: $id) {
+    ...CliLinkShareFields
+  }
+}
+
+mutation CliUpdateShare($input: UpdateShareInput!) {
+  updateShare(input: $input) {
+    ...CliLinkShareFields
+  }
+}
+
+mutation CliDeleteShare($id: Int!) {
+  deleteShare(id: $id)
+}

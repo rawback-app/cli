@@ -1069,6 +1069,290 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       () => {},
     )
     .command(
+      "shares",
+      "browse incoming shares and manage links shared with others",
+      (command) =>
+        command
+          .command(
+            "list",
+            "list shares for the authenticated account",
+            (list) =>
+              list
+                .option("scope", {
+                  choices: ["by-me", "with-me"] as const,
+                  default: "by-me" as const,
+                  describe: "list shares you sent or resources shared with you",
+                  type: "string",
+                })
+                .option("type", {
+                  choices: ["photo", "album", "dream"] as const,
+                  describe: "filter by shared resource type",
+                  type: "string",
+                })
+                .option("kind", {
+                  choices: ["link", "direct"] as const,
+                  describe: "filter outgoing shares by link or direct grant",
+                  type: "string",
+                })
+                .option("status", {
+                  choices: ["active", "archived"] as const,
+                  describe: "filter outgoing shares by status (default: active)",
+                  type: "string",
+                })
+                .option("enabled", {
+                  describe: "filter enabled links (use --no-enabled for disabled links)",
+                  type: "boolean",
+                })
+                .option("access", {
+                  choices: ["public", "restricted"] as const,
+                  describe: "filter links by access type",
+                  type: "string",
+                })
+                .option("expiry", {
+                  choices: ["valid", "expired", "never"] as const,
+                  describe: "filter links by expiration state",
+                  type: "string",
+                })
+                .option("after", {
+                  describe: "created on/after an ISO date/time or Unix timestamp",
+                  type: "string",
+                })
+                .option("before", {
+                  describe: "created on/before an ISO date/time or Unix timestamp",
+                  type: "string",
+                })
+                .option("page", {
+                  default: 1,
+                  describe: "result page",
+                  type: "number",
+                })
+                .option("page-size", {
+                  default: 20,
+                  describe: "shares per page (1-100)",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareList } = await import("./shares.ts");
+              await runCommand(() =>
+                runShareList({
+                  scope: args.scope,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                  ...(args.type !== undefined ? { type: args.type } : {}),
+                  ...(args.kind !== undefined ? { kind: args.kind } : {}),
+                  ...(args.status !== undefined ? { status: args.status } : {}),
+                  ...(args.enabled !== undefined ? { enabled: args.enabled } : {}),
+                  ...(args.access !== undefined ? { access: args.access } : {}),
+                  ...(args.expiry !== undefined ? { expiry: args.expiry } : {}),
+                  ...(args.after !== undefined ? { after: args.after } : {}),
+                  ...(args.before !== undefined ? { before: args.before } : {}),
+                }),
+              );
+            },
+          )
+          .command(
+            ["get <share-id>", "view <share-id>"],
+            "show a link share and its settings",
+            (get) =>
+              get
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareGet } = await import("./shares.ts");
+              await runCommand(() => runShareGet({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "archive <share-id>",
+            "move a link share to the archive without disabling it",
+            (archive) =>
+              archive
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareArchive } = await import("./shares.ts");
+              await runCommand(() => runShareArchive({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "unarchive <share-id>",
+            "return an archived link share to the active list",
+            (unarchive) =>
+              unarchive
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareUnarchive } = await import("./shares.ts");
+              await runCommand(() => runShareUnarchive({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "enable <share-id>",
+            "enable an unexpired link share",
+            (enable) =>
+              enable
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareEnable } = await import("./shares.ts");
+              await runCommand(() => runShareEnable({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "disable <share-id>",
+            "disable access through a link share",
+            (disable) =>
+              disable
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareDisable } = await import("./shares.ts");
+              await runCommand(() => runShareDisable({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "delete <share-id>",
+            "permanently delete a link share",
+            (remove) =>
+              remove
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("force", {
+                  default: false,
+                  describe: "delete without confirmation",
+                  type: "boolean",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                })
+                .check((args) => {
+                  if (!args.force && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+                    throw new Error(
+                      "Deleting a share requires an interactive terminal unless --force is provided.",
+                    );
+                  }
+                  return true;
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareDelete } = await import("./shares.ts");
+              await runCommand(
+                () =>
+                  runShareDelete({
+                    id: args.shareId!,
+                    force: args.force,
+                    json: args.json,
+                  }),
+                "Share operation cancelled.",
+              );
+            },
+          )
+          .command(
+            "recipients <share-id>",
+            "list email recipients for a link share",
+            (recipients) =>
+              recipients
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareRecipients } = await import("./shares.ts");
+              await runCommand(() => runShareRecipients({ id: args.shareId!, json: args.json }));
+            },
+          )
+          .command(
+            "link <share-id>",
+            "print or copy a link share URL",
+            (link) =>
+              link
+                .positional("share-id", {
+                  describe: "link share ID",
+                  type: "number",
+                })
+                .option("copy", {
+                  default: false,
+                  describe: "copy the URL to the system clipboard",
+                  type: "boolean",
+                })
+                .option("json", {
+                  default: false,
+                  describe: "output machine-readable JSON",
+                  type: "boolean",
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return;
+              const { runShareLink } = await import("./shares.ts");
+              await runCommand(() =>
+                runShareLink({ id: args.shareId!, copy: args.copy, json: args.json }),
+              );
+            },
+          )
+          .demandCommand(
+            1,
+            "Choose a shares command: list, get, archive, unarchive, enable, disable, delete, recipients, or link",
+          )
+          .strict(),
+      () => {},
+    )
+    .command(
       "uploads",
       "list FTP and SFTP upload sessions",
       (command) =>

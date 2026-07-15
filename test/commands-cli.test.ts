@@ -113,6 +113,71 @@ describe("new command hierarchy", () => {
     expect(retry.stderr).not.toContain("Authentication credentials");
   });
 
+  test("documents the shares command hierarchy and rich list filters", () => {
+    const shares = runCli("shares", "--help");
+    for (const command of [
+      "list",
+      "get",
+      "view",
+      "archive",
+      "unarchive",
+      "enable",
+      "disable",
+      "delete",
+      "recipients",
+      "link",
+    ]) {
+      expect(shares.stdout).toContain(command);
+    }
+
+    const list = runCli("shares", "list", "--help");
+    for (const flag of [
+      "--scope",
+      "--type",
+      "--kind",
+      "--status",
+      "--enabled",
+      "--access",
+      "--expiry",
+      "--after",
+      "--before",
+      "--page-size",
+      "--json",
+    ]) {
+      expect(list.stdout).toContain(flag);
+    }
+    expect(runCli("shares", "link", "7", "--help").stdout).toContain("--copy");
+    expect(runCli("shares", "delete", "7", "--help").stdout).toContain("--force");
+  });
+
+  test("requires a shares subcommand", () => {
+    const result = runCli("shares");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Choose a shares command");
+  });
+
+  test("validates share filters, IDs, and delete safety before authentication", () => {
+    const filter = runCli("shares", "list", "--scope", "with-me", "--status", "archived");
+    expect(filter.exitCode).toBe(1);
+    expect(filter.stderr).toContain("only apply to --scope by-me");
+    expect(filter.stderr).not.toContain("Authentication credentials");
+
+    const range = runCli("shares", "list", "--after", "2025-02-01", "--before", "2025-01-01");
+    expect(range.exitCode).toBe(1);
+    expect(range.stderr).toContain("--after must not be later");
+    expect(range.stderr).not.toContain("Authentication credentials");
+
+    const id = runCli("shares", "get", "0");
+    expect(id.exitCode).toBe(1);
+    expect(id.stderr).toContain("Share ID must be a positive integer");
+    expect(id.stderr).not.toContain("Authentication credentials");
+
+    const remove = runCli("shares", "delete", "7");
+    expect(remove.exitCode).toBe(1);
+    expect(remove.stderr).toContain("requires an interactive terminal unless --force is provided");
+    expect(remove.stderr).not.toContain("Authentication credentials");
+  });
+
   test("documents the album command hierarchy", () => {
     const album = runCli("album", "--help");
     for (const command of ["list", "view", "create", "edit", "delete", "image", "tag", "article"]) {
