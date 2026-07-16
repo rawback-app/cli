@@ -48,6 +48,8 @@ describe("HttpClient", () => {
     expect(headers.get("authorization")).toBe("Bearer secret");
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.get("user-agent")).toBe(`rawback-cli@${packageJson.version}`);
+    expect(headers.get("x-rawback-client-source")).toBe("cli");
+    expect(headers.get("x-rawback-client-version")).toBe(packageJson.version);
     expect(USER_AGENT).toBe(`rawback-cli@${packageJson.version}`);
   });
 

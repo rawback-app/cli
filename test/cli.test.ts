@@ -70,15 +70,14 @@ describe("rawback CLI", () => {
     expect(result.stderr).toContain("Unknown argument: unknown");
   });
 
-  test("documents auth login options", () => {
+  test("documents device authentication options", () => {
     const result = runCli("auth", "--help");
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("--email");
-    expect(result.stdout).toContain("--password");
     expect(result.stdout).toContain("--force");
-    expect(result.stdout).toContain("shell history");
+    expect(result.stdout).not.toContain("--email");
+    expect(result.stdout).not.toContain("--password");
   });
 
   test("rejects login options for auth status", () => {

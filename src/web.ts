@@ -7,7 +7,7 @@ export interface WebCommandDependencies extends ReadCommandDependencies {
   platform?: NodeJS.Platform;
 }
 
-async function defaultOpen(command: string, args: string[]): Promise<number> {
+export async function defaultOpen(command: string, args: string[]): Promise<number> {
   const process = Bun.spawn([command, ...args], {
     stdin: "ignore",
     stdout: "ignore",

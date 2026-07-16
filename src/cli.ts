@@ -77,24 +77,13 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             describe: "authentication action",
             type: "string",
           })
-          .option("email", {
-            describe: "email address",
-            type: "string",
-          })
-          .option("password", {
-            describe: "password (may be visible in shell history and process listings)",
-            type: "string",
-          })
           .option("force", {
             default: false,
             describe: "reauthenticate without checking or confirming the current session",
             type: "boolean",
           })
           .check((args) => {
-            if (
-              args.subcommand === "status" &&
-              (args.email !== undefined || args.password !== undefined || args.force)
-            ) {
+            if (args.subcommand === "status" && args.force) {
               throw new Error("rawback auth status does not accept login options");
             }
             return true;
@@ -112,8 +101,6 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
         await runCommand(() =>
           runAuth({
             force: args.force,
-            ...(args.email !== undefined ? { email: args.email } : {}),
-            ...(args.password !== undefined ? { password: args.password } : {}),
           }),
         );
       },

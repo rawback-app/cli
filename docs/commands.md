@@ -14,7 +14,7 @@ Running `rawback` without arguments shows top-level help.
 
 ## `rawback auth [status]`
 
-Sign in interactively:
+Sign in through the browser:
 
 ```bash
 rawback auth
@@ -22,22 +22,17 @@ rawback auth
 
 If a valid session already exists, the command asks before replacing it.
 `--force` skips both the current-session check and replacement confirmation.
-Omitted email and password values are prompted for.
 
-| Option                  | Description                                                       |
-| ----------------------- | ----------------------------------------------------------------- |
-| `--email <email>`       | Supply the login email                                            |
-| `--password <password>` | Supply the login password                                         |
-| `--force`               | Reauthenticate without checking or confirming the current session |
+| Option    | Description                                                       |
+| --------- | ----------------------------------------------------------------- |
+| `--force` | Reauthenticate without checking or confirming the current session |
 
-For non-interactive login, all three options are needed:
-
-```bash
-rawback auth --email user@example.com --password 'secret' --force
-```
-
-Passing a password on the command line may expose it in shell history or process
-listings. Prefer the interactive prompt whenever possible.
+The CLI creates a device session that expires after 10 minutes, prints its
+approval URL, and attempts to open it in the system browser. The URL remains
+usable if the browser cannot be opened automatically. After you sign in and
+approve the request, the CLI checks the session every 10 seconds and stores the
+issued credentials. Denied, expired, and already-used sessions do not replace
+existing credentials.
 
 Check the stored session and display account information:
 
@@ -45,7 +40,7 @@ Check the stored session and display account information:
 rawback auth status
 ```
 
-Login options are not accepted by `auth status`.
+`--force` is not accepted by `auth status`.
 
 ## `rawback credentials`
 
