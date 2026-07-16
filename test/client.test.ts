@@ -55,6 +55,8 @@ describe("Apollo integration", () => {
     const body = JSON.parse(String(requests[0]?.init?.body));
     expect(headers.get("authorization")).toBe("Bearer access-token");
     expect(headers.get("user-agent")).toBe(`rawback-cli@${packageJson.version}`);
+    expect(headers.get("x-rawback-client-source")).toBe("cli");
+    expect(headers.get("x-rawback-client-version")).toBe(packageJson.version);
     expect(body.operationName).toBe("Test");
     expect(body.variables).toEqual({ id: 7 });
     expect(body.query).toContain("query Test");

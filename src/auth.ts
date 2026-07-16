@@ -1,8 +1,9 @@
 import { CombinedGraphQLErrors, ServerError } from "@apollo/client";
+import { arch as systemArchitecture, platform as operatingSystem } from "node:os";
 import { commandOutput, type ReadCommandDependencies } from "./command.ts";
 import { authStatusDocument } from "./features/auth/view.ts";
 import { type RawbackClient, createRawbackClient } from "./client.ts";
-import { type RawbackConfig, readConfig } from "./config.ts";
+import { DEFAULT_WEB_HOST, type RawbackConfig, readConfig } from "./config.ts";
 import {
   type Credentials,
   CredentialsError,
@@ -11,7 +12,8 @@ import {
   writeCredentials,
 } from "./credentials.ts";
 import { AuthStatusDocument, type AuthStatusQuery } from "./gql/graphql.ts";
-import { type ApiEnvelope } from "./http.ts";
+import { type ApiEnvelope, HttpError, JsonResponseError } from "./http.ts";
+import { browserCommand, defaultOpen } from "./web.ts";
 
 interface LoginUser {
   id: number;
@@ -19,26 +21,39 @@ interface LoginUser {
   email: string;
 }
 
-interface LoginResponse {
+interface DeviceSessionResponse {
+  sessionId: string;
+  pollToken: string;
+  expiresAt: string;
+  pollIntervalSeconds: number;
+}
+
+interface ApprovedDeviceResponse {
   user: LoginUser;
   accessToken: string;
   refreshToken: string;
 }
 
+type DevicePollResponse =
+  | { status: "pending" | "denied" }
+  | ({ status: "approved" } & ApprovedDeviceResponse);
+
 export interface AuthPrompts {
   confirm(message: string): Promise<boolean>;
-  email(defaultValue?: string): Promise<string>;
-  password(): Promise<string>;
 }
 
 export interface AuthCommandDependencies extends ReadCommandDependencies {
   prompts?: AuthPrompts;
+  open?: (command: string, args: string[]) => Promise<number>;
+  platform?: NodeJS.Platform;
+  sleep?: (milliseconds: number) => Promise<void>;
+  now?: () => number;
+  operatingSystem?: () => string;
+  architecture?: () => string;
 }
 
 export interface AuthCommandOptions {
-  email?: string;
   force?: boolean;
-  password?: string;
 }
 
 type AuthUser = AuthStatusQuery["me"];
@@ -62,32 +77,6 @@ function defaultPrompts(): AuthPrompts {
       );
       const { confirm } = await import("@inquirer/prompts");
       return confirm({ default: false, message });
-    },
-    async email(defaultValue) {
-      ensureInteractive(
-        "Authentication requires an interactive terminal unless --email and --password are provided.",
-      );
-      const { input } = await import("@inquirer/prompts");
-      return input({
-        ...(defaultValue ? { default: defaultValue } : {}),
-        message: "Email:",
-        validate(value) {
-          return value.trim().length > 0 || "Email is required";
-        },
-      });
-    },
-    async password() {
-      ensureInteractive(
-        "Authentication requires an interactive terminal unless --email and --password are provided.",
-      );
-      const { password } = await import("@inquirer/prompts");
-      return password({
-        mask: "*",
-        message: "Password:",
-        validate(value) {
-          return value.length > 0 || "Password is required";
-        },
-      });
     },
   };
 }
@@ -158,53 +147,136 @@ async function readStoredCredentials(
   }
 }
 
-function validateEmail(value: string): string {
-  const email = value.trim();
-  if (email.length === 0) {
-    throw new Error("Email is required");
-  }
-  return email;
-}
-
-function validatePassword(value: string): string {
-  if (value.length === 0) {
-    throw new Error("Password is required");
-  }
-  return value;
-}
-
-function parseLoginResponse(value: unknown): LoginResponse {
+function parseDeviceSessionResponse(value: unknown): DeviceSessionResponse {
   if (
     typeof value !== "object" ||
     value === null ||
-    !("user" in value) ||
-    typeof value.user !== "object" ||
-    value.user === null ||
-    !("id" in value.user) ||
-    typeof value.user.id !== "number" ||
-    !("name" in value.user) ||
-    typeof value.user.name !== "string" ||
-    !("email" in value.user) ||
-    typeof value.user.email !== "string" ||
-    !("accessToken" in value) ||
+    !("sessionId" in value) ||
+    typeof value.sessionId !== "string" ||
+    value.sessionId.length === 0 ||
+    !("pollToken" in value) ||
+    typeof value.pollToken !== "string" ||
+    value.pollToken.length === 0 ||
+    !("expiresAt" in value) ||
+    typeof value.expiresAt !== "string" ||
+    !Number.isFinite(Date.parse(value.expiresAt)) ||
+    !("pollIntervalSeconds" in value) ||
+    typeof value.pollIntervalSeconds !== "number" ||
+    !Number.isInteger(value.pollIntervalSeconds) ||
+    value.pollIntervalSeconds < 1 ||
+    value.pollIntervalSeconds > 60
+  ) {
+    throw new Error("The device session response was invalid");
+  }
+  return {
+    sessionId: value.sessionId,
+    pollToken: value.pollToken,
+    expiresAt: value.expiresAt,
+    pollIntervalSeconds: value.pollIntervalSeconds,
+  };
+}
+
+function parseDevicePollResponse(value: unknown): DevicePollResponse {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("status" in value) ||
+    !["pending", "approved", "denied"].includes(String(value.status))
+  ) {
+    throw new Error("The device authorization response was invalid");
+  }
+  if (value.status !== "approved") {
+    return { status: value.status as "pending" | "denied" };
+  }
+  const approved = parseApprovedDeviceResponse(value);
+  return { status: "approved", ...approved };
+}
+
+function parseApprovedDeviceResponse(value: Record<string, unknown>): ApprovedDeviceResponse {
+  const user = value.user;
+  if (
+    typeof user !== "object" ||
+    user === null ||
+    !("id" in user) ||
+    typeof user.id !== "number" ||
+    !("name" in user) ||
+    typeof user.name !== "string" ||
+    !("email" in user) ||
+    typeof user.email !== "string" ||
     typeof value.accessToken !== "string" ||
     value.accessToken.length === 0 ||
-    !("refreshToken" in value) ||
     typeof value.refreshToken !== "string" ||
     value.refreshToken.length === 0
   ) {
-    throw new Error("The login response did not contain valid user information and tokens");
+    throw new Error(
+      "The approved device response did not contain valid user information and tokens",
+    );
   }
-
   return {
     user: {
-      id: value.user.id,
-      name: value.user.name,
-      email: value.user.email,
+      id: user.id,
+      name: user.name,
+      email: user.email,
     },
     accessToken: value.accessToken,
     refreshToken: value.refreshToken,
   };
+}
+
+function isRetriablePollError(error: unknown): boolean {
+  if (error instanceof HttpError) {
+    return error.status >= 500;
+  }
+  return !(error instanceof JsonResponseError);
+}
+
+async function pollDeviceSession(
+  client: RawbackClient,
+  session: DeviceSessionResponse,
+  dependencies: AuthCommandDependencies,
+): Promise<ApprovedDeviceResponse> {
+  const now = dependencies.now ?? Date.now;
+  const sleep = dependencies.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds));
+  const expiresAt = Date.parse(session.expiresAt);
+  const interval = session.pollIntervalSeconds * 1_000;
+
+  while (now() < expiresAt) {
+    let envelope: ApiEnvelope<DevicePollResponse>;
+    try {
+      envelope = await client.http.requestJson<ApiEnvelope<DevicePollResponse>>(
+        `/api/v1/auth/device/sessions/${encodeURIComponent(session.sessionId)}/token`,
+        {
+          authenticated: false,
+          body: { pollToken: session.pollToken },
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      if (!isRetriablePollError(error)) {
+        if (error instanceof HttpError && error.status === 404) {
+          throw new Error("Device authorization expired or was already used.", { cause: error });
+        }
+        throw error;
+      }
+      await sleep(interval);
+      continue;
+    }
+
+    const response = parseDevicePollResponse(envelope.data);
+    if (response.status === "approved") {
+      return {
+        user: response.user,
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      };
+    }
+    if (response.status === "denied") {
+      throw new Error("Device authorization was denied.");
+    }
+    await sleep(interval);
+  }
+
+  throw new Error("Device authorization expired. Run 'rawback auth' to try again.");
 }
 
 export async function runAuth(
@@ -214,7 +286,6 @@ export async function runAuth(
   const config = await readConfig(dependencies.configPath);
   const ui = commandOutput(dependencies);
   const prompts = dependencies.prompts ?? defaultPrompts();
-  let existingUser: AuthUser | undefined;
 
   if (!options.force) {
     const credentials = await readStoredCredentials(dependencies, true);
@@ -223,7 +294,6 @@ export async function runAuth(
     );
 
     if (status.kind === "authenticated") {
-      existingUser = status.user;
       const shouldReauthenticate = await prompts.confirm(
         "Already authenticated as " +
           status.user.name +
@@ -240,17 +310,40 @@ export async function runAuth(
     }
   }
 
-  const email = validateEmail(options.email ?? (await prompts.email(existingUser?.email)));
-  const password = validatePassword(options.password ?? (await prompts.password()));
   const client = await createClient(config, null, dependencies);
-  const envelope = await ui.withActivity("Signing in…", () =>
-    client.http.requestJson<ApiEnvelope<LoginResponse>>("/api/v1/auth/login", {
+  const envelope = await ui.withActivity("Creating device session…", () =>
+    client.http.requestJson<ApiEnvelope<DeviceSessionResponse>>("/api/v1/auth/device/sessions", {
       authenticated: false,
-      body: { email, password },
+      body: {
+        operatingSystem: (dependencies.operatingSystem ?? operatingSystem)(),
+        architecture: (dependencies.architecture ?? systemArchitecture)(),
+      },
       method: "POST",
     }),
   );
-  const response = parseLoginResponse(envelope.data);
+  const session = parseDeviceSessionResponse(envelope.data);
+  const webHost = (config.webHost ?? DEFAULT_WEB_HOST).replace(/\/$/, "");
+  const url = `${webHost}/auth/device/${encodeURIComponent(session.sessionId)}`;
+  ui.info("Authorize this CLI session in your browser:");
+  ui.raw(url);
+
+  const [command, args] = browserCommand(dependencies.platform ?? process.platform, url);
+  try {
+    const exitCode = await (dependencies.open ?? defaultOpen)(command, args);
+    if (exitCode !== 0) {
+      ui.warning(`Could not open the browser automatically. Use the link shown above.`);
+    }
+  } catch {
+    ui.warning("Could not open the browser automatically. Use the link shown above.");
+  }
+
+  const activity = ui.startActivity("Waiting for browser authorization…");
+  let response: ApprovedDeviceResponse;
+  try {
+    response = await pollDeviceSession(client, session, dependencies);
+  } finally {
+    await activity.stop();
+  }
   await writeCredentials(
     {
       token: response.accessToken,

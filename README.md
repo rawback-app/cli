@@ -102,9 +102,11 @@ rawback auth
 rawback auth status
 ```
 
-`rawback auth` securely prompts for your email and password. The resulting
-access and refresh tokens are saved in `~/.rawback/credentials.json`. Expired
-access tokens are refreshed automatically when possible.
+`rawback auth` creates a 10-minute device session, prints a copyable approval
+link, and opens it in your browser. Sign in on the web if needed, review the CLI
+request details, and authorize it. The resulting access and refresh tokens are
+saved in `~/.rawback/credentials.json`. Expired access tokens are refreshed
+automatically when possible.
 
 ### 2. Browse your account
 

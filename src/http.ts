@@ -1,7 +1,9 @@
 import packageJson from "../package.json" with { type: "json" };
 
 export const DEFAULT_API_HOST = "https://api.rawback.app";
-export const USER_AGENT = `rawback-cli@${packageJson.version}`;
+export const CLIENT_SOURCE = "cli";
+export const CLIENT_VERSION = packageJson.version;
+export const USER_AGENT = `rawback-cli@${CLIENT_VERSION}`;
 
 export interface ApiEnvelope<T> {
   code: number;
@@ -97,6 +99,8 @@ export class HttpClient {
     const headers = new Headers(requestOptions.headers);
     headers.set("accept", "application/json");
     headers.set("user-agent", USER_AGENT);
+    headers.set("x-rawback-client-source", CLIENT_SOURCE);
+    headers.set("x-rawback-client-version", CLIENT_VERSION);
 
     if (requestBody !== undefined) {
       headers.set("content-type", "application/json");

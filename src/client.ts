@@ -4,6 +4,8 @@ import { type RawbackConfig, DEFAULT_CONFIG_PATH, readConfig } from "./config.ts
 import { type Credentials, DEFAULT_CREDENTIALS_PATH, readCredentials } from "./credentials.ts";
 import {
   HttpClient,
+  CLIENT_SOURCE,
+  CLIENT_VERSION,
   type HttpClientOptions,
   resolveApiHost,
   resolveApiUrl,
@@ -52,6 +54,8 @@ function createAuthLink(token: string | undefined): ApolloLink {
         ...Object.fromEntries(new Headers(headers)),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
         "user-agent": USER_AGENT,
+        "x-rawback-client-source": CLIENT_SOURCE,
+        "x-rawback-client-version": CLIENT_VERSION,
       },
     }));
     return forward(operation);
