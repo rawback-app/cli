@@ -48,7 +48,18 @@ try {
     throw "rawback installer: checksums.txt does not contain $archive"
   }
 
-  $actualChecksum = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+  $archiveStream = [System.IO.File]::OpenRead($archivePath)
+  try {
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $hashBytes = $sha256.ComputeHash($archiveStream)
+      $actualChecksum = [System.BitConverter]::ToString($hashBytes).Replace('-', '').ToLowerInvariant()
+    } finally {
+      $sha256.Dispose()
+    }
+  } finally {
+    $archiveStream.Dispose()
+  }
   if ($actualChecksum -ne $expectedChecksum) {
     throw "rawback installer: checksum mismatch for $archive"
   }
