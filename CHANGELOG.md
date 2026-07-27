@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.2](https://github.com/rawback-app/cli/compare/v1.0.1...v1.0.2) (2026-07-27)
+
+
+### Bug Fixes
+
+* report device auth failures ([b3de0f3](https://github.com/rawback-app/cli/commit/b3de0f35d5c849603607ab0124553f1c99de8114))
+* report underlying device auth failures ([fc70db2](https://github.com/rawback-app/cli/commit/fc70db2dced1320a0f0a824c6d71e3b4f981d275))
+* retry device authentication setup ([bf66500](https://github.com/rawback-app/cli/commit/bf665003bbca720251dc4055f93917b76c8dfd70))
+* retry unavailable device authentication ([b2ef335](https://github.com/rawback-app/cli/commit/b2ef335095556f1bf58f4e07f345a0197b280359))
+
 ## [1.0.1](https://github.com/rawback-app/cli/compare/v1.0.0...v1.0.1) (2026-07-27)
 
 
