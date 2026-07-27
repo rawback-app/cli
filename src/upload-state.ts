@@ -1,43 +1,43 @@
-import { Database } from "bun:sqlite";
-import { chmod, mkdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { Database } from 'bun:sqlite'
+import { chmod, mkdir, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 
-export type UploadFileStatus = "pending" | "in_progress" | "completed" | "failed";
+export type UploadFileStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
 export interface UploadStateFile {
-  account: string;
-  endpoint: string;
-  path: string;
-  size: number;
-  mtimeMs: number;
+  account: string
+  endpoint: string
+  path: string
+  size: number
+  mtimeMs: number
 }
 
 interface ThroughputRow {
-  bytes: number;
-  durationMs: number;
+  bytes: number
+  durationMs: number
 }
 
 export interface ThroughputEstimate {
-  bytesPerSecond: number;
-  source: "matching concurrency history" | "endpoint history";
+  bytesPerSecond: number
+  source: 'matching concurrency history' | 'endpoint history'
 }
 
-export const DEFAULT_UPLOAD_STATE_PATH = join(homedir(), ".rawback", "upload-progress.sqlite");
+export const DEFAULT_UPLOAD_STATE_PATH = join(homedir(), '.rawback', 'upload-progress.sqlite')
 
 export class UploadStateError extends Error {
   constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "UploadStateError";
+    super(message, options)
+    this.name = 'UploadStateError'
   }
 }
 
 function processIsAlive(pid: number): boolean {
   try {
-    process.kill(pid, 0);
-    return true;
+    process.kill(pid, 0)
+    return true
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
 }
 
@@ -49,13 +49,13 @@ export class UploadState {
   ) {}
 
   static async open(path = DEFAULT_UPLOAD_STATE_PATH): Promise<UploadState> {
-    await mkdir(dirname(path), { mode: 0o700, recursive: true });
-    if (process.platform !== "win32") await chmod(dirname(path), 0o700);
+    await mkdir(dirname(path), { mode: 0o700, recursive: true })
+    if (process.platform !== 'win32') await chmod(dirname(path), 0o700)
 
-    const database = new Database(path, { create: true, strict: true });
+    const database = new Database(path, { create: true, strict: true })
     database.exec(
-      "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;",
-    );
+      'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;',
+    )
     database.exec(`
       CREATE TABLE IF NOT EXISTS upload_files (
         account TEXT NOT NULL,
@@ -93,31 +93,31 @@ export class UploadState {
         first_seen_at INTEGER NOT NULL,
         PRIMARY KEY (host, port)
       );
-    `);
-    if (process.platform !== "win32") await chmod(path, 0o600);
-    return new UploadState(database, path, false);
+    `)
+    if (process.platform !== 'win32') await chmod(path, 0o600)
+    return new UploadState(database, path, false)
   }
 
   static async openReadonly(path = DEFAULT_UPLOAD_STATE_PATH): Promise<UploadState | null> {
     try {
-      await stat(path);
+      await stat(path)
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
     }
     try {
-      return new UploadState(new Database(path, { readonly: true, strict: true }), path, true);
+      return new UploadState(new Database(path, { readonly: true, strict: true }), path, true)
     } catch (error) {
-      throw new UploadStateError(`Unable to read upload progress at ${path}`, { cause: error });
+      throw new UploadStateError(`Unable to read upload progress at ${path}`, { cause: error })
     }
   }
 
   close(): void {
-    this.database.close();
+    this.database.close()
   }
 
   private assertWritable(): void {
-    if (this.readonly) throw new UploadStateError("Upload progress database is read-only");
+    if (this.readonly) throw new UploadStateError('Upload progress database is read-only')
   }
 
   isCompleted(file: UploadStateFile): boolean {
@@ -130,15 +130,15 @@ export class UploadState {
                AND size = ? AND mtime_ms = ? AND status = 'completed'`,
           )
           .get(file.account, file.endpoint, file.path, file.size, file.mtimeMs),
-      );
+      )
     } catch (error) {
-      if (this.readonly && String(error).includes("no such table")) return false;
-      throw error;
+      if (this.readonly && String(error).includes('no such table')) return false
+      throw error
     }
   }
 
   prepareFile(file: UploadStateFile): void {
-    this.assertWritable();
+    this.assertWritable()
     this.database
       .query(
         `INSERT INTO upload_files
@@ -160,11 +160,11 @@ export class UploadState {
            error = NULL,
            updated_at = excluded.updated_at`,
       )
-      .run(file.account, file.endpoint, file.path, file.size, file.mtimeMs, Date.now());
+      .run(file.account, file.endpoint, file.path, file.size, file.mtimeMs, Date.now())
   }
 
   setFileStatus(file: UploadStateFile, status: UploadFileStatus, error?: string): void {
-    this.assertWritable();
+    this.assertWritable()
     this.database
       .query(
         `UPDATE upload_files SET status = ?, transferred_bytes = ?, error = ?, updated_at = ?
@@ -172,70 +172,70 @@ export class UploadState {
       )
       .run(
         status,
-        status === "completed" ? file.size : 0,
+        status === 'completed' ? file.size : 0,
         error ?? null,
         Date.now(),
         file.account,
         file.endpoint,
         file.path,
-      );
+      )
   }
 
   resetInterrupted(account: string, endpoint: string): void {
-    this.assertWritable();
+    this.assertWritable()
     this.database
       .query(
         `UPDATE upload_files SET status = 'pending', transferred_bytes = 0, error = NULL,
            updated_at = ?
          WHERE account = ? AND endpoint = ? AND status IN ('in_progress', 'failed')`,
       )
-      .run(Date.now(), account, endpoint);
+      .run(Date.now(), account, endpoint)
   }
 
   acquireLock(account: string, endpoint: string): void {
-    this.assertWritable();
+    this.assertWritable()
     const transaction = this.database.transaction(() => {
       const lock = this.database
-        .query("SELECT pid FROM upload_locks WHERE account = ? AND endpoint = ?")
-        .get(account, endpoint) as { pid: number } | null;
+        .query('SELECT pid FROM upload_locks WHERE account = ? AND endpoint = ?')
+        .get(account, endpoint) as { pid: number } | null
       if (lock && lock.pid !== process.pid && processIsAlive(lock.pid)) {
         throw new UploadStateError(
           `Another upload is already running for ${account} on ${endpoint} (PID ${lock.pid})`,
-        );
+        )
       }
       this.database
-        .query("DELETE FROM upload_locks WHERE account = ? AND endpoint = ?")
-        .run(account, endpoint);
+        .query('DELETE FROM upload_locks WHERE account = ? AND endpoint = ?')
+        .run(account, endpoint)
       this.database
-        .query("INSERT INTO upload_locks (account, endpoint, pid, started_at) VALUES (?, ?, ?, ?)")
-        .run(account, endpoint, process.pid, Date.now());
-    });
-    transaction();
+        .query('INSERT INTO upload_locks (account, endpoint, pid, started_at) VALUES (?, ?, ?, ?)')
+        .run(account, endpoint, process.pid, Date.now())
+    })
+    transaction()
   }
 
   releaseLock(account: string, endpoint: string): void {
-    if (this.readonly) return;
+    if (this.readonly) return
     this.database
-      .query("DELETE FROM upload_locks WHERE account = ? AND endpoint = ? AND pid = ?")
-      .run(account, endpoint, process.pid);
+      .query('DELETE FROM upload_locks WHERE account = ? AND endpoint = ? AND pid = ?')
+      .run(account, endpoint, process.pid)
   }
 
   beginRun(account: string, endpoint: string, concurrency: number): number {
-    this.assertWritable();
+    this.assertWritable()
     const result = this.database
       .query(
         `INSERT INTO upload_runs (account, endpoint, concurrency, started_at, status)
          VALUES (?, ?, ?, ?, 'running')`,
       )
-      .run(account, endpoint, concurrency, Date.now());
-    return Number(result.lastInsertRowid);
+      .run(account, endpoint, concurrency, Date.now())
+    return Number(result.lastInsertRowid)
   }
 
-  finishRun(runId: number, bytes: number, status: "completed" | "partial" | "cancelled"): void {
-    this.assertWritable();
+  finishRun(runId: number, bytes: number, status: 'completed' | 'partial' | 'cancelled'): void {
+    this.assertWritable()
     this.database
-      .query("UPDATE upload_runs SET finished_at = ?, bytes = ?, status = ? WHERE id = ?")
-      .run(Date.now(), bytes, status, runId);
+      .query('UPDATE upload_runs SET finished_at = ?, bytes = ?, status = ? WHERE id = ?')
+      .run(Date.now(), bytes, status, runId)
   }
 
   throughput(account: string, endpoint: string, concurrency: number): ThroughputEstimate | null {
@@ -248,65 +248,65 @@ export class UploadState {
              FROM upload_runs
              WHERE account = ? AND endpoint = ? AND status IN ('completed', 'partial')
                AND bytes > 0 AND finished_at > started_at
-               ${matchConcurrency ? "AND concurrency = ?" : ""}`,
+               ${matchConcurrency ? 'AND concurrency = ?' : ''}`,
           )
           .get(
             ...(matchConcurrency ? [account, endpoint, concurrency] : [account, endpoint]),
-          ) as ThroughputRow | null;
+          ) as ThroughputRow | null
       } catch (error) {
-        if (this.readonly && String(error).includes("no such table")) return null;
-        throw error;
+        if (this.readonly && String(error).includes('no such table')) return null
+        throw error
       }
-    };
+    }
 
-    const exact = select(true);
+    const exact = select(true)
     if (exact && exact.bytes > 0 && exact.durationMs > 0) {
       return {
         bytesPerSecond: (exact.bytes * 1000) / exact.durationMs,
-        source: "matching concurrency history",
-      };
+        source: 'matching concurrency history',
+      }
     }
-    const endpointHistory = select(false);
+    const endpointHistory = select(false)
     if (endpointHistory && endpointHistory.bytes > 0 && endpointHistory.durationMs > 0) {
       return {
         bytesPerSecond: (endpointHistory.bytes * 1000) / endpointHistory.durationMs,
-        source: "endpoint history",
-      };
+        source: 'endpoint history',
+      }
     }
-    return null;
+    return null
   }
 
   getFingerprint(host: string, port: number): string | null {
     try {
       const row = this.database
-        .query("SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?")
-        .get(host, port) as { fingerprint: string } | null;
-      return row?.fingerprint ?? null;
+        .query('SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?')
+        .get(host, port) as { fingerprint: string } | null
+      return row?.fingerprint ?? null
     } catch (error) {
-      if (this.readonly && String(error).includes("no such table")) return null;
-      throw error;
+      if (this.readonly && String(error).includes('no such table')) return null
+      throw error
     }
   }
 
   trustFingerprint(host: string, port: number, fingerprint: string): void {
-    this.assertWritable();
+    this.assertWritable()
     const transaction = this.database.transaction(() => {
       const existing = this.database
-        .query("SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?")
-        .get(host, port) as { fingerprint: string } | null;
+        .query('SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?')
+        .get(host, port) as { fingerprint: string } | null
       if (existing && existing.fingerprint !== fingerprint) {
         throw new UploadStateError(
           `SFTP host key changed for ${host}:${port}: expected ${existing.fingerprint}, received ${fingerprint}`,
-        );
+        )
       }
       if (!existing) {
         this.database
           .query(
-            "INSERT INTO known_hosts (host, port, fingerprint, first_seen_at) VALUES (?, ?, ?, ?)",
+            'INSERT INTO known_hosts (host, port, fingerprint, first_seen_at) VALUES (?, ?, ?, ?)',
           )
-          .run(host, port, fingerprint, Date.now());
+          .run(host, port, fingerprint, Date.now())
       }
-    });
-    transaction();
+    })
+    transaction()
   }
 }

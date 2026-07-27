@@ -1,15 +1,15 @@
-import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
-import { usageDocument } from "./features/usage/view.ts";
-import { FullUsageDocument, type FullUsageQuery } from "./gql/graphql.ts";
+import { commandOutput, createCommandClient, type ReadCommandDependencies } from './command.ts'
+import { usageDocument } from './features/usage/view.ts'
+import { FullUsageDocument, type FullUsageQuery } from './gql/graphql.ts'
 
 export interface UsageOptions {
-  json?: boolean;
+  json?: boolean
 }
 
-export type UsageDependencies = ReadCommandDependencies;
+export type UsageDependencies = ReadCommandDependencies
 
 function serializeUsage(data: FullUsageQuery) {
-  const overview = data.me.usageOverview;
+  const overview = data.me.usageOverview
   return {
     userId: data.me.id,
     tier: data.me.tier,
@@ -68,27 +68,27 @@ function serializeUsage(data: FullUsageQuery) {
       description: cost.description,
       quotaType: cost.quotaType,
     })),
-  };
+  }
 }
 
 export async function runUsage(
   options: UsageOptions = {},
   dependencies: UsageDependencies = {},
 ): Promise<void> {
-  const ui = commandOutput(dependencies);
+  const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
-    "Loading usage…",
+    'Loading usage…',
     async () => {
-      const client = await createCommandClient(dependencies);
-      return client.graphql.query({ query: FullUsageDocument });
+      const client = await createCommandClient(dependencies)
+      return client.graphql.query({ query: FullUsageDocument })
     },
     !options.json,
-  );
-  if (result.error) throw result.error;
-  if (!result.data?.me) throw new Error("The usage response did not include account usage data");
+  )
+  if (result.error) throw result.error
+  if (!result.data?.me) throw new Error('The usage response did not include account usage data')
   if (options.json) {
-    ui.json({ usage: serializeUsage(result.data) });
-    return;
+    ui.json({ usage: serializeUsage(result.data) })
+    return
   }
-  ui.document(usageDocument(result.data));
+  ui.document(usageDocument(result.data))
 }

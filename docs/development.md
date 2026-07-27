@@ -111,9 +111,9 @@ credentials and configuration, builds a JSON REST client, and creates an Apollo
 Client for `/api/v2/graphql`:
 
 ```ts
-import { createRawbackClient } from "./api.ts";
+import { createRawbackClient } from './api.ts'
 
-const client = await createRawbackClient();
+const client = await createRawbackClient()
 ```
 
 The API host resolves in this order:
@@ -130,10 +130,10 @@ and GraphQL errors.
 The REST helper currently handles JSON requests and responses:
 
 ```ts
-const response = await client.http.requestJson<MyResponse>("/api/v1/example", {
-  method: "POST",
+const response = await client.http.requestJson<MyResponse>('/api/v1/example', {
+  method: 'POST',
   body: { example: true },
-});
+})
 ```
 
 Non-success status codes throw `HttpError` with the parsed body. Malformed JSON

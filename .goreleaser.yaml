@@ -45,14 +45,14 @@ checksum:
     - glob: ./.release-artifacts/rawback_Windows_arm64.zip
 
 snapshot:
-  version_template: "{{ incpatch .Version }}-next"
+  version_template: '{{ incpatch .Version }}-next'
 
 changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
+      - '^docs:'
+      - '^test:'
 
 release:
   github:
@@ -77,7 +77,7 @@ release:
     ```bash
     brew install --cask rawback-app/tap/rawback
     ```
-  name_template: "v{{ .Version }}"
+  name_template: 'v{{ .Version }}'
 
 notarize:
   macos:
@@ -85,12 +85,12 @@ notarize:
       ids:
         - rawback
       sign:
-        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
-        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+        certificate: '{{ .Env.MACOS_SIGN_P12 }}'
+        password: '{{ .Env.MACOS_SIGN_PASSWORD }}'
       notarize:
-        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
-        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
-        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        issuer_id: '{{ .Env.MACOS_NOTARY_ISSUER_ID }}'
+        key_id: '{{ .Env.MACOS_NOTARY_KEY_ID }}'
+        key: '{{ .Env.MACOS_NOTARY_KEY }}'
         wait: true
 
 homebrew_casks:
@@ -102,10 +102,10 @@ homebrew_casks:
     repository:
       owner: rawback-app
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: '{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}'
     directory: Casks
-    homepage: "https://rawback.app"
-    description: "Rawback CLI for managing photo libraries and uploads"
+    homepage: 'https://rawback.app'
+    description: 'Rawback CLI for managing photo libraries and uploads'
     skip_upload: auto
     commit_author:
       name: github-actions[bot]

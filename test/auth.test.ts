@@ -1,21 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { type AuthPrompts, runAuth, runAuthStatus } from "../src/auth.ts";
-import { readCredentials, writeCredentials } from "../src/credentials.ts";
-import { HttpError } from "../src/http.ts";
+import { type AuthPrompts, runAuth, runAuthStatus } from '../src/auth.ts'
+import { readCredentials, writeCredentials } from '../src/credentials.ts'
+import { HttpError } from '../src/http.ts'
 
-const temporaryDirectories: string[] = [];
+const temporaryDirectories: string[] = []
 
 async function temporaryPaths(): Promise<{ configPath: string; credentialsPath: string }> {
-  const directory = await mkdtemp(join(tmpdir(), "rawback-auth-"));
-  temporaryDirectories.push(directory);
+  const directory = await mkdtemp(join(tmpdir(), 'rawback-auth-'))
+  temporaryDirectories.push(directory)
   return {
-    configPath: join(directory, "config.yml"),
-    credentialsPath: join(directory, ".rawback", "credentials.json"),
-  };
+    configPath: join(directory, 'config.yml'),
+    credentialsPath: join(directory, '.rawback', 'credentials.json'),
+  }
 }
 
 afterEach(async () => {
@@ -23,129 +23,129 @@ afterEach(async () => {
     temporaryDirectories
       .splice(0)
       .map((directory) => rm(directory, { force: true, recursive: true })),
-  );
-});
+  )
+})
 
 function createFetch(
   handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
 ): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
-    handler(input.toString(), init)) as typeof fetch;
+    handler(input.toString(), init)) as typeof fetch
 }
 
 function unexpectedPrompts(): AuthPrompts {
   return {
     async confirm() {
-      throw new Error("Unexpected confirmation prompt");
+      throw new Error('Unexpected confirmation prompt')
     },
-  };
+  }
 }
 
 const authUser = {
   id: 7,
-  name: "Raw Back",
-  email: "user@example.com",
-  slug: "raw-back",
-  tier: "free",
-  subscriptionStatus: "active",
-  accountStatus: "active",
-};
+  name: 'Raw Back',
+  email: 'user@example.com',
+  slug: 'raw-back',
+  tier: 'free',
+  subscriptionStatus: 'active',
+  accountStatus: 'active',
+}
 
-const expiresAt = "2099-01-01T00:10:00Z";
+const expiresAt = '2099-01-01T00:10:00Z'
 
 function deviceCreated() {
   return Response.json(
     {
       code: 201,
       data: {
-        sessionId: "session-123",
-        pollToken: "private-poll-token",
+        sessionId: 'session-123',
+        pollToken: 'private-poll-token',
         expiresAt,
         pollIntervalSeconds: 10,
       },
-      msg: "",
+      msg: '',
     },
     { status: 201 },
-  );
+  )
 }
 
 function deviceApproved() {
   return Response.json({
     code: 200,
     data: {
-      status: "approved",
-      user: { id: 7, name: "Raw Back", email: "user@example.com" },
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
+      status: 'approved',
+      user: { id: 7, name: 'Raw Back', email: 'user@example.com' },
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
     },
-    msg: "",
-  });
+    msg: '',
+  })
 }
 
-describe("auth commands", () => {
-  test("creates a device session, opens its web page, polls, and saves credentials", async () => {
-    const paths = await temporaryPaths();
-    const output: string[] = [];
-    const opened: Array<{ command: string; args: string[] }> = [];
-    const sleeps: number[] = [];
-    let polls = 0;
+describe('auth commands', () => {
+  test('creates a device session, opens its web page, polls, and saves credentials', async () => {
+    const paths = await temporaryPaths()
+    const output: string[] = []
+    const opened: Array<{ command: string; args: string[] }> = []
+    const sleeps: number[] = []
+    let polls = 0
 
     await runAuth(
       { force: true },
       {
         ...paths,
         prompts: unexpectedPrompts(),
-        platform: "linux",
-        operatingSystem: () => "linux",
-        architecture: () => "x64",
+        platform: 'linux',
+        operatingSystem: () => 'linux',
+        architecture: () => 'x64',
         open: async (command, args) => {
-          opened.push({ command, args });
-          return 0;
+          opened.push({ command, args })
+          return 0
         },
         sleep: async (milliseconds) => {
-          sleeps.push(milliseconds);
+          sleeps.push(milliseconds)
         },
         stdout: (message) => output.push(message),
         fetch: createFetch((url, init) => {
-          const headers = new Headers(init?.headers);
-          expect(headers.get("authorization")).toBeNull();
-          expect(headers.get("x-rawback-client-source")).toBe("cli");
-          expect(headers.get("x-rawback-client-version")).not.toBeNull();
+          const headers = new Headers(init?.headers)
+          expect(headers.get('authorization')).toBeNull()
+          expect(headers.get('x-rawback-client-source')).toBe('cli')
+          expect(headers.get('x-rawback-client-version')).not.toBeNull()
 
-          if (url.endsWith("/api/v1/auth/device/sessions")) {
+          if (url.endsWith('/api/v1/auth/device/sessions')) {
             expect(JSON.parse(String(init?.body))).toEqual({
-              operatingSystem: "linux",
-              architecture: "x64",
-            });
-            return deviceCreated();
+              operatingSystem: 'linux',
+              architecture: 'x64',
+            })
+            return deviceCreated()
           }
-          expect(url).toEndWith("/api/v1/auth/device/sessions/session-123/token");
+          expect(url).toEndWith('/api/v1/auth/device/sessions/session-123/token')
           expect(JSON.parse(String(init?.body))).toEqual({
-            pollToken: "private-poll-token",
-          });
-          polls += 1;
+            pollToken: 'private-poll-token',
+          })
+          polls += 1
           return polls === 1
-            ? Response.json({ code: 200, data: { status: "pending" }, msg: "" })
-            : deviceApproved();
+            ? Response.json({ code: 200, data: { status: 'pending' }, msg: '' })
+            : deviceApproved()
         }),
       },
-    );
+    )
 
-    const authorizationURL = "https://rawback.app/auth/device/session-123";
-    expect(opened).toEqual([{ command: "xdg-open", args: [authorizationURL] }]);
-    expect(sleeps).toEqual([10_000]);
-    expect(output).toContain(authorizationURL);
-    expect(output.at(-1)).toBe("✓ Authenticated as Raw Back (user@example.com).");
+    const authorizationURL = 'https://rawback.app/auth/device/session-123'
+    expect(opened).toEqual([{ command: 'xdg-open', args: [authorizationURL] }])
+    expect(sleeps).toEqual([10_000])
+    expect(output).toContain(authorizationURL)
+    expect(output.at(-1)).toBe('✓ Authenticated as Raw Back (user@example.com).')
     expect(await readCredentials(paths.credentialsPath)).toEqual({
-      token: "access-token",
-      refreshToken: "refresh-token",
-    });
-  });
+      token: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+  })
 
-  test("prints a copyable link and continues when the browser cannot open", async () => {
-    const paths = await temporaryPaths();
-    const output: string[] = [];
-    const warnings: string[] = [];
+  test('prints a copyable link and continues when the browser cannot open', async () => {
+    const paths = await temporaryPaths()
+    const output: string[] = []
+    const warnings: string[] = []
 
     await runAuth(
       { force: true },
@@ -155,19 +155,19 @@ describe("auth commands", () => {
         open: async () => 1,
         stdout: (message) => output.push(message),
         stderr: (message) => warnings.push(message),
-        fetch: createFetch((url) => (url.endsWith("/token") ? deviceApproved() : deviceCreated())),
+        fetch: createFetch((url) => (url.endsWith('/token') ? deviceApproved() : deviceCreated())),
       },
-    );
+    )
 
-    expect(output).toContain("https://rawback.app/auth/device/session-123");
-    expect(warnings.join("\n")).toContain("Use the link shown above");
-    expect(await readCredentials(paths.credentialsPath)).not.toBeNull();
-  });
+    expect(output).toContain('https://rawback.app/auth/device/session-123')
+    expect(warnings.join('\n')).toContain('Use the link shown above')
+    expect(await readCredentials(paths.credentialsPath)).not.toBeNull()
+  })
 
-  test("retries transient polling failures until approval", async () => {
-    const paths = await temporaryPaths();
-    let polls = 0;
-    let sleeps = 0;
+  test('retries transient polling failures until approval', async () => {
+    const paths = await temporaryPaths()
+    let polls = 0
+    let sleeps = 0
 
     await runAuth(
       { force: true },
@@ -176,35 +176,35 @@ describe("auth commands", () => {
         prompts: unexpectedPrompts(),
         open: async () => 0,
         sleep: async () => {
-          sleeps += 1;
+          sleeps += 1
         },
         stdout() {},
         fetch: createFetch((url) => {
-          if (!url.endsWith("/token")) return deviceCreated();
-          polls += 1;
+          if (!url.endsWith('/token')) return deviceCreated()
+          polls += 1
           return polls === 1
             ? Response.json(
                 {
                   code: 503,
                   data: null,
-                  msg: "temporarily unavailable",
-                  reason: "device_session_unavailable",
+                  msg: 'temporarily unavailable',
+                  reason: 'device_session_unavailable',
                 },
                 { status: 503 },
               )
-            : deviceApproved();
+            : deviceApproved()
         }),
       },
-    );
+    )
 
-    expect(polls).toBe(2);
-    expect(sleeps).toBe(1);
-  });
+    expect(polls).toBe(2)
+    expect(sleeps).toBe(1)
+  })
 
-  test("preserves existing credentials when authorization is denied", async () => {
-    const paths = await temporaryPaths();
-    const oldCredentials = { token: "old-token", refreshToken: "old-refresh" };
-    await writeCredentials(oldCredentials, paths.credentialsPath);
+  test('preserves existing credentials when authorization is denied', async () => {
+    const paths = await temporaryPaths()
+    const oldCredentials = { token: 'old-token', refreshToken: 'old-refresh' }
+    await writeCredentials(oldCredentials, paths.credentialsPath)
 
     expect(
       runAuth(
@@ -214,25 +214,25 @@ describe("auth commands", () => {
           prompts: unexpectedPrompts(),
           open: async () => 0,
           fetch: createFetch((url) =>
-            url.endsWith("/token")
-              ? Response.json({ code: 200, data: { status: "denied" }, msg: "" })
+            url.endsWith('/token')
+              ? Response.json({ code: 200, data: { status: 'denied' }, msg: '' })
               : deviceCreated(),
           ),
         },
       ),
-    ).rejects.toThrow("was denied");
-    expect(await readCredentials(paths.credentialsPath)).toEqual(oldCredentials);
-  });
+    ).rejects.toThrow('was denied')
+    expect(await readCredentials(paths.credentialsPath)).toEqual(oldCredentials)
+  })
 
-  test("keeps a valid session when reauthentication is declined", async () => {
-    const paths = await temporaryPaths();
+  test('keeps a valid session when reauthentication is declined', async () => {
+    const paths = await temporaryPaths()
     await writeCredentials(
-      { token: "access-token", refreshToken: "refresh-token" },
+      { token: 'access-token', refreshToken: 'refresh-token' },
       paths.credentialsPath,
-    );
-    const output: string[] = [];
-    const confirmations: string[] = [];
-    let requests = 0;
+    )
+    const output: string[] = []
+    const confirmations: string[] = []
+    let requests = 0
 
     await runAuth(
       {},
@@ -240,33 +240,33 @@ describe("auth commands", () => {
         ...paths,
         prompts: {
           async confirm(message) {
-            confirmations.push(message);
-            return false;
+            confirmations.push(message)
+            return false
           },
         },
         stdout: (message) => output.push(message),
         fetch: createFetch(() => {
-          requests += 1;
-          return Response.json({ data: { me: authUser } });
+          requests += 1
+          return Response.json({ data: { me: authUser } })
         }),
       },
-    );
+    )
 
-    expect(requests).toBe(1);
+    expect(requests).toBe(1)
     expect(confirmations).toEqual([
-      "Already authenticated as Raw Back (user@example.com). Reauthenticate?",
-    ]);
-    expect(output).toEqual(["ℹ Authentication unchanged."]);
-  });
+      'Already authenticated as Raw Back (user@example.com). Reauthenticate?',
+    ])
+    expect(output).toEqual(['ℹ Authentication unchanged.'])
+  })
 
-  test("allows authentication to replace malformed credentials", async () => {
-    const paths = await temporaryPaths();
+  test('allows authentication to replace malformed credentials', async () => {
+    const paths = await temporaryPaths()
     await writeCredentials(
-      { token: "old-token", refreshToken: "old-refresh" },
+      { token: 'old-token', refreshToken: 'old-refresh' },
       paths.credentialsPath,
-    );
-    await writeFile(paths.credentialsPath, "not json");
-    const warnings: string[] = [];
+    )
+    await writeFile(paths.credentialsPath, 'not json')
+    const warnings: string[] = []
 
     await runAuth(
       {},
@@ -276,19 +276,19 @@ describe("auth commands", () => {
         open: async () => 0,
         stderr: (message) => warnings.push(message),
         stdout() {},
-        fetch: createFetch((url) => (url.endsWith("/token") ? deviceApproved() : deviceCreated())),
+        fetch: createFetch((url) => (url.endsWith('/token') ? deviceApproved() : deviceCreated())),
       },
-    );
+    )
 
-    expect(warnings.join("\n")).toContain("invalid JSON");
+    expect(warnings.join('\n')).toContain('invalid JSON')
     expect(await readCredentials(paths.credentialsPath)).toEqual({
-      token: "access-token",
-      refreshToken: "refresh-token",
-    });
-  });
+      token: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+  })
 
-  test("does not retry a final polling error", async () => {
-    const paths = await temporaryPaths();
+  test('does not retry a final polling error', async () => {
+    const paths = await temporaryPaths()
     expect(
       runAuth(
         { force: true },
@@ -297,87 +297,87 @@ describe("auth commands", () => {
           prompts: unexpectedPrompts(),
           open: async () => 0,
           sleep: async () => {
-            throw new Error("Unexpected retry");
+            throw new Error('Unexpected retry')
           },
           fetch: createFetch((url) => {
-            if (!url.endsWith("/token")) return deviceCreated();
+            if (!url.endsWith('/token')) return deviceCreated()
             return Response.json(
               {
                 code: 404,
                 data: null,
-                msg: "device session not found",
-                reason: "device_session_not_found",
+                msg: 'device session not found',
+                reason: 'device_session_not_found',
               },
               { status: 404 },
-            );
+            )
           }),
         },
       ),
-    ).rejects.toThrow("expired or was already used");
-  });
+    ).rejects.toThrow('expired or was already used')
+  })
 
-  test("prints basic account information for auth status", async () => {
-    const paths = await temporaryPaths();
+  test('prints basic account information for auth status', async () => {
+    const paths = await temporaryPaths()
     await writeCredentials(
-      { token: "access-token", refreshToken: "refresh-token" },
+      { token: 'access-token', refreshToken: 'refresh-token' },
       paths.credentialsPath,
-    );
-    const output: string[] = [];
+    )
+    const output: string[] = []
 
     await runAuthStatus({
       ...paths,
       stdout: (message) => output.push(message),
       fetch: createFetch(() => Response.json({ data: { me: authUser } })),
-    });
+    })
 
-    expect(output).toHaveLength(1);
-    expect(output[0]).toContain("✓ Authenticated");
-    expect(output[0]).toContain("Name          Raw Back");
-    expect(output[0]).toContain("Email         user@example.com");
-    expect(output[0]).toContain("Profile       @raw-back");
-  });
+    expect(output).toHaveLength(1)
+    expect(output[0]).toContain('✓ Authenticated')
+    expect(output[0]).toContain('Name          Raw Back')
+    expect(output[0]).toContain('Email         user@example.com')
+    expect(output[0]).toContain('Profile       @raw-back')
+  })
 
-  test("reports missing, malformed, and expired authentication", async () => {
-    const missingPaths = await temporaryPaths();
-    expect(runAuthStatus(missingPaths)).rejects.toThrow("Not authenticated");
+  test('reports missing, malformed, and expired authentication', async () => {
+    const missingPaths = await temporaryPaths()
+    expect(runAuthStatus(missingPaths)).rejects.toThrow('Not authenticated')
 
-    const malformedPaths = await temporaryPaths();
-    await writeFile(malformedPaths.credentialsPath, "not json").catch(async () => {
+    const malformedPaths = await temporaryPaths()
+    await writeFile(malformedPaths.credentialsPath, 'not json').catch(async () => {
       await writeCredentials(
-        { token: "temporary", refreshToken: "temporary" },
+        { token: 'temporary', refreshToken: 'temporary' },
         malformedPaths.credentialsPath,
-      );
-      await writeFile(malformedPaths.credentialsPath, "not json");
-    });
-    expect(runAuthStatus(malformedPaths)).rejects.toThrow("rawback auth --force");
+      )
+      await writeFile(malformedPaths.credentialsPath, 'not json')
+    })
+    expect(runAuthStatus(malformedPaths)).rejects.toThrow('rawback auth --force')
 
-    const expiredPaths = await temporaryPaths();
+    const expiredPaths = await temporaryPaths()
     await writeCredentials(
-      { token: "expired-token", refreshToken: "expired-refresh" },
+      { token: 'expired-token', refreshToken: 'expired-refresh' },
       expiredPaths.credentialsPath,
-    );
+    )
     expect(
       runAuthStatus({
         ...expiredPaths,
         fetch: createFetch((url) => {
-          if (url.endsWith("/api/v1/auth/refresh")) {
+          if (url.endsWith('/api/v1/auth/refresh')) {
             return Response.json(
-              { code: 401, data: null, msg: "invalid refresh token" },
+              { code: 401, data: null, msg: 'invalid refresh token' },
               { status: 401 },
-            );
+            )
           }
           return Response.json({
             data: null,
-            errors: [{ message: "unauthorized", extensions: { code: 401 } }],
-          });
+            errors: [{ message: 'unauthorized', extensions: { code: 401 } }],
+          })
         }),
       }),
-    ).rejects.toThrow("Authentication has expired");
-  });
+    ).rejects.toThrow('Authentication has expired')
+  })
 
-  test("surfaces device-session creation errors without polling", async () => {
-    const paths = await temporaryPaths();
-    let requests = 0;
+  test('surfaces device-session creation errors without polling', async () => {
+    const paths = await temporaryPaths()
+    let requests = 0
 
     try {
       await runAuth(
@@ -387,23 +387,23 @@ describe("auth commands", () => {
           prompts: unexpectedPrompts(),
           open: async () => 0,
           fetch: createFetch(() => {
-            requests += 1;
+            requests += 1
             return Response.json(
               {
                 code: 429,
                 data: null,
-                msg: "too many device sessions",
-                reason: "device_session_rate_limited",
+                msg: 'too many device sessions',
+                reason: 'device_session_rate_limited',
               },
               { status: 429 },
-            );
+            )
           }),
         },
-      );
-      throw new Error("Expected authentication to fail");
+      )
+      throw new Error('Expected authentication to fail')
     } catch (error) {
-      expect(error).toBeInstanceOf(HttpError);
+      expect(error).toBeInstanceOf(HttpError)
     }
-    expect(requests).toBe(1);
-  });
-});
+    expect(requests).toBe(1)
+  })
+})
