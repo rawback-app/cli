@@ -1,0 +1,46 @@
+# Changelog
+
+## 1.0.0 (2026-07-27)
+
+
+### Features
+
+* add album and article commands ([7008078](https://github.com/rawback-app/cli/commit/700807897a7927f290bbaadee0bf88d7662be583))
+* add album and article commands ([490340f](https://github.com/rawback-app/cli/commit/490340f0013f6e6246f1932bff89330f2f47c602))
+* add API client foundation ([604d2c9](https://github.com/rawback-app/cli/commit/604d2c99113413eee6a96e35aa7245584878d97e))
+* add API client foundation ([3f280a7](https://github.com/rawback-app/cli/commit/3f280a76c224212572d23becd8f23bcaf8a745a9))
+* add auth commands ([2f41db9](https://github.com/rawback-app/cli/commit/2f41db911e81ec016fb526f21bf784d39f6e23f8))
+* add cross-platform release pipeline ([edc749a](https://github.com/rawback-app/cli/commit/edc749aee469b78200cbc3b861c20b5fda09fb44))
+* add cross-platform release pipeline ([271cdd1](https://github.com/rawback-app/cli/commit/271cdd1d7665f96ab92e411e8f9e11cbc631b704))
+* add device authentication flow ([176fd0b](https://github.com/rawback-app/cli/commit/176fd0bab829739c082ba384c960502f1acfbb60))
+* add dream commands ([3cae433](https://github.com/rawback-app/cli/commit/3cae433cee1f504b115dec2b763315ee4872bf48))
+* add dream commands ([bf3a4bb](https://github.com/rawback-app/cli/commit/bf3a4bb0aed0942080a47c4167d2ca11c4fa0407))
+* add Ink terminal UI ([2cd402b](https://github.com/rawback-app/cli/commit/2cd402b9572fb1e27ac783bcd47433d0dba351e5))
+* add Ink terminal UI ([93cc470](https://github.com/rawback-app/cli/commit/93cc4709430123318a73b033b4eb59ad7849bc02))
+* add SFTP credential commands ([70106f8](https://github.com/rawback-app/cli/commit/70106f89e0704a34d71adce4f988cc88e5f3d423))
+* add SFTP credential commands ([b9cc282](https://github.com/rawback-app/cli/commit/b9cc282a05464a3caccbe96f14cd118b0b399e2c))
+* add shares command suite ([0bfbc3f](https://github.com/rawback-app/cli/commit/0bfbc3fabe0306b50bfbfdbb802760d1991604bb))
+* add shares command suite ([c079056](https://github.com/rawback-app/cli/commit/c079056d8930e1965767db71e3b33b08e1193adb))
+* align upload image and RAW formats ([141e333](https://github.com/rawback-app/cli/commit/141e333db8555d8e0b3b1f8586c1be55a57e0276))
+* align upload image and RAW formats ([ee30b50](https://github.com/rawback-app/cli/commit/ee30b50b7fac06ab650f0489e6bdd9a3c3780b21))
+* initialize Bun CLI ([516f561](https://github.com/rawback-app/cli/commit/516f5618b869a9fdf75e96417776d3d069c1bd31))
+* replace password login with device flow ([b8a2ae8](https://github.com/rawback-app/cli/commit/b8a2ae8b71a3f9caca6fe4e24b63fee25bff4d4f))
+
+
+### Bug Fixes
+
+* always generate SFTP credential passwords ([1d85020](https://github.com/rawback-app/cli/commit/1d85020f71ef2ffa9ef6ee6be07229d6b6138fb5))
+* **gql:** update gql schema ([94c9f10](https://github.com/rawback-app/cli/commit/94c9f10c000786f4bb544bc115883efd369ca5e4))
+* use compatible Windows checksum hashing ([c1bfebc](https://github.com/rawback-app/cli/commit/c1bfebcc8f21d2137aecf5a4a87d655217787cf1))
+* use compatible Windows checksum hashing ([dd1ae82](https://github.com/rawback-app/cli/commit/dd1ae82d50778c4abd041d141241a7ba28afdbbc))
+
+
+### Documentation
+
+* improve CLI documentation ([156eabf](https://github.com/rawback-app/cli/commit/156eabf7a2b118d9cdc83742b8b05ddcb6395812))
+* improve CLI documentation ([86e9c1b](https://github.com/rawback-app/cli/commit/86e9c1b47428198dd4bf6508cb9f18a8fe41fa8b))
+
+
+### Build System
+
+* ignore generated GraphQL client ([5127628](https://github.com/rawback-app/cli/commit/51276281e09f131ef01503351936ceeb474afb65))
