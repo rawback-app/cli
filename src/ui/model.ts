@@ -1,73 +1,73 @@
-export type UiTone = "neutral" | "info" | "success" | "warning" | "error";
+export type UiTone = 'neutral' | 'info' | 'success' | 'warning' | 'error'
 
 export interface UiCell {
-  text: string;
-  tone?: UiTone;
-  dim?: boolean;
+  text: string
+  tone?: UiTone
+  dim?: boolean
 }
 
-export type UiCellValue = string | number | UiCell;
+export type UiCellValue = string | number | UiCell
 
 export interface UiTableColumn {
-  key: string;
-  label: string;
-  priority?: number;
-  required?: boolean;
-  minWidth?: number;
-  maxWidth?: number;
+  key: string
+  label: string
+  priority?: number
+  required?: boolean
+  minWidth?: number
+  maxWidth?: number
 }
 
-export type UiTableRow = Record<string, UiCellValue>;
+export type UiTableRow = Record<string, UiCellValue>
 
 export interface UiField {
-  label: string;
-  value: UiCellValue;
+  label: string
+  value: UiCellValue
 }
 
 export interface UiNoticeBlock {
-  type: "notice";
-  message: string;
-  tone?: UiTone;
+  type: 'notice'
+  message: string
+  tone?: UiTone
 }
 
 export interface UiFieldsBlock {
-  type: "fields";
-  fields: UiField[];
+  type: 'fields'
+  fields: UiField[]
 }
 
 export interface UiTableBlock {
-  type: "table";
-  columns: UiTableColumn[];
-  rows: UiTableRow[];
-  emptyMessage?: string;
+  type: 'table'
+  columns: UiTableColumn[]
+  rows: UiTableRow[]
+  emptyMessage?: string
 }
 
 export interface UiTextBlock {
-  type: "text";
-  text: string;
-  dim?: boolean;
-  bold?: boolean;
+  type: 'text'
+  text: string
+  dim?: boolean
+  bold?: boolean
 }
 
 export interface UiHelpSection {
-  title: string;
-  entries: Array<{ term: string; description: string }>;
+  title: string
+  entries: Array<{ term: string; description: string }>
 }
 
 export interface UiHelpBlock {
-  type: "help";
-  usage?: string;
-  description?: string;
-  sections: UiHelpSection[];
+  type: 'help'
+  usage?: string
+  description?: string
+  sections: UiHelpSection[]
 }
 
 export interface UiPaginationBlock {
-  type: "pagination";
-  page: number;
-  pageSize: number;
-  count: number;
-  totalCount?: number;
-  totalPages?: number;
+  type: 'pagination'
+  page: number
+  pageSize: number
+  count: number
+  totalCount?: number
+  totalPages?: number
 }
 
 export type UiBlock =
@@ -76,17 +76,17 @@ export type UiBlock =
   | UiTableBlock
   | UiTextBlock
   | UiHelpBlock
-  | UiPaginationBlock;
+  | UiPaginationBlock
 
 export interface UiDocument {
-  title?: string;
-  blocks: UiBlock[];
+  title?: string
+  blocks: UiBlock[]
 }
 
-export function cell(text: string, options: Omit<UiCell, "text"> = {}): UiCell {
-  return { text, ...options };
+export function cell(text: string, options: Omit<UiCell, 'text'> = {}): UiCell {
+  return { text, ...options }
 }
 
-export function statusCell(enabled: boolean, enabledText = "enabled"): UiCell {
-  return enabled ? { text: enabledText, tone: "success" } : { text: "disabled", tone: "warning" };
+export function statusCell(enabled: boolean, enabledText = 'enabled'): UiCell {
+  return enabled ? { text: enabledText, tone: 'success' } : { text: 'disabled', tone: 'warning' }
 }

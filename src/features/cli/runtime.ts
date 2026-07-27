@@ -1,18 +1,18 @@
-import { createProgram } from "../../cli.ts";
-import { CommandOutput } from "../../ui/output.tsx";
-import { helpDocument } from "./help.ts";
+import { createProgram } from '../../cli.ts'
+import { CommandOutput } from '../../ui/output.tsx'
+import { helpDocument } from './help.ts'
 
 function normalizedArgs(args: string[]): string[] {
-  if (args[0] !== "upload") return args;
-  return args.filter((argument) => argument !== "--help" && argument !== "-h");
+  if (args[0] !== 'upload') return args
+  return args.filter((argument) => argument !== '--help' && argument !== '-h')
 }
 
 function isHelpRequest(args: string[]): boolean {
-  return args.includes("--help") || args.includes("-h");
+  return args.includes('--help') || args.includes('-h')
 }
 
 function isVersionRequest(args: string[]): boolean {
-  return args.length === 1 && (args[0] === "--version" || args[0] === "-V");
+  return args.length === 1 && (args[0] === '--version' || args[0] === '-V')
 }
 
 export async function runCli(
@@ -20,29 +20,29 @@ export async function runCli(
   version: string,
   output = new CommandOutput(),
 ): Promise<void> {
-  const program = createProgram(version, output);
+  const program = createProgram(version, output)
 
   if (args.length === 0) {
-    output.document(helpDocument(await program.getHelp()));
-    return;
+    output.document(helpDocument(await program.getHelp()))
+    return
   }
 
   if (isVersionRequest(args)) {
-    output.raw(version);
-    return;
+    output.raw(version)
+    return
   }
 
-  const parseArgs = normalizedArgs(args);
+  const parseArgs = normalizedArgs(args)
   if (!isHelpRequest(parseArgs)) {
-    await program.parseAsync(parseArgs);
-    return;
+    await program.parseAsync(parseArgs)
+    return
   }
 
-  let help = "";
+  let help = ''
   await program.parseAsync(parseArgs, {}, (_error, _argv, rendered) => {
-    help = rendered;
-  });
+    help = rendered
+  })
   if (help.trim().length > 0) {
-    output.document(helpDocument(help));
+    output.document(helpDocument(help))
   }
 }

@@ -155,7 +155,7 @@ Create `~/.rawback/config.yml` with the account slug shown by
 sftp:
   endpoint: sftp://ftp.rawback.app:2222
   username: your-account-slug
-  password: "generated-password"
+  password: 'generated-password'
 ```
 
 On Linux and macOS, protect the file because it contains a password:

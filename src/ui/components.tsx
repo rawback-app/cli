@@ -1,4 +1,4 @@
-import { Box, Text } from "ink";
+import { Box, Text } from 'ink'
 
 import {
   type UiBlock,
@@ -10,58 +10,58 @@ import {
   type UiTableBlock,
   type UiTableColumn,
   type UiTone,
-} from "./model.ts";
+} from './model.ts'
 
-type ToneColor = "cyan" | "green" | "yellow" | "red" | undefined;
+type ToneColor = 'cyan' | 'green' | 'yellow' | 'red' | undefined
 
 const toneColor: Record<UiTone, ToneColor> = {
   neutral: undefined,
-  info: "cyan",
-  success: "green",
-  warning: "yellow",
-  error: "red",
-};
+  info: 'cyan',
+  success: 'green',
+  warning: 'yellow',
+  error: 'red',
+}
 
 const toneIcon: Record<UiTone, string> = {
-  neutral: "•",
-  info: "ℹ",
-  success: "✓",
-  warning: "!",
-  error: "✗",
-};
+  neutral: '•',
+  info: 'ℹ',
+  success: '✓',
+  warning: '!',
+  error: '✗',
+}
 
 function normalizedCell(value: UiCellValue | undefined): UiCell {
-  if (value === undefined) return { text: "—", dim: true };
-  if (typeof value === "object") return value;
-  return { text: String(value) };
+  if (value === undefined) return { text: '—', dim: true }
+  if (typeof value === 'object') return value
+  return { text: String(value) }
 }
 
 function cellWidth(value: UiCellValue | undefined): number {
-  return normalizedCell(value).text.length;
+  return normalizedCell(value).text.length
 }
 
 function minColumnWidth(column: UiTableColumn): number {
-  return Math.max(column.minWidth ?? 3, column.label.length);
+  return Math.max(column.minWidth ?? 3, column.label.length)
 }
 
 export function visibleTableColumns(block: UiTableBlock, terminalWidth: number): UiTableColumn[] {
-  const gapWidth = 2;
+  const gapWidth = 2
   const ordered = [...block.columns].sort(
     (left, right) => (left.priority ?? 100) - (right.priority ?? 100),
-  );
-  const visible: UiTableColumn[] = [];
-  let used = 0;
+  )
+  const visible: UiTableColumn[] = []
+  let used = 0
 
   for (const column of ordered) {
-    const width = minColumnWidth(column);
-    const nextWidth = used + (visible.length > 0 ? gapWidth : 0) + width;
+    const width = minColumnWidth(column)
+    const nextWidth = used + (visible.length > 0 ? gapWidth : 0) + width
     if (column.required || nextWidth <= terminalWidth || visible.length === 0) {
-      visible.push(column);
-      used = nextWidth;
+      visible.push(column)
+      used = nextWidth
     }
   }
 
-  return block.columns.filter((column) => visible.includes(column));
+  return block.columns.filter((column) => visible.includes(column))
 }
 
 function allocateWidths(
@@ -69,37 +69,37 @@ function allocateWidths(
   columns: UiTableColumn[],
   terminalWidth: number,
 ): number[] {
-  const gapWidth = Math.max(0, columns.length - 1) * 2;
+  const gapWidth = Math.max(0, columns.length - 1) * 2
   const widths = columns.map((column) => {
     const contentWidth = Math.max(
       column.label.length,
       ...block.rows.map((row) => cellWidth(row[column.key])),
-    );
-    return Math.min(column.maxWidth ?? Number.POSITIVE_INFINITY, contentWidth);
-  });
-  const minimums = columns.map(minColumnWidth);
-  let overflow = widths.reduce((total, width) => total + width, gapWidth) - terminalWidth;
+    )
+    return Math.min(column.maxWidth ?? Number.POSITIVE_INFINITY, contentWidth)
+  })
+  const minimums = columns.map(minColumnWidth)
+  let overflow = widths.reduce((total, width) => total + width, gapWidth) - terminalWidth
 
   while (overflow > 0) {
-    let changed = false;
+    let changed = false
     for (let index = widths.length - 1; index >= 0 && overflow > 0; index -= 1) {
-      const width = widths[index];
-      const minimum = minimums[index];
+      const width = widths[index]
+      const minimum = minimums[index]
       if (width !== undefined && minimum !== undefined && width > minimum) {
-        widths[index] = width - 1;
-        overflow -= 1;
-        changed = true;
+        widths[index] = width - 1
+        overflow -= 1
+        changed = true
       }
     }
-    if (!changed) break;
+    if (!changed) break
   }
 
-  return widths;
+  return widths
 }
 
 function CellText({ value }: { value: UiCellValue | undefined }) {
-  const rendered = normalizedCell(value);
-  const color = toneColor[rendered.tone ?? "neutral"];
+  const rendered = normalizedCell(value)
+  const color = toneColor[rendered.tone ?? 'neutral']
   return (
     <Text
       {...(color === undefined ? {} : { color })}
@@ -108,11 +108,11 @@ function CellText({ value }: { value: UiCellValue | undefined }) {
     >
       {rendered.text}
     </Text>
-  );
+  )
 }
 
 function Fields({ fields }: { fields: UiField[] }) {
-  const labelWidth = Math.max(...fields.map((field) => field.label.length), 0);
+  const labelWidth = Math.max(...fields.map((field) => field.label.length), 0)
   return (
     <Box flexDirection="column">
       {fields.map((field) => (
@@ -124,16 +124,16 @@ function Fields({ fields }: { fields: UiField[] }) {
         </Box>
       ))}
     </Box>
-  );
+  )
 }
 
 function Table({ block, terminalWidth }: { block: UiTableBlock; terminalWidth: number }) {
   if (block.rows.length === 0) {
-    return <Text dimColor>{block.emptyMessage ?? "No results."}</Text>;
+    return <Text dimColor>{block.emptyMessage ?? 'No results.'}</Text>
   }
 
-  const columns = visibleTableColumns(block, terminalWidth);
-  const widths = allocateWidths(block, columns, terminalWidth);
+  const columns = visibleTableColumns(block, terminalWidth)
+  const widths = allocateWidths(block, columns, terminalWidth)
 
   return (
     <Box flexDirection="column">
@@ -156,7 +156,7 @@ function Table({ block, terminalWidth }: { block: UiTableBlock; terminalWidth: n
         </Box>
       ))}
     </Box>
-  );
+  )
 }
 
 function Help({ block }: { block: UiHelpBlock }) {
@@ -174,7 +174,7 @@ function Help({ block }: { block: UiHelpBlock }) {
         </Box>
       ) : null}
       {block.sections.map((section) => {
-        const termWidth = Math.max(...section.entries.map((entry) => entry.term.length), 0);
+        const termWidth = Math.max(...section.entries.map((entry) => entry.term.length), 0)
         return (
           <Box key={section.title} flexDirection="column" marginBottom={1}>
             <Text bold>{section.title}</Text>
@@ -187,28 +187,28 @@ function Help({ block }: { block: UiHelpBlock }) {
               </Box>
             ))}
           </Box>
-        );
+        )
       })}
     </Box>
-  );
+  )
 }
 
 function Block({ block, terminalWidth }: { block: UiBlock; terminalWidth: number }) {
   switch (block.type) {
-    case "notice": {
-      const tone = block.tone ?? "neutral";
-      const color = toneColor[tone];
+    case 'notice': {
+      const tone = block.tone ?? 'neutral'
+      const color = toneColor[tone]
       return (
         <Text {...(color === undefined ? {} : { color })}>
           {toneIcon[tone]} {block.message}
         </Text>
-      );
+      )
     }
-    case "fields":
-      return <Fields fields={block.fields} />;
-    case "table":
-      return <Table block={block} terminalWidth={terminalWidth} />;
-    case "text":
+    case 'fields':
+      return <Fields fields={block.fields} />
+    case 'table':
+      return <Table block={block} terminalWidth={terminalWidth} />
+    case 'text':
       return (
         <Text
           {...(block.dim === undefined ? {} : { dimColor: block.dim })}
@@ -216,25 +216,25 @@ function Block({ block, terminalWidth }: { block: UiBlock; terminalWidth: number
         >
           {block.text}
         </Text>
-      );
-    case "help":
-      return <Help block={block} />;
-    case "pagination": {
-      const start = block.count === 0 ? 0 : (block.page - 1) * block.pageSize + 1;
-      const end = start === 0 ? 0 : start + block.count - 1;
+      )
+    case 'help':
+      return <Help block={block} />
+    case 'pagination': {
+      const start = block.count === 0 ? 0 : (block.page - 1) * block.pageSize + 1
+      const end = start === 0 ? 0 : start + block.count - 1
       if (block.totalCount !== undefined && block.totalPages !== undefined) {
         return (
           <Text dimColor>
             Page {block.page} of {block.totalPages} · {block.totalCount} total
           </Text>
-        );
+        )
       }
       return (
         <Text dimColor>
           Page {block.page} · showing {start}–{end} · {block.count} result
-          {block.count === 1 ? "" : "s"}
+          {block.count === 1 ? '' : 's'}
         </Text>
-      );
+      )
     }
   }
 }
@@ -243,8 +243,8 @@ export function DocumentView({
   document,
   terminalWidth = 80,
 }: {
-  document: UiDocument;
-  terminalWidth?: number;
+  document: UiDocument
+  terminalWidth?: number
 }) {
   return (
     <Box flexDirection="column">
@@ -259,10 +259,10 @@ export function DocumentView({
         </Box>
       ))}
     </Box>
-  );
+  )
 }
 
-const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 export function ActivityView({ label, frame }: { label: string; frame: number }) {
   return (
@@ -270,5 +270,5 @@ export function ActivityView({ label, frame }: { label: string; frame: number })
       <Text color="cyan">{spinnerFrames[frame % spinnerFrames.length]}</Text>
       <Text> {label}</Text>
     </Box>
-  );
+  )
 }

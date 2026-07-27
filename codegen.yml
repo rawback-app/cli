@@ -1,6 +1,6 @@
 overwrite: true
-schema: "./graphql.schema.json"
-documents: "src/schema/**/*.gql"
+schema: './graphql.schema.json'
+documents: 'src/schema/**/*.gql'
 ignoreNoDocuments: true
 generates:
   src/gql/:

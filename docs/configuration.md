@@ -20,7 +20,7 @@ webHost: https://rawback.app
 sftp:
   endpoint: sftp://ftp.rawback.app:2222
   username: your-account-slug
-  password: "generated SFTP credential password"
+  password: 'generated SFTP credential password'
 
   # Optional SSH host-key pin. Without it, the first observed key is trusted
   # and recorded in ~/.rawback/upload-progress.sqlite.

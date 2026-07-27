@@ -1,30 +1,30 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { writeCredentials } from "../src/credentials.ts";
-import { runPricing } from "../src/pricing.ts";
-import { runUploadSessionList } from "../src/uploads.ts";
-import { runUsage } from "../src/usage.ts";
-import { browserCommand, runWeb } from "../src/web.ts";
+import { writeCredentials } from '../src/credentials.ts'
+import { runPricing } from '../src/pricing.ts'
+import { runUploadSessionList } from '../src/uploads.ts'
+import { runUsage } from '../src/usage.ts'
+import { browserCommand, runWeb } from '../src/web.ts'
 
-const temporaryDirectories: string[] = [];
+const temporaryDirectories: string[] = []
 
 async function authenticatedPaths() {
-  const directory = await mkdtemp(join(tmpdir(), "rawback-read-commands-"));
-  temporaryDirectories.push(directory);
-  const credentialsPath = join(directory, "credentials.json");
-  const configPath = join(directory, "config.yml");
-  await writeCredentials({ token: "token", refreshToken: "refresh" }, credentialsPath);
-  return { configPath, credentialsPath };
+  const directory = await mkdtemp(join(tmpdir(), 'rawback-read-commands-'))
+  temporaryDirectories.push(directory)
+  const credentialsPath = join(directory, 'credentials.json')
+  const configPath = join(directory, 'config.yml')
+  await writeCredentials({ token: 'token', refreshToken: 'refresh' }, credentialsPath)
+  return { configPath, credentialsPath }
 }
 
 function graphqlFetch(
   handler: (body: Record<string, unknown>) => Response,
 ): typeof globalThis.fetch {
   return (async (_input, init) =>
-    handler(JSON.parse(String(init?.body)) as Record<string, unknown>)) as typeof fetch;
+    handler(JSON.parse(String(init?.body)) as Record<string, unknown>)) as typeof fetch
 }
 
 afterEach(async () => {
@@ -32,35 +32,35 @@ afterEach(async () => {
     temporaryDirectories
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
+  )
+})
 
-describe("upload sessions", () => {
-  test("filters, paginates, and emits named JSON", async () => {
-    const paths = await authenticatedPaths();
-    const lines: string[] = [];
+describe('upload sessions', () => {
+  test('filters, paginates, and emits named JSON', async () => {
+    const paths = await authenticatedPaths()
+    const lines: string[] = []
     await runUploadSessionList(
-      { json: true, page: 3, pageSize: 5, status: "failed" },
+      { json: true, page: 3, pageSize: 5, status: 'failed' },
       {
         ...paths,
         fetch: graphqlFetch((body) => {
-          expect(body.operationName).toBe("UploadSessions");
+          expect(body.operationName).toBe('UploadSessions')
           expect(body.variables).toEqual({
-            status: "failed",
+            status: 'failed',
             pagination: { page: 3, pageSize: 5 },
-          });
+          })
           return Response.json({
             data: {
               uploads: {
                 edges: [
                   {
                     id: 4,
-                    sessionId: "session-4",
+                    sessionId: 'session-4',
                     sftpSessionId: null,
-                    sourceIP: "127.0.0.1",
-                    sourceKind: "sftp",
-                    status: "failed",
-                    closedReason: "timeout",
+                    sourceIP: '127.0.0.1',
+                    sourceKind: 'sftp',
+                    status: 'failed',
+                    closedReason: 'timeout',
                     clientBanner: null,
                     geoCountry: null,
                     geoCity: null,
@@ -80,7 +80,7 @@ describe("upload sessions", () => {
                     completedAt: 120,
                     createdAt: 100,
                     updatedAt: 120,
-                    credential: { id: 8, name: "Camera" },
+                    credential: { id: 8, name: 'Camera' },
                   },
                 ],
                 pageInfo: {
@@ -93,22 +93,22 @@ describe("upload sessions", () => {
                 },
               },
             },
-          });
+          })
         }),
         stdout: (message) => lines.push(message),
       },
-    );
-    expect(JSON.parse(lines.join("\n"))).toMatchObject({
-      uploads: [{ id: 4, credential: { name: "Camera" } }],
+    )
+    expect(JSON.parse(lines.join('\n'))).toMatchObject({
+      uploads: [{ id: 4, credential: { name: 'Camera' } }],
       pageInfo: { page: 3, totalCount: 11 },
-    });
-  });
-});
+    })
+  })
+})
 
 const usageData = {
   me: {
     id: 2,
-    tier: "pro",
+    tier: 'pro',
     usageOverview: {
       storage: {
         usedBytes: 1024,
@@ -120,11 +120,11 @@ const usageData = {
         topImages: [
           {
             id: 9,
-            displayName: "Large photo",
-            originalFilename: "large.raf",
+            displayName: 'Large photo',
+            originalFilename: 'large.raf',
             sizeBytes: 800,
             thumbnailUrl: null,
-            mimeType: "image/x-fuji-raf",
+            mimeType: 'image/x-fuji-raf',
           },
         ],
       },
@@ -132,19 +132,19 @@ const usageData = {
         balance: 80,
         monthlyAllowance: 100,
         resetAt: 1_704_153_600,
-        tier: "pro",
+        tier: 'pro',
         dailySeries: [{ day: 1_704_067_200, value: 3 }],
         recentOperations: [
           {
             id: 5,
-            operationType: "caption",
-            quotaType: "credits",
+            operationType: 'caption',
+            quotaType: 'credits',
             creditsUsed: 3,
             creditsBefore: 83,
             creditsAfter: 80,
-            referenceType: "image",
+            referenceType: 'image',
             referenceId: 9,
-            status: "completed",
+            status: 'completed',
             createdAt: 1_704_067_200,
             metadata: null,
           },
@@ -156,59 +156,59 @@ const usageData = {
         resetAt: 1_704_153_600,
         facesCount: 12,
         dailySeries: [{ day: 1_704_067_200, value: 2 }],
-        topFaces: [{ id: 3, name: "Ada", faceCount: 8, coverImageUrl: null }],
+        topFaces: [{ id: 3, name: 'Ada', faceCount: 8, coverImageUrl: null }],
       },
     },
   },
   creditCosts: [
-    { operation: "caption", cost: 3, description: "Create a caption", quotaType: "credits" },
+    { operation: 'caption', cost: 3, description: 'Create a caption', quotaType: 'credits' },
   ],
-};
+}
 
-describe("usage", () => {
-  test("returns all web usage sections in human and JSON forms", async () => {
-    const paths = await authenticatedPaths();
+describe('usage', () => {
+  test('returns all web usage sections in human and JSON forms', async () => {
+    const paths = await authenticatedPaths()
     const fetch = graphqlFetch((body) => {
-      expect(body.operationName).toBe("FullUsage");
-      return Response.json({ data: usageData });
-    });
-    const human: string[] = [];
-    await runUsage({}, { ...paths, fetch, stdout: (message) => human.push(message) });
-    expect(human[0]).toContain("Storage · last 30 days");
-    expect(human[0]).toContain("Recent AI operations");
-    expect(human[0]).toContain("Top face matches");
+      expect(body.operationName).toBe('FullUsage')
+      return Response.json({ data: usageData })
+    })
+    const human: string[] = []
+    await runUsage({}, { ...paths, fetch, stdout: (message) => human.push(message) })
+    expect(human[0]).toContain('Storage · last 30 days')
+    expect(human[0]).toContain('Recent AI operations')
+    expect(human[0]).toContain('Top face matches')
 
-    const json: string[] = [];
-    await runUsage({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) });
-    expect(JSON.parse(json.join("\n"))).toMatchObject({
+    const json: string[] = []
+    await runUsage({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) })
+    expect(JSON.parse(json.join('\n'))).toMatchObject({
       usage: {
         userId: 2,
         storage: { topImages: [{ id: 9 }] },
         aiCredits: { recentOperations: [{ id: 5 }] },
-        faceRecognition: { topFaces: [{ name: "Ada" }] },
+        faceRecognition: { topFaces: [{ name: 'Ada' }] },
       },
-    });
-  });
-});
+    })
+  })
+})
 
-describe("pricing", () => {
-  test("is public and filters yearly plans while retaining free and add-ons", async () => {
-    const lines: string[] = [];
+describe('pricing', () => {
+  test('is public and filters yearly plans while retaining free and add-ons', async () => {
+    const lines: string[] = []
     await runPricing(
-      { interval: "year", json: true },
+      { interval: 'year', json: true },
       {
-        configPath: join(tmpdir(), "rawback-missing-config.yml"),
+        configPath: join(tmpdir(), 'rawback-missing-config.yml'),
         fetch: graphqlFetch((body) => {
-          expect(body.operationName).toBe("CliPricing");
+          expect(body.operationName).toBe('CliPricing')
           return Response.json({
             data: {
               pricing: {
                 tiers: [
                   {
-                    id: "free",
-                    name: "Free",
+                    id: 'free',
+                    name: 'Free',
                     price: 0,
-                    billingInterval: "month",
+                    billingInterval: 'month',
                     storageGB: 5,
                     creditsPerMonth: 10,
                     faceRecPerMonth: 10,
@@ -218,10 +218,10 @@ describe("pricing", () => {
                     priorityProcessing: false,
                   },
                   {
-                    id: "pro",
-                    name: "Pro",
+                    id: 'pro',
+                    name: 'Pro',
                     price: 1000,
-                    billingInterval: "month",
+                    billingInterval: 'month',
                     storageGB: 100,
                     creditsPerMonth: 100,
                     faceRecPerMonth: 100,
@@ -231,10 +231,10 @@ describe("pricing", () => {
                     priorityProcessing: true,
                   },
                   {
-                    id: "pro_yearly",
-                    name: "Pro",
+                    id: 'pro_yearly',
+                    name: 'Pro',
                     price: 10000,
-                    billingInterval: "year",
+                    billingInterval: 'year',
                     storageGB: 100,
                     creditsPerMonth: 100,
                     faceRecPerMonth: 100,
@@ -246,74 +246,74 @@ describe("pricing", () => {
                 ],
                 addOns: [
                   {
-                    id: "storage-100",
-                    name: "Storage",
+                    id: 'storage-100',
+                    name: 'Storage',
                     price: 500,
-                    kind: "storage",
+                    kind: 'storage',
                     amount: 100,
-                    description: "100 GB",
+                    description: '100 GB',
                   },
                 ],
               },
             },
-          });
+          })
         }),
         stdout: (message) => lines.push(message),
       },
-    );
-    const pricing = JSON.parse(lines.join("\n")).pricing;
-    expect(pricing.tiers.map((tier: { id: string }) => tier.id)).toEqual(["free", "pro_yearly"]);
-    expect(pricing.addOns).toHaveLength(1);
-  });
-});
+    )
+    const pricing = JSON.parse(lines.join('\n')).pricing
+    expect(pricing.tiers.map((tier: { id: string }) => tier.id)).toEqual(['free', 'pro_yearly'])
+    expect(pricing.addOns).toHaveLength(1)
+  })
+})
 
-describe("web", () => {
-  test("opens the configured authenticated profile without shell interpolation", async () => {
-    const paths = await authenticatedPaths();
-    await writeFile(paths.configPath, "webHost: https://staging.rawback.app/\n");
-    const opened: Array<{ command: string; args: string[] }> = [];
-    const lines: string[] = [];
+describe('web', () => {
+  test('opens the configured authenticated profile without shell interpolation', async () => {
+    const paths = await authenticatedPaths()
+    await writeFile(paths.configPath, 'webHost: https://staging.rawback.app/\n')
+    const opened: Array<{ command: string; args: string[] }> = []
+    const lines: string[] = []
     await runWeb({
       ...paths,
-      platform: "linux",
+      platform: 'linux',
       fetch: graphqlFetch(() =>
         Response.json({
           data: {
             me: {
               id: 1,
-              name: "Ada",
-              email: "ada@example.com",
-              slug: "ada lovelace",
-              tier: "pro",
-              subscriptionStatus: "active",
-              accountStatus: "active",
+              name: 'Ada',
+              email: 'ada@example.com',
+              slug: 'ada lovelace',
+              tier: 'pro',
+              subscriptionStatus: 'active',
+              accountStatus: 'active',
             },
           },
         }),
       ),
       async open(command, args) {
-        opened.push({ command, args });
-        return 0;
+        opened.push({ command, args })
+        return 0
       },
       stdout: (message) => lines.push(message),
-    });
+    })
     expect(opened).toEqual([
       {
-        command: "xdg-open",
-        args: ["https://staging.rawback.app/users/ada%20lovelace"],
+        command: 'xdg-open',
+        args: ['https://staging.rawback.app/users/ada%20lovelace'],
       },
-    ]);
-    expect(lines[0]).toContain("Opened https://staging.rawback.app/users/ada%20lovelace");
-  });
+    ])
+    expect(lines[0]).toContain('Opened https://staging.rawback.app/users/ada%20lovelace')
+  })
 
-  test("selects platform-specific browser commands", () => {
-    expect(browserCommand("darwin", "https://rawback.app")).toEqual([
-      "open",
-      ["https://rawback.app"],
-    ]);
-    expect(browserCommand("win32", "https://rawback.app")).toEqual([
-      "cmd",
-      ["/c", "start", "", "https://rawback.app"],
-    ]);
-  });
-});
+  test('selects platform-specific browser commands', () => {
+    expect(browserCommand('darwin', 'https://rawback.app')).toEqual([
+      'open',
+      ['https://rawback.app'],
+    ])
+    expect(browserCommand('win32', 'https://rawback.app')).toEqual([
+      'cmd',
+      ['/c', 'start', '', 'https://rawback.app'],
+    ])
+  })
+})
