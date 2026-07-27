@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.1](https://github.com/rawback-app/cli/compare/v1.0.0...v1.0.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **fmt:** fmt code ([ac6dc65](https://github.com/rawback-app/cli/commit/ac6dc65ad2ee1deb1af4874b85ef934f42f26f2e))
+* **fmt:** fmt code ([0878f93](https://github.com/rawback-app/cli/commit/0878f939208cd35ed9e203cc68715d15672b918e))
+
+
+### Continuous Integration
+
+* skip native Windows jobs ([17a592c](https://github.com/rawback-app/cli/commit/17a592ca4f407fac0bb7481c575145b8287b17fa))
+* skip native Windows jobs ([ed35a33](https://github.com/rawback-app/cli/commit/ed35a3376d70b1e2255948c6ff0d45372061b39d))
+
 ## 1.0.0 (2026-07-27)
 
 
