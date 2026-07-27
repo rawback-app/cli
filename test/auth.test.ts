@@ -82,6 +82,18 @@ function deviceApproved() {
   })
 }
 
+function deviceUnavailable(headers?: ConstructorParameters<typeof Headers>[0]) {
+  return Response.json(
+    {
+      code: 503,
+      data: null,
+      msg: 'device authorization is temporarily unavailable',
+      reason: 'device_session_unavailable',
+    },
+    { status: 503, ...(headers ? { headers } : {}) },
+  )
+}
+
 describe('auth commands', () => {
   test('creates a device session, opens its web page, polls, and saves credentials', async () => {
     const paths = await temporaryPaths()
@@ -199,6 +211,121 @@ describe('auth commands', () => {
 
     expect(polls).toBe(2)
     expect(sleeps).toBe(1)
+  })
+
+  test('retries transient device-session creation failures', async () => {
+    const paths = await temporaryPaths()
+    const sleeps: number[] = []
+    let creates = 0
+
+    await runAuth(
+      { force: true },
+      {
+        ...paths,
+        prompts: unexpectedPrompts(),
+        open: async () => 0,
+        sleep: async (milliseconds) => {
+          sleeps.push(milliseconds)
+        },
+        stdout() {},
+        fetch: createFetch((url) => {
+          if (url.endsWith('/token')) return deviceApproved()
+          creates += 1
+          return creates === 1 ? deviceUnavailable({ 'retry-after': '30' }) : deviceCreated()
+        }),
+      },
+    )
+
+    expect(creates).toBe(2)
+    expect(sleeps).toEqual([10_000])
+  })
+
+  test('reports the final trace ID when device-session creation remains unavailable', async () => {
+    const paths = await temporaryPaths()
+    const oldCredentials = { token: 'old-token', refreshToken: 'old-refresh' }
+    await writeCredentials(oldCredentials, paths.credentialsPath)
+    const sleeps: number[] = []
+    let requests = 0
+
+    try {
+      await runAuth(
+        { force: true },
+        {
+          ...paths,
+          prompts: unexpectedPrompts(),
+          open: async () => {
+            throw new Error('Unexpected browser open')
+          },
+          sleep: async (milliseconds) => {
+            sleeps.push(milliseconds)
+          },
+          fetch: createFetch(() => {
+            requests += 1
+            return deviceUnavailable({ 'x-trace-id': 'trace-final' })
+          }),
+        },
+      )
+      throw new Error('Expected authentication to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('after 3 attempts')
+      expect((error as Error).message).toContain('Trace ID: trace-final')
+    }
+
+    expect(requests).toBe(3)
+    expect(sleeps).toEqual([1_000, 2_000])
+    expect(await readCredentials(paths.credentialsPath)).toEqual(oldCredentials)
+  })
+
+  test('retries a network failure while creating a device session', async () => {
+    const paths = await temporaryPaths()
+    const sleeps: number[] = []
+    let creates = 0
+
+    await runAuth(
+      { force: true },
+      {
+        ...paths,
+        prompts: unexpectedPrompts(),
+        open: async () => 0,
+        sleep: async (milliseconds) => {
+          sleeps.push(milliseconds)
+        },
+        stdout() {},
+        fetch: createFetch((url) => {
+          if (url.endsWith('/token')) return deviceApproved()
+          creates += 1
+          if (creates === 1) throw new TypeError('fetch failed')
+          return deviceCreated()
+        }),
+      },
+    )
+
+    expect(creates).toBe(2)
+    expect(sleeps).toEqual([1_000])
+  })
+
+  test('does not retry malformed device-session responses', async () => {
+    const paths = await temporaryPaths()
+    let requests = 0
+
+    expect(
+      runAuth(
+        { force: true },
+        {
+          ...paths,
+          prompts: unexpectedPrompts(),
+          sleep: async () => {
+            throw new Error('Unexpected retry')
+          },
+          fetch: createFetch(() => {
+            requests += 1
+            return new Response('not json', { status: 503 })
+          }),
+        },
+      ),
+    ).rejects.toThrow('Expected a JSON response')
+    expect(requests).toBe(1)
   })
 
   test('preserves existing credentials when authorization is denied', async () => {
@@ -375,7 +502,7 @@ describe('auth commands', () => {
     ).rejects.toThrow('Authentication has expired')
   })
 
-  test('surfaces device-session creation errors without polling', async () => {
+  test('does not retry a device-session rate limit response', async () => {
     const paths = await temporaryPaths()
     let requests = 0
 

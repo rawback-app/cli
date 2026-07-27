@@ -40,6 +40,10 @@ type DevicePollResponse =
   | { status: 'pending' | 'denied' }
   | ({ status: 'approved' } & ApprovedDeviceResponse)
 
+const DEVICE_SESSION_CREATE_ATTEMPTS = 3
+const DEVICE_SESSION_CREATE_RETRY_DELAYS = [1_000, 2_000] as const
+const MAX_RETRY_AFTER_MILLISECONDS = 10_000
+
 export interface AuthPrompts {
   confirm(message: string): Promise<boolean>
 }
@@ -232,6 +236,83 @@ function isRetriablePollError(error: unknown): boolean {
   return !(error instanceof JsonResponseError)
 }
 
+function retryAfterMilliseconds(error: unknown, fallback: number, now: () => number): number {
+  if (!(error instanceof HttpError)) {
+    return fallback
+  }
+
+  const value = error.headers.get('retry-after')?.trim()
+  if (!value) {
+    return fallback
+  }
+
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1_000, MAX_RETRY_AFTER_MILLISECONDS)
+  }
+
+  const retryAt = Date.parse(value)
+  if (!Number.isFinite(retryAt)) {
+    return fallback
+  }
+  return Math.min(Math.max(retryAt - now(), 0), MAX_RETRY_AFTER_MILLISECONDS)
+}
+
+function exhaustedDeviceSessionError(error: unknown): Error {
+  const traceID = error instanceof HttpError ? error.headers.get('x-trace-id')?.trim() : undefined
+  const traceSuffix = traceID ? ` Trace ID: ${traceID}.` : ''
+
+  if (error instanceof HttpError) {
+    return new Error(
+      `Device authorization is temporarily unavailable after ${DEVICE_SESSION_CREATE_ATTEMPTS} attempts. Try again shortly.${traceSuffix}`,
+      { cause: error },
+    )
+  }
+
+  const detail = error instanceof Error && error.message ? `: ${error.message}` : ''
+  return new Error(
+    `Unable to create a device authorization session after ${DEVICE_SESSION_CREATE_ATTEMPTS} attempts${detail}.${traceSuffix}`,
+    { cause: error },
+  )
+}
+
+async function createDeviceSession(
+  client: RawbackClient,
+  dependencies: AuthCommandDependencies,
+): Promise<DeviceSessionResponse> {
+  const sleep = dependencies.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds))
+  const now = dependencies.now ?? Date.now
+  const body = {
+    operatingSystem: (dependencies.operatingSystem ?? operatingSystem)(),
+    architecture: (dependencies.architecture ?? systemArchitecture)(),
+  }
+
+  for (let attempt = 0; attempt < DEVICE_SESSION_CREATE_ATTEMPTS; attempt += 1) {
+    try {
+      const envelope = await client.http.requestJson<ApiEnvelope<DeviceSessionResponse>>(
+        '/api/v1/auth/device/sessions',
+        {
+          authenticated: false,
+          body,
+          method: 'POST',
+        },
+      )
+      return parseDeviceSessionResponse(envelope.data)
+    } catch (error) {
+      if (!isRetriablePollError(error)) {
+        throw error
+      }
+      const fallback = DEVICE_SESSION_CREATE_RETRY_DELAYS[attempt]
+      if (fallback === undefined) {
+        throw exhaustedDeviceSessionError(error)
+      }
+      await sleep(retryAfterMilliseconds(error, fallback, now))
+    }
+  }
+
+  throw new Error('Unable to create a device authorization session')
+}
+
 async function pollDeviceSession(
   client: RawbackClient,
   session: DeviceSessionResponse,
@@ -313,17 +394,9 @@ export async function runAuth(
   }
 
   const client = await createClient(config, null, dependencies)
-  const envelope = await ui.withActivity('Creating device session…', () =>
-    client.http.requestJson<ApiEnvelope<DeviceSessionResponse>>('/api/v1/auth/device/sessions', {
-      authenticated: false,
-      body: {
-        operatingSystem: (dependencies.operatingSystem ?? operatingSystem)(),
-        architecture: (dependencies.architecture ?? systemArchitecture)(),
-      },
-      method: 'POST',
-    }),
+  const session = await ui.withActivity('Creating device session…', () =>
+    createDeviceSession(client, dependencies),
   )
-  const session = parseDeviceSessionResponse(envelope.data)
   const webHost = (config.webHost ?? DEFAULT_WEB_HOST).replace(/\/$/, '')
   const url = `${webHost}/auth/device/${encodeURIComponent(session.sessionId)}`
   ui.info('Authorize this CLI session in your browser:')

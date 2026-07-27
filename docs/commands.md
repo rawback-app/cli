@@ -32,7 +32,9 @@ approval URL, and attempts to open it in the system browser. The URL remains
 usable if the browser cannot be opened automatically. After you sign in and
 approve the request, the CLI checks the session every 10 seconds and stores the
 issued credentials. Denied, expired, and already-used sessions do not replace
-existing credentials.
+existing credentials. Network and server failures while creating the session
+are retried up to three total attempts. A persistent server failure includes a
+trace ID when the API provides one.
 
 Check the stored session and display account information:
 

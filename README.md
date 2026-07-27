@@ -106,7 +106,9 @@ rawback auth status
 link, and opens it in your browser. Sign in on the web if needed, review the CLI
 request details, and authorize it. The resulting access and refresh tokens are
 saved in `~/.rawback/credentials.json`. Expired access tokens are refreshed
-automatically when possible.
+automatically when possible. Temporary device-session creation failures are
+retried before the command reports an error with a support trace ID when
+available.
 
 ### 2. Browse your account
 

@@ -160,6 +160,14 @@ the server or network change first.
 
 ## Troubleshooting
 
+### Device authorization is temporarily unavailable
+
+The CLI retries temporary network and server failures while creating the device
+session. If all three attempts fail, retry later and include the displayed trace
+ID when reporting the problem. Server operators should check the API `/ready`
+endpoint and its Redis connection; existing credentials are not replaced by a
+failed authentication attempt.
+
 ### `Missing sftp... in ~/.rawback/config.yml`
 
 Add the missing `endpoint`, `username`, or `password` field under the `sftp`
