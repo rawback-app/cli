@@ -264,7 +264,7 @@ function exhaustedDeviceSessionError(error: unknown): Error {
 
   if (error instanceof HttpError) {
     return new Error(
-      `Device authorization is temporarily unavailable after ${DEVICE_SESSION_CREATE_ATTEMPTS} attempts. Try again shortly.${traceSuffix}`,
+      `Device authorization failed after ${DEVICE_SESSION_CREATE_ATTEMPTS} attempts: ${error.message}${traceSuffix}`,
       { cause: error },
     )
   }
@@ -272,6 +272,16 @@ function exhaustedDeviceSessionError(error: unknown): Error {
   const detail = error instanceof Error && error.message ? `: ${error.message}` : ''
   return new Error(
     `Unable to create a device authorization session after ${DEVICE_SESSION_CREATE_ATTEMPTS} attempts${detail}.${traceSuffix}`,
+    { cause: error },
+  )
+}
+
+function exhaustedDevicePollError(error: unknown): Error {
+  const detail = error instanceof Error && error.message ? error.message : String(error)
+  const traceID = error instanceof HttpError ? error.headers.get('x-trace-id')?.trim() : undefined
+  const traceSuffix = traceID ? ` Trace ID: ${traceID}.` : ''
+  return new Error(
+    `Device authorization could not be completed before the session expired: ${detail}${traceSuffix}`,
     { cause: error },
   )
 }
@@ -322,6 +332,7 @@ async function pollDeviceSession(
   const sleep = dependencies.sleep ?? ((milliseconds: number) => Bun.sleep(milliseconds))
   const expiresAt = Date.parse(session.expiresAt)
   const interval = session.pollIntervalSeconds * 1_000
+  let lastRetriableError: unknown
 
   while (now() < expiresAt) {
     let envelope: ApiEnvelope<DevicePollResponse>
@@ -341,11 +352,13 @@ async function pollDeviceSession(
         }
         throw error
       }
+      lastRetriableError = error
       await sleep(interval)
       continue
     }
 
     const response = parseDevicePollResponse(envelope.data)
+    lastRetriableError = undefined
     if (response.status === 'approved') {
       return {
         user: response.user,
@@ -359,6 +372,9 @@ async function pollDeviceSession(
     await sleep(interval)
   }
 
+  if (lastRetriableError !== undefined) {
+    throw exhaustedDevicePollError(lastRetriableError)
+  }
   throw new Error("Device authorization expired. Run 'rawback auth' to try again.")
 }
 

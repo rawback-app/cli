@@ -82,12 +82,15 @@ function deviceApproved() {
   })
 }
 
-function deviceUnavailable(headers?: ConstructorParameters<typeof Headers>[0]) {
+function deviceUnavailable(
+  headers?: ConstructorParameters<typeof Headers>[0],
+  message = 'device authorization is temporarily unavailable',
+) {
   return Response.json(
     {
       code: 503,
       data: null,
-      msg: 'device authorization is temporarily unavailable',
+      msg: message,
       reason: 'device_session_unavailable',
     },
     { status: 503, ...(headers ? { headers } : {}) },
@@ -240,7 +243,7 @@ describe('auth commands', () => {
     expect(sleeps).toEqual([10_000])
   })
 
-  test('reports the final trace ID when device-session creation remains unavailable', async () => {
+  test('reports the raw server error and final trace ID when creation remains unavailable', async () => {
     const paths = await temporaryPaths()
     const oldCredentials = { token: 'old-token', refreshToken: 'old-refresh' }
     await writeCredentials(oldCredentials, paths.credentialsPath)
@@ -261,7 +264,10 @@ describe('auth commands', () => {
           },
           fetch: createFetch(() => {
             requests += 1
-            return deviceUnavailable({ 'x-trace-id': 'trace-final' })
+            return deviceUnavailable(
+              { 'x-trace-id': 'trace-final' },
+              'device auth is unavailable: redis connection refused',
+            )
           }),
         },
       )
@@ -269,6 +275,9 @@ describe('auth commands', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error)
       expect((error as Error).message).toContain('after 3 attempts')
+      expect((error as Error).message).toContain(
+        'device auth is unavailable: redis connection refused',
+      )
       expect((error as Error).message).toContain('Trace ID: trace-final')
     }
 
@@ -326,6 +335,74 @@ describe('auth commands', () => {
       ),
     ).rejects.toThrow('Expected a JSON response')
     expect(requests).toBe(1)
+  })
+
+  test('reports a continuous raw polling failure when the session expires', async () => {
+    const paths = await temporaryPaths()
+    const times = [Date.parse('2098-01-01T00:00:00Z'), Date.parse('2100-01-01T00:00:00Z')]
+
+    try {
+      await runAuth(
+        { force: true },
+        {
+          ...paths,
+          prompts: unexpectedPrompts(),
+          open: async () => 0,
+          now: () => times.shift() ?? Date.parse('2100-01-01T00:00:00Z'),
+          sleep: async () => {},
+          stdout() {},
+          fetch: createFetch((url) =>
+            url.endsWith('/token')
+              ? deviceUnavailable(
+                  { 'x-trace-id': 'trace-poll' },
+                  'device auth is unavailable: redis poll failed',
+                )
+              : deviceCreated(),
+          ),
+        },
+      )
+      throw new Error('Expected authentication to fail')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('redis poll failed')
+      expect((error as Error).message).toContain('Trace ID: trace-poll')
+    }
+  })
+
+  test('clears a transient polling error after the server recovers', async () => {
+    const paths = await temporaryPaths()
+    const times = [
+      Date.parse('2098-01-01T00:00:00Z'),
+      Date.parse('2098-01-01T00:00:01Z'),
+      Date.parse('2100-01-01T00:00:00Z'),
+    ]
+    let polls = 0
+
+    try {
+      await runAuth(
+        { force: true },
+        {
+          ...paths,
+          prompts: unexpectedPrompts(),
+          open: async () => 0,
+          now: () => times.shift() ?? Date.parse('2100-01-01T00:00:00Z'),
+          sleep: async () => {},
+          stdout() {},
+          fetch: createFetch((url) => {
+            if (!url.endsWith('/token')) return deviceCreated()
+            polls += 1
+            return polls === 1
+              ? deviceUnavailable(undefined, 'device auth is unavailable: stale error')
+              : Response.json({ code: 200, data: { status: 'pending' }, msg: '' })
+          }),
+        },
+      )
+      throw new Error('Expected authentication to expire')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('Device authorization expired')
+      expect((error as Error).message).not.toContain('stale error')
+    }
   })
 
   test('preserves existing credentials when authorization is denied', async () => {

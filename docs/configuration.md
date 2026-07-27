@@ -166,7 +166,9 @@ The CLI retries temporary network and server failures while creating the device
 session. If all three attempts fail, retry later and include the displayed trace
 ID when reporting the problem. Server operators should check the API `/ready`
 endpoint and its Redis connection; existing credentials are not replaced by a
-failed authentication attempt.
+failed authentication attempt. Device-authentication failures include the raw
+server error, which may contain infrastructure-specific Redis, network, or ACL
+details.
 
 ### `Missing sftp... in ~/.rawback/config.yml`
 
