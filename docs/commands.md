@@ -34,7 +34,8 @@ approve the request, the CLI checks the session every 10 seconds and stores the
 issued credentials. Denied, expired, and already-used sessions do not replace
 existing credentials. Network and server failures while creating the session
 are retried up to three total attempts. A persistent server failure includes a
-trace ID when the API provides one.
+trace ID when the API provides one and the raw server error returned by the
+device-authentication endpoint.
 
 Check the stored session and display account information:
 

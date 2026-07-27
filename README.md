@@ -108,7 +108,8 @@ request details, and authorize it. The resulting access and refresh tokens are
 saved in `~/.rawback/credentials.json`. Expired access tokens are refreshed
 automatically when possible. Temporary device-session creation failures are
 retried before the command reports an error with a support trace ID when
-available.
+available. Persistent device-authentication failures also include the raw server
+error for diagnosis.
 
 ### 2. Browse your account
 
