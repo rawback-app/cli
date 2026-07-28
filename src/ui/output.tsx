@@ -15,6 +15,25 @@ export interface ActivityHandle {
   stop(): Promise<void>
 }
 
+export function createActivityStop(
+  instance: Pick<Instance, 'clear' | 'unmount' | 'waitUntilExit'>,
+  stopAnimation: () => void,
+  detachInstance: () => void,
+): ActivityHandle['stop'] {
+  let current: typeof instance | undefined = instance
+
+  return async () => {
+    if (current === undefined) return
+    stopAnimation()
+    const stopping = current
+    current = undefined
+    detachInstance()
+    stopping.clear()
+    stopping.unmount()
+    await stopping.waitUntilExit()
+  }
+}
+
 export class CommandOutput {
   readonly columns: number
   readonly interactive: boolean
@@ -113,20 +132,20 @@ export class CommandOutput {
       frame += 1
       instance?.rerender(<ActivityView label={currentLabel} frame={frame} />)
     }, 80)
+    const stop = createActivityStop(
+      instance,
+      () => clearInterval(timer),
+      () => {
+        instance = undefined
+      },
+    )
 
     return {
       update(nextLabel: string) {
         currentLabel = nextLabel
         instance?.rerender(<ActivityView label={currentLabel} frame={frame} />)
       },
-      async stop() {
-        if (instance === undefined) return
-        clearInterval(timer)
-        const stopping = instance
-        instance = undefined
-        stopping.unmount()
-        await stopping.waitUntilExit()
-      },
+      stop,
     }
   }
 }

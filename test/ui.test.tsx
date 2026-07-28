@@ -9,7 +9,7 @@ import {
 } from '../src/features/upload/progress.tsx'
 import { visibleTableColumns } from '../src/ui/components.tsx'
 import { type UiTableBlock } from '../src/ui/model.ts'
-import { CommandOutput } from '../src/ui/output.tsx'
+import { type ActivityHandle, CommandOutput, createActivityStop } from '../src/ui/output.tsx'
 
 describe('Ink output', () => {
   test('keeps required table columns and drops lower-priority detail on narrow terminals', () => {
@@ -46,6 +46,56 @@ describe('Ink output', () => {
     expect(stderr).toHaveLength(1)
     expect(stderr[0]).toContain('✗ Request failed')
     expect(stderr[0]).toContain('Hint: Try again.')
+  })
+
+  test('clears an activity before unmounting it and only stops once', async () => {
+    const lifecycle: string[] = []
+    const stop = createActivityStop(
+      {
+        clear() {
+          lifecycle.push('clear')
+        },
+        unmount() {
+          lifecycle.push('unmount')
+        },
+        async waitUntilExit() {
+          lifecycle.push('exit')
+        },
+      },
+      () => lifecycle.push('timer'),
+      () => lifecycle.push('detach'),
+    )
+
+    await stop()
+    await stop()
+
+    expect(lifecycle).toEqual(['timer', 'detach', 'clear', 'unmount', 'exit'])
+  })
+
+  test('stops activity output after fulfilled and rejected operations', async () => {
+    class TrackingOutput extends CommandOutput {
+      stops = 0
+
+      override startActivity(_label: string, _enabled = true): ActivityHandle {
+        return {
+          update() {},
+          stop: async () => {
+            this.stops += 1
+          },
+        }
+      }
+    }
+
+    const output = new TrackingOutput()
+    expect(await output.withActivity('Loading…', async () => 'done')).toBe('done')
+    expect(output.stops).toBe(1)
+
+    await expect(
+      output.withActivity('Loading…', async () => {
+        throw new Error('Request failed')
+      }),
+    ).rejects.toThrow('Request failed')
+    expect(output.stops).toBe(2)
   })
 
   test('parses indented Yargs options into distinct help entries', () => {
