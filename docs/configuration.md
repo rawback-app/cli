@@ -31,6 +31,19 @@ The SFTP endpoint may contain only a hostname and optional port. Keep the
 username and password in their dedicated fields; URL paths, query strings, and
 embedded credentials are rejected.
 
+View the stored configuration in YAML or JSON form:
+
+```bash
+rawback config view
+rawback config view --json
+```
+
+The command reads only this file; it does not merge environment overrides or
+built-in defaults and does not require authentication. YAML comments and unknown
+keys remain visible in human output. Both formats replace `sftp.password` with
+`[REDACTED]`; open the file directly when you need to inspect or change the real
+value.
+
 On Linux and macOS, upload commands reject a config file readable or writable by
 group or other users. Fix its permissions with:
 

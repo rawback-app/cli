@@ -45,6 +45,21 @@ rawback auth status
 
 `--force` is not accepted by `auth status`.
 
+## `rawback config view`
+
+Displays the stored `~/.rawback/config.yml` without requiring authentication:
+
+```bash
+rawback config view [--json]
+```
+
+Human output retains YAML comments and unknown keys. `--json` converts the stored
+mapping to machine-readable JSON and writes no additional prose to stdout. Both
+formats replace `sftp.password` with `[REDACTED]` and do not include environment
+overrides or built-in defaults. A missing or empty optional file is reported as
+an empty configuration; malformed or unreadable files fail with a nonzero exit
+status.
+
 ## `rawback credentials`
 
 Manage upload credentials. `credentials` can be shortened to `cred`, and

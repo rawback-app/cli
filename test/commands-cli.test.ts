@@ -47,6 +47,16 @@ describe('new command hierarchy', () => {
     expect(runCli('web', '--help').stdout).toContain('open your Rawback profile')
   })
 
+  test('documents the config view command and JSON output', () => {
+    const config = runCli('config', '--help')
+    expect(config.exitCode).toBe(0)
+    expect(config.stdout).toContain('view')
+
+    const view = runCli('config', 'view', '--help')
+    expect(view.exitCode).toBe(0)
+    expect(view.stdout).toContain('--json')
+  })
+
   test('documents the dream command hierarchy and view alias', () => {
     const dream = runCli('dream', '--help')
     for (const command of ['list', 'get', 'view', 'retry']) {
