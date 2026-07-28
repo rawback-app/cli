@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.3](https://github.com/rawback-app/cli/compare/v1.0.2...v1.0.3) (2026-07-28)
+
+
+### Features
+
+* add read-only config viewer ([26add9a](https://github.com/rawback-app/cli/commit/26add9a215b9336d45f023ee3c6539a0d67e6c51))
+* add read-only config viewer ([d2da3b8](https://github.com/rawback-app/cli/commit/d2da3b83e00bc61ad0708696019defdb21c631d9))
+
+
+### Bug Fixes
+
+* clear completed activity indicators ([a7cc5a3](https://github.com/rawback-app/cli/commit/a7cc5a312eb6f3c8c8a4f2dd50718a85d4a174dd))
+* clear completed activity indicators ([6573bcc](https://github.com/rawback-app/cli/commit/6573bcc179d4cb8b4331860d6584c4fadbd73556))
+
 ## [1.0.2](https://github.com/rawback-app/cli/compare/v1.0.1...v1.0.2) (2026-07-27)
 
 
