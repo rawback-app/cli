@@ -1415,6 +1415,30 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       },
     )
     .command(
+      'config',
+      'inspect local configuration',
+      (command) =>
+        command
+          .command(
+            'view',
+            'view the local configuration',
+            (view) =>
+              view.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runConfigView } = await import('./config-view.ts')
+              await runCommand(() => runConfigView({ json: args.json }))
+            },
+          )
+          .demandCommand(1, 'Choose a config command: view')
+          .strict(),
+      () => {},
+    )
+    .command(
       'web',
       'open your Rawback profile in a web browser',
       () => {},

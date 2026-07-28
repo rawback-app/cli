@@ -14,6 +14,7 @@ in a browser.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Browse content shared with you and manage your outgoing share links.
 - Manage the SFTP credentials associated with your account.
+- Inspect the shared local configuration without exposing its SFTP password.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
 - Request machine-readable JSON from read and credential commands.
 
@@ -123,6 +124,7 @@ rawback shares list
 rawback uploads
 rawback usage
 rawback pricing
+rawback config view
 rawback web
 ```
 
@@ -133,6 +135,7 @@ rawback photos list --page-size 10 --json
 rawback dream get 42 --json
 rawback shares list --scope with-me --type album --json
 rawback usage --json
+rawback config view --json
 ```
 
 Human-facing output uses a compact terminal UI with responsive columns, status
@@ -166,6 +169,16 @@ On Linux and macOS, protect the file because it contains a password:
 ```bash
 chmod 600 ~/.rawback/config.yml
 ```
+
+Inspect the stored file without exposing `sftp.password`:
+
+```bash
+rawback config view
+rawback config view --json
+```
+
+The viewer does not apply environment overrides or built-in defaults. It prints
+`[REDACTED]` in place of the stored SFTP password.
 
 Preview an upload, then run it:
 
@@ -240,6 +253,7 @@ rawback --help
 rawback photos list --help
 rawback photos upload --help
 rawback dream --help
+rawback config --help
 rawback album --help
 rawback album article --help
 rawback shares list --help
@@ -258,7 +272,8 @@ Rawback stores local state under `~/.rawback/`:
 The CLI creates credential and upload-state files with restrictive permissions
 on Unix. You create `config.yml` yourself, so upload commands require it to have
 mode `0600` on Unix. Never commit files from `~/.rawback/` or paste their secrets
-into issues and logs.
+into issues and logs. `rawback config view` masks `sftp.password` in both terminal
+and JSON output.
 
 ## Development
 

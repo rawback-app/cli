@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { parse } from 'yaml'
+import { Document, parseDocument } from 'yaml'
 import * as z from 'zod'
 
 const nonEmptyStringSchema = z
@@ -67,6 +67,13 @@ const rawbackConfigSchema = z.preprocess(
 export type RawbackConfig = z.infer<typeof rawbackConfigSchema>
 export type SftpConfig = z.infer<typeof sftpConfigSchema>
 
+export interface ConfigView {
+  contents: string
+  exists: boolean
+  path: string
+  value: Record<string, unknown>
+}
+
 export const DEFAULT_CONFIG_PATH = join(homedir(), '.rawback', 'config.yml')
 export const DEFAULT_WEB_HOST = 'https://rawback.app'
 
@@ -84,32 +91,69 @@ function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
 }
 
-export async function readConfig(path = DEFAULT_CONFIG_PATH): Promise<RawbackConfig> {
+interface ConfigDocument {
+  config: RawbackConfig
+  contents: string
+  document: Document
+  exists: boolean
+}
+
+async function readConfigDocument(path: string): Promise<ConfigDocument> {
   let contents: string
+  let exists = true
 
   try {
     contents = await readFile(path, 'utf8')
   } catch (error) {
     if (isFileSystemError(error) && error.code === 'ENOENT') {
-      return {}
+      contents = ''
+      exists = false
+    } else {
+      throw new ConfigError(`Unable to read config at ${path}`, path, { cause: error })
     }
-    throw new ConfigError(`Unable to read config at ${path}`, path, { cause: error })
   }
 
-  let parsed: unknown
+  let document: Document
   try {
-    parsed = parse(contents)
+    document = contents ? parseDocument(contents) : new Document({})
+    if (document.errors.length > 0) throw document.errors[0]
   } catch (error) {
     throw new ConfigError(`Config at ${path} contains invalid YAML`, path, {
       cause: error,
     })
   }
 
-  const result = rawbackConfigSchema.safeParse(parsed)
+  const result = rawbackConfigSchema.safeParse(document.toJS())
   if (!result.success) {
     throw new ConfigError(`Config at ${path} is invalid:\n${z.prettifyError(result.error)}`, path, {
       cause: result.error,
     })
   }
-  return result.data
+  return { config: result.data, contents, document, exists }
+}
+
+export async function readConfig(path = DEFAULT_CONFIG_PATH): Promise<RawbackConfig> {
+  return (await readConfigDocument(path)).config
+}
+
+export async function readConfigView(path = DEFAULT_CONFIG_PATH): Promise<ConfigView> {
+  const loaded = await readConfigDocument(path)
+  if (loaded.config.sftp?.password !== undefined) {
+    loaded.document.setIn(['sftp', 'password'], '[REDACTED]')
+  }
+  const value = loaded.document.toJS()
+  return {
+    contents:
+      loaded.contents.length === 0
+        ? ''
+        : loaded.config.sftp?.password === undefined
+          ? loaded.contents
+          : loaded.document.toString(),
+    exists: loaded.exists,
+    path,
+    value:
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {},
+  }
 }
