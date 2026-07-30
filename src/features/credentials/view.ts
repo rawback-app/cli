@@ -1,4 +1,5 @@
-import { type CreateSftpCredentialMutation, type SftpCredentialsQuery } from '../../gql/graphql.ts'
+import { type CreateSftpCredentialMutation, type SftpCredentialsQuery } from '@rawback/sdk'
+
 import { formatTimestamp, sanitizeCell } from '../../ui/format.ts'
 import { cell, statusCell, type UiDocument } from '../../ui/model.ts'
 

@@ -263,11 +263,11 @@ rawback shares list --help
 
 Rawback stores local state under `~/.rawback/`:
 
-| File                     | Purpose                                             |
-| ------------------------ | --------------------------------------------------- |
-| `credentials.json`       | Access and refresh tokens created by `rawback auth` |
-| `config.yml`             | Optional API/web hosts and SFTP upload settings     |
-| `upload-progress.sqlite` | Resume history and trusted SFTP host keys           |
+| File                | Purpose                                             |
+| ------------------- | --------------------------------------------------- |
+| `credentials.json`  | Access and refresh tokens created by `rawback auth` |
+| `config.yml`        | Optional API/web hosts and SFTP upload settings     |
+| `upload-state.json` | Shared upload queue, history, and trusted host keys |
 
 The CLI creates credential and upload-state files with restrictive permissions
 on Unix. You create `config.yml` yourself, so upload commands require it to have
@@ -301,7 +301,7 @@ bun run format:check
 ```
 
 Install the repository's pre-commit hooks with `bun run hooks:install`. More
-architecture, GraphQL generation, testing, and release notes are in
+architecture, SDK integration, testing, and release notes are in
 [the contributor guide](docs/development.md). Coding agents should also read
 [`AGENTS.md`](AGENTS.md) before making changes.
 

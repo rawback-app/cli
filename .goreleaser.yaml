@@ -5,7 +5,6 @@ project_name: rawback
 
 before:
   hooks:
-    - bun run graphql:generate
     - bun run scripts/build-windows-arm64.ts
 
 builds:
@@ -22,6 +21,8 @@ builds:
     flags:
       - --compile
       - --minify
+      - --external
+      - cpu-features
 
 archives:
   - id: rawback

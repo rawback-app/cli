@@ -3,6 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { AlbumPermission } from '@rawback/sdk'
+
 import {
   createAlbumInput,
   type AlbumCommandDependencies,
@@ -28,7 +30,6 @@ import {
   runArticleView,
 } from '../src/articles.ts'
 import { writeCredentials } from '../src/credentials.ts'
-import { AlbumPermission } from '../src/gql/graphql.ts'
 
 const temporaryDirectories: string[] = []
 

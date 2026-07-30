@@ -1,4 +1,5 @@
-import { type AuthStatusQuery } from '../../gql/graphql.ts'
+import { type AuthStatusQuery } from '@rawback/sdk'
+
 import { type UiDocument } from '../../ui/model.ts'
 
 type AuthUser = AuthStatusQuery['me']

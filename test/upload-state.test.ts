@@ -1,9 +1,10 @@
+import { Database } from 'bun:sqlite'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { UploadState, type UploadStateFile } from '../src/upload-state.ts'
+import { UploadState, migrateLegacyUploadState, type UploadStateFile } from '../src/upload-state.ts'
 
 const temporaryDirectories: string[] = []
 
@@ -47,12 +48,12 @@ describe('upload progress state', () => {
     expect(() => state.trustFingerprint('ftp.rawback.app', 2222, 'SHA256:changed')).toThrow(
       'host key changed',
     )
-    state.close()
+    await state.close()
 
     const readonly = await UploadState.openReadonly(path)
     expect(readonly?.isCompleted(file())).toBe(true)
     expect(readonly?.getFingerprint('ftp.rawback.app', 2222)).toBe('SHA256:first')
-    readonly?.close()
+    await readonly?.close()
   })
 
   test('records throughput history for dry-run estimates', async () => {
@@ -65,6 +66,43 @@ describe('upload progress state', () => {
     const estimate = state.throughput('annatarhe', 'sftp://ftp.rawback.app:2222', 4)
     expect(estimate?.source).toBe('matching concurrency history')
     expect(estimate?.bytesPerSecond).toBeGreaterThan(0)
-    state.close()
+    await state.close()
+  })
+
+  test('imports completed identities and host keys from the legacy SQLite store', async () => {
+    const legacyPath = await statePath()
+    const targetPath = legacyPath + '.json'
+    const database = new Database(legacyPath, { create: true })
+    database.exec(`
+      CREATE TABLE upload_files (
+        account TEXT, endpoint TEXT, canonical_path TEXT, size INTEGER,
+        mtime_ms REAL, status TEXT, error TEXT, updated_at INTEGER
+      );
+      CREATE TABLE known_hosts (host TEXT, port INTEGER, fingerprint TEXT);
+    `)
+    database
+      .query('INSERT INTO upload_files VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        'annatarhe',
+        'sftp://ftp.rawback.app:2222',
+        '/photos/image.jpg',
+        100,
+        1234,
+        'completed',
+        null,
+        Date.now(),
+      )
+    database
+      .query('INSERT INTO known_hosts VALUES (?, ?, ?)')
+      .run('ftp.rawback.app', 2222, 'SHA256:legacy')
+    database.close()
+
+    await migrateLegacyUploadState(legacyPath, targetPath)
+    await migrateLegacyUploadState(legacyPath, targetPath)
+    const migrated = await UploadState.openReadonly(targetPath)
+
+    expect(migrated?.isCompleted(file())).toBe(true)
+    expect(migrated?.getFingerprint('ftp.rawback.app', 2222)).toBe('SHA256:legacy')
+    await migrated?.close()
   })
 })

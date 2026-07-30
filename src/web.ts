@@ -1,6 +1,7 @@
+import { AuthStatusDocument } from '@rawback/sdk'
+
 import { commandOutput, createCommandClient, type ReadCommandDependencies } from './command.ts'
 import { DEFAULT_CONFIG_PATH, DEFAULT_WEB_HOST, readConfig } from './config.ts'
-import { AuthStatusDocument } from './gql/graphql.ts'
 
 export interface WebCommandDependencies extends ReadCommandDependencies {
   open?: (command: string, args: string[]) => Promise<number>

@@ -1,6 +1,12 @@
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 
+import {
+  ExistingUploadImagesDocument,
+  UploadPreflightDocument,
+  type UploadPreflightQuery,
+} from '@rawback/sdk'
+
 import type { RawbackClient } from './client.ts'
 import { createRawbackClient } from './client.ts'
 import { commandOutput, type ReadCommandDependencies } from './command.ts'
@@ -8,11 +14,6 @@ import { DEFAULT_CONFIG_PATH, readConfig, type SftpConfig } from './config.ts'
 import { DEFAULT_CREDENTIALS_PATH } from './credentials.ts'
 import { UploadProgressController } from './features/upload/progress.tsx'
 import { uploadDryRunDocument, uploadSummaryDocument } from './features/upload/view.ts'
-import {
-  ExistingUploadImagesDocument,
-  UploadPreflightDocument,
-  type UploadPreflightQuery,
-} from './gql/graphql.ts'
 import {
   createSftpClient,
   isConnectionFailure,
@@ -400,7 +401,7 @@ export async function runUpload(
       return
     }
 
-    state.acquireLock(preflightResult.account, preflightResult.endpoint)
+    await state.acquireLock(preflightResult.account, preflightResult.endpoint)
     let transport: UploadTransport | null = null
     let interrupted = false
     let signalCount = 0
@@ -491,9 +492,9 @@ export async function runUpload(
     } finally {
       process.removeListener('SIGINT', onInterrupt)
       await transport?.close()
-      state.releaseLock(preflightResult.account, preflightResult.endpoint)
+      await state.releaseLock(preflightResult.account, preflightResult.endpoint)
     }
   } finally {
-    state?.close()
+    await state?.close()
   }
 }

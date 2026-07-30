@@ -1,13 +1,14 @@
-import { type RawbackClient, createRawbackClient } from './client.ts'
-import { commandOutput, type ReadCommandDependencies } from './command.ts'
-import { credentialListDocument, createdCredentialDocument } from './features/credentials/view.ts'
 import {
   CreateSftpCredentialDocument,
   DeleteSftpCredentialDocument,
   SftpCredentialsDocument,
   type CreateSftpCredentialMutation,
   type SftpCredentialsQuery,
-} from './gql/graphql.ts'
+} from '@rawback/sdk'
+
+import { type RawbackClient, createRawbackClient } from './client.ts'
+import { commandOutput, type ReadCommandDependencies } from './command.ts'
+import { credentialListDocument, createdCredentialDocument } from './features/credentials/view.ts'
 
 type SftpCredential = SftpCredentialsQuery['sftpCredentials'][number]
 type CreatedSftpCredential = CreateSftpCredentialMutation['createSFTPCredential']

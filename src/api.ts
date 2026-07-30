@@ -1,5 +1,5 @@
 export {
-  createApolloClient,
+  createGraphqlClient,
   createRawbackClient,
   type RawbackClient,
   type RawbackClientOptions,

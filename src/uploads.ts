@@ -1,3 +1,5 @@
+import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from '@rawback/sdk'
+
 import {
   createCommandClient,
   commandOutput,
@@ -5,7 +7,6 @@ import {
   validatePagination,
 } from './command.ts'
 import { uploadSessionListDocument } from './features/uploads/view.ts'
-import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from './gql/graphql.ts'
 
 const UPLOAD_STATUSES = new Set<string>(Object.values(UploadStatus))
 

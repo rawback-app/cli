@@ -16,6 +16,7 @@ try {
       target: 'bun-windows-arm64',
       outfile: executablePath,
     },
+    external: ['cpu-features'],
     minify: true,
   })
 

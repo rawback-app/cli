@@ -1,15 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { gql } from '@apollo/client'
+import { AuthStatusDocument } from '@rawback/sdk'
 
 import packageJson from '../package.json' with { type: 'json' }
-import { createApolloClient, createRawbackClient } from '../src/client.ts'
-
-const TestDocument = gql`
-  query Test($id: Int!) {
-    test(id: $id)
-  }
-`
+import { createGraphqlClient, createRawbackClient } from '../src/client.ts'
 
 type FetchInput = Parameters<typeof fetch>[0]
 type FetchInit = Parameters<typeof fetch>[1]
@@ -18,22 +12,32 @@ function graphqlFetch(inspect: (input: FetchInput, init: FetchInit) => void): ty
   return (async (input: FetchInput, init: FetchInit) => {
     inspect(input, init)
     return Response.json({
-      data: { test: 'partial' },
+      data: {
+        me: {
+          id: 7,
+          name: 'Raw Back',
+          email: 'user@example.com',
+          slug: 'raw-back',
+          tier: 'free',
+          subscriptionStatus: 'active',
+          accountStatus: 'active',
+        },
+      },
       errors: [
         {
           extensions: { code: 400 },
           message: 'partial failure',
-          path: ['test'],
+          path: ['me'],
         },
       ],
     })
   }) as typeof fetch
 }
 
-describe('Apollo integration', () => {
+describe('SDK GraphQL integration', () => {
   test('posts GraphQL operations with auth and returns partial data', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = []
-    const client = createApolloClient({
+    const client = createGraphqlClient({
       apiHost: 'https://example.com/',
       token: 'access-token',
       fetch: graphqlFetch((input, init) => {
@@ -42,12 +46,11 @@ describe('Apollo integration', () => {
     })
 
     const first = await client.query({
-      query: TestDocument,
-      variables: { id: 7 },
+      query: AuthStatusDocument,
     })
-    await client.query({ query: TestDocument, variables: { id: 7 } })
+    await client.query({ query: AuthStatusDocument })
 
-    expect(first.data).toEqual({ test: 'partial' })
+    expect(first.data?.me?.id).toBe(7)
     expect(first.error?.message).toContain('partial failure')
     expect(requests).toHaveLength(2)
     expect(requests[0]?.url).toBe('https://example.com/api/v2/graphql')
@@ -58,9 +61,9 @@ describe('Apollo integration', () => {
     expect(headers.get('user-agent')).toBe(`rawback-cli@${packageJson.version}`)
     expect(headers.get('x-rawback-client-source')).toBe('cli')
     expect(headers.get('x-rawback-client-version')).toBe(packageJson.version)
-    expect(body.operationName).toBe('Test')
-    expect(body.variables).toEqual({ id: 7 })
-    expect(body.query).toContain('query Test')
+    expect(body.operationName).toBe('AuthStatus')
+    expect(body.variables).toEqual({})
+    expect(body.query).toContain('query AuthStatus')
   })
 
   test('loads credentials for both transports', async () => {
@@ -77,7 +80,7 @@ describe('Apollo integration', () => {
     })
 
     await client.http.requestJson('/api/test')
-    await client.graphql.query({ query: TestDocument, variables: { id: 1 } })
+    await client.graphql.query({ query: AuthStatusDocument })
 
     expect(client.credentials?.refreshToken).toBe('refresh-token')
     expect(new Headers(requests[0]?.headers).get('authorization')).toBe('Bearer stored-token')

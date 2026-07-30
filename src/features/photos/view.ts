@@ -1,4 +1,5 @@
-import { type PhotosQuery } from '../../gql/graphql.ts'
+import { type PhotosQuery } from '@rawback/sdk'
+
 import { formatTimestamp } from '../../ui/format.ts'
 import { cell, type UiDocument } from '../../ui/model.ts'
 

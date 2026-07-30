@@ -1,11 +1,4 @@
-import {
-  createCommandClient,
-  commandOutput,
-  type ReadCommandDependencies,
-  validatePagination,
-} from './command.ts'
-import { dreamListDocument, dreamViewDocument } from './features/dreams/view.ts'
-import { type FragmentType, useFragment } from './gql/fragment-masking.ts'
+import { type FragmentType, useFragment } from '@rawback/sdk'
 import {
   type CliDreamFieldsFragment,
   CliDreamFieldsFragmentDoc,
@@ -16,7 +9,15 @@ import {
   CliDreamSummaryFieldsFragmentDoc,
   CliDreamsDocument,
   CliRetryDreamDocument,
-} from './gql/graphql.ts'
+} from '@rawback/sdk'
+
+import {
+  createCommandClient,
+  commandOutput,
+  type ReadCommandDependencies,
+  validatePagination,
+} from './command.ts'
+import { dreamListDocument, dreamViewDocument } from './features/dreams/view.ts'
 
 export interface DreamPrompts {
   confirm(message: string): Promise<boolean>

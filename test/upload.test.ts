@@ -252,7 +252,7 @@ describe('upload command', () => {
     expect(lines.at(-1)).toContain('Nothing to upload')
   })
 
-  test('dry-run filters remote files, estimates time, and does not create SQLite state', async () => {
+  test('dry-run filters remote files, estimates time, and does not create upload state', async () => {
     const directory = await temporaryDirectory()
     const configPath = await writeConfig(directory)
     const statePath = join(directory, 'missing-progress.sqlite')

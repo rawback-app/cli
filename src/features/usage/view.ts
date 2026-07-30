@@ -1,4 +1,5 @@
-import { type FullUsageQuery } from '../../gql/graphql.ts'
+import { type FullUsageQuery } from '@rawback/sdk'
+
 import { formatBytes, formatTimestamp } from '../../ui/format.ts'
 import { type UiBlock, type UiDocument, type UiTableColumn } from '../../ui/model.ts'
 

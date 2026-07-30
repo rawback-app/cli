@@ -1,14 +1,6 @@
 import { readFile } from 'node:fs/promises'
 
-import { validatePositiveId } from './albums.ts'
-import {
-  createCommandClient,
-  commandOutput,
-  type ReadCommandDependencies,
-  validatePagination,
-} from './command.ts'
-import { articleListDocument, articleViewDocument } from './features/articles/view.ts'
-import { type FragmentType, useFragment } from './gql/fragment-masking.ts'
+import { type FragmentType, useFragment } from '@rawback/sdk'
 import {
   type CliAlbumArticleQuery,
   CliAlbumArticleDocument,
@@ -22,7 +14,16 @@ import {
   CliUnpublishArticleDocument,
   CliUpsertArticleDocument,
   type UpsertArticleInput,
-} from './gql/graphql.ts'
+} from '@rawback/sdk'
+
+import { validatePositiveId } from './albums.ts'
+import {
+  createCommandClient,
+  commandOutput,
+  type ReadCommandDependencies,
+  validatePagination,
+} from './command.ts'
+import { articleListDocument, articleViewDocument } from './features/articles/view.ts'
 
 export interface ArticlePrompts {
   confirm(message: string): Promise<boolean>
