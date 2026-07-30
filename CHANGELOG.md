@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4](https://github.com/rawback-app/cli/compare/v1.0.3...v1.0.4) (2026-07-30)
+
+
+### Code Refactoring
+
+* adopt shared Rawback SDK ([d466f56](https://github.com/rawback-app/cli/commit/d466f56b30425e16719ba07296caf66f2774662f))
+* adopt shared Rawback SDK ([637c52b](https://github.com/rawback-app/cli/commit/637c52bafeaf5182defd1676df27ae0836f6ad99))
+
 ## [1.0.3](https://github.com/rawback-app/cli/compare/v1.0.2...v1.0.3) (2026-07-28)
 
 
