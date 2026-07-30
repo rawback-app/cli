@@ -1,4 +1,3 @@
-import packageJson from "../package.json" with { type: "json" };
 import {
   HttpClient as SdkHttpClient,
   JsonResponseError,
@@ -7,21 +6,23 @@ import {
   resolveApiUrl,
   type ApiEnvelope,
   type JsonRequestOptions,
-} from "@rawback/sdk";
+} from '@rawback/sdk'
 
-export const DEFAULT_API_HOST = "https://api.rawback.app";
-export const CLIENT_SOURCE = "cli";
-export const CLIENT_VERSION = packageJson.version;
-export const USER_AGENT = `rawback-cli@${CLIENT_VERSION}`;
+import packageJson from '../package.json' with { type: 'json' }
+
+export const DEFAULT_API_HOST = 'https://api.rawback.app'
+export const CLIENT_SOURCE = 'cli'
+export const CLIENT_VERSION = packageJson.version
+export const USER_AGENT = `rawback-cli@${CLIENT_VERSION}`
 
 export interface HttpClientOptions {
-  apiHost?: string;
-  token?: string;
-  fetch?: typeof globalThis.fetch;
+  apiHost?: string
+  token?: string
+  fetch?: typeof globalThis.fetch
 }
 
 export class HttpClient extends SdkHttpClient {
-  readonly token: string | undefined;
+  readonly token: string | undefined
 
   constructor(options: HttpClientOptions = {}) {
     super({
@@ -33,8 +34,8 @@ export class HttpClient extends SdkHttpClient {
       ...(options.apiHost ? { apiHost: options.apiHost } : {}),
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.token ? { token: () => options.token } : {}),
-    });
-    this.token = options.token;
+    })
+    this.token = options.token
   }
 }
 
@@ -46,4 +47,4 @@ export {
   resolveApiUrl,
   type ApiEnvelope,
   type JsonRequestOptions,
-};
+}

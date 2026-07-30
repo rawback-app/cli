@@ -6,7 +6,7 @@
       "name": "@rawback/cli",
       "dependencies": {
         "@inquirer/prompts": "^8.5.2",
-        "@rawback/sdk": "0.1.0",
+        "@rawback/sdk": "0.1.1",
         "ink": "^7.1.0",
         "react": "^19.2.0",
         "react-devtools-core": "^7.0.1",
@@ -150,7 +150,7 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.73.0", "", { "os": "win32", "cpu": "x64" }, "sha512-WaNRvh4f6zY9CvUQk2YoA1O90ieWrIklI84+HXFr9Isjz9CSESrdqo/RtIYt4Dll/cAchqGDMehfaZd0vqEFZw=="],
 
-    "@rawback/sdk": ["@rawback/sdk@0.1.0", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-SjGD8UQU6cAQLnpGd7Xgc60Tjrx5bgy/SbhepLLfCUrrIYsaSjgCaoHM/JnJuSOxZgM4jGXEGz0dGYnYX5YggQ=="],
+    "@rawback/sdk": ["@rawback/sdk@0.1.1", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-mYb7qScw/B3HqtNNLC4/LE86VHIauREmdRQfp2rmiyDsYeExOM1/WjyEA/0Ny6fDlLsWO7XnZmKP30AhJtwbFA=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

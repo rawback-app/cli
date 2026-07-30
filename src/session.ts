@@ -2,19 +2,19 @@ import {
   CredentialSession as SdkCredentialSession,
   FileCredentialsStore,
   type Credentials,
-} from "@rawback/sdk";
+} from '@rawback/sdk'
 
-import { CLIENT_SOURCE, CLIENT_VERSION, USER_AGENT } from "./http.ts";
+import { CLIENT_SOURCE, CLIENT_VERSION, USER_AGENT } from './http.ts'
 
 export interface CredentialSessionOptions {
-  apiHost: string;
-  credentials: Credentials;
-  credentialsPath: string;
-  fetch?: typeof globalThis.fetch;
+  apiHost: string
+  credentials: Credentials
+  credentialsPath: string
+  fetch?: typeof globalThis.fetch
 }
 
 export class CredentialSession {
-  private readonly session: SdkCredentialSession;
+  private readonly session: SdkCredentialSession
 
   constructor(options: CredentialSessionOptions) {
     this.session = new SdkCredentialSession({
@@ -27,18 +27,18 @@ export class CredentialSession {
       },
       store: new FileCredentialsStore(options.credentialsPath),
       ...(options.fetch ? { fetch: options.fetch } : {}),
-    });
+    })
   }
 
   get credentials(): Credentials {
-    return this.session.credentials;
+    return this.session.credentials
   }
 
   refresh(): Promise<boolean> {
-    return this.session.refresh();
+    return this.session.refresh()
   }
 
   createFetch(): typeof globalThis.fetch {
-    return this.session.createFetch();
+    return this.session.createFetch()
   }
 }

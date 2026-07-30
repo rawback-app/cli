@@ -20,7 +20,7 @@ webHost: https://rawback.app
 sftp:
   endpoint: sftp://ftp.rawback.app:2222
   username: your-account-slug
-  password: "generated SFTP credential password"
+  password: 'generated SFTP credential password'
 
   # Optional SSH host-key pin. Without it, the first observed key is trusted
   # and recorded in ~/.rawback/upload-state.json.
@@ -30,6 +30,19 @@ sftp:
 The SFTP endpoint may contain only a hostname and optional port. Keep the
 username and password in their dedicated fields; URL paths, query strings, and
 embedded credentials are rejected.
+
+View the stored configuration in YAML or JSON form:
+
+```bash
+rawback config view
+rawback config view --json
+```
+
+The command reads only this file; it does not merge environment overrides or
+built-in defaults and does not require authentication. YAML comments and unknown
+keys remain visible in human output. Both formats replace `sftp.password` with
+`[REDACTED]`; open the file directly when you need to inspect or change the real
+value.
 
 On Linux and macOS, upload commands reject a config file readable or writable by
 group or other users. Fix its permissions with:
@@ -161,6 +174,16 @@ not delete the upload-state file merely to bypass a host-key mismatch; investiga
 the server or network change first.
 
 ## Troubleshooting
+
+### Device authorization is temporarily unavailable
+
+The CLI retries temporary network and server failures while creating the device
+session. If all three attempts fail, retry later and include the displayed trace
+ID when reporting the problem. Server operators should check the API `/ready`
+endpoint and its Redis connection; existing credentials are not replaced by a
+failed authentication attempt. Device-authentication failures include the raw
+server error, which may contain infrastructure-specific Redis, network, or ACL
+details.
 
 ### `Missing sftp... in ~/.rawback/config.yml`
 

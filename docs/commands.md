@@ -32,7 +32,10 @@ approval URL, and attempts to open it in the system browser. The URL remains
 usable if the browser cannot be opened automatically. After you sign in and
 approve the request, the CLI checks the session every 10 seconds and stores the
 issued credentials. Denied, expired, and already-used sessions do not replace
-existing credentials.
+existing credentials. Network and server failures while creating the session
+are retried up to three total attempts. A persistent server failure includes a
+trace ID when the API provides one and the raw server error returned by the
+device-authentication endpoint.
 
 Check the stored session and display account information:
 
@@ -41,6 +44,21 @@ rawback auth status
 ```
 
 `--force` is not accepted by `auth status`.
+
+## `rawback config view`
+
+Displays the stored `~/.rawback/config.yml` without requiring authentication:
+
+```bash
+rawback config view [--json]
+```
+
+Human output retains YAML comments and unknown keys. `--json` converts the stored
+mapping to machine-readable JSON and writes no additional prose to stdout. Both
+formats replace `sftp.password` with `[REDACTED]` and do not include environment
+overrides or built-in defaults. A missing or empty optional file is reported as
+an empty configuration; malformed or unreadable files fail with a nonzero exit
+status.
 
 ## `rawback credentials`
 

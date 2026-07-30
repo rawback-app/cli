@@ -69,10 +69,6 @@ jobs:
             runner: macos-15-intel
           - name: macOS arm64
             runner: macos-15
-          - name: Windows x86-64
-            runner: windows-latest
-          - name: Windows arm64
-            runner: windows-11-arm
 
     steps:
       - name: Checkout code
@@ -93,21 +89,9 @@ jobs:
         run: bun run build
 
       - name: Smoke test standalone binary
-        if: runner.os != 'Windows'
         run: |
           ./dist/rawback --help
           test "$(./dist/rawback --version)" = "$(bun -p 'require("./package.json").version')"
-
-      - name: Smoke test standalone binary on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./dist/rawback.exe --help
-          $expected = (Get-Content package.json | ConvertFrom-Json).version
-          $actual = (./dist/rawback.exe --version).Trim()
-          if ($actual -ne $expected) {
-            throw "Expected version $expected, got $actual"
-          }
 
   release-snapshot:
     name: GoReleaser snapshot

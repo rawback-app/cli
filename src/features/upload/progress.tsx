@@ -1,57 +1,57 @@
-import { Box, Text, render, type Instance } from "ink";
+import { Box, Text, render, type Instance } from 'ink'
 
-import { formatBytes, formatDuration } from "../../ui/format.ts";
-import { type CommandOutput } from "../../ui/output.tsx";
+import { formatBytes, formatDuration } from '../../ui/format.ts'
+import { type CommandOutput } from '../../ui/output.tsx'
 
 export interface ProgressFile {
-  basename: string;
-  canonicalPath: string;
-  size: number;
+  basename: string
+  canonicalPath: string
+  size: number
 }
 
 interface ActiveFile {
-  bytes: number;
-  file: ProgressFile;
+  bytes: number
+  file: ProgressFile
 }
 
 export interface UploadProgressSnapshot {
-  active: ActiveFile[];
-  completedBytes: number;
-  completedFiles: number;
-  elapsedSeconds: number;
-  totalBytes: number;
-  totalFiles: number;
+  active: ActiveFile[]
+  completedBytes: number
+  completedFiles: number
+  elapsedSeconds: number
+  totalBytes: number
+  totalFiles: number
 }
 
 function percent(value: number, total: number): number {
-  if (total === 0) return 100;
-  return Math.max(0, Math.min(100, Math.floor((value / total) * 100)));
+  if (total === 0) return 100
+  return Math.max(0, Math.min(100, Math.floor((value / total) * 100)))
 }
 
 function ProgressBar({ value, width }: { value: number; width: number }) {
-  const filled = Math.round((Math.max(0, Math.min(100, value)) / 100) * width);
+  const filled = Math.round((Math.max(0, Math.min(100, value)) / 100) * width)
   return (
     <Text>
-      <Text color="cyan">{"━".repeat(filled)}</Text>
-      <Text dimColor>{"─".repeat(Math.max(0, width - filled))}</Text>
+      <Text color="cyan">{'━'.repeat(filled)}</Text>
+      <Text dimColor>{'─'.repeat(Math.max(0, width - filled))}</Text>
     </Text>
-  );
+  )
 }
 
 export function UploadProgressView({
   snapshot,
   terminalWidth,
 }: {
-  snapshot: UploadProgressSnapshot;
-  terminalWidth: number;
+  snapshot: UploadProgressSnapshot
+  terminalWidth: number
 }) {
-  const activeBytes = snapshot.active.reduce((total, item) => total + item.bytes, 0);
-  const transferred = Math.min(snapshot.totalBytes, snapshot.completedBytes + activeBytes);
-  const progress = percent(transferred, snapshot.totalBytes);
-  const bytesPerSecond = snapshot.elapsedSeconds > 0 ? transferred / snapshot.elapsedSeconds : 0;
+  const activeBytes = snapshot.active.reduce((total, item) => total + item.bytes, 0)
+  const transferred = Math.min(snapshot.totalBytes, snapshot.completedBytes + activeBytes)
+  const progress = percent(transferred, snapshot.totalBytes)
+  const bytesPerSecond = snapshot.elapsedSeconds > 0 ? transferred / snapshot.elapsedSeconds : 0
   const remainingSeconds =
-    bytesPerSecond > 0 ? (snapshot.totalBytes - transferred) / bytesPerSecond : Number.NaN;
-  const barWidth = Math.max(12, Math.min(42, terminalWidth - 14));
+    bytesPerSecond > 0 ? (snapshot.totalBytes - transferred) / bytesPerSecond : Number.NaN
+  const barWidth = Math.max(12, Math.min(42, terminalWidth - 14))
 
   return (
     <Box flexDirection="column">
@@ -66,8 +66,8 @@ export function UploadProgressView({
       </Box>
       <Text dimColor>
         {formatBytes(transferred)} / {formatBytes(snapshot.totalBytes)}
-        {bytesPerSecond > 0 ? " · " + formatBytes(bytesPerSecond) + "/s" : ""}
-        {Number.isFinite(remainingSeconds) ? " · ETA " + formatDuration(remainingSeconds) : ""}
+        {bytesPerSecond > 0 ? ' · ' + formatBytes(bytesPerSecond) + '/s' : ''}
+        {Number.isFinite(remainingSeconds) ? ' · ETA ' + formatDuration(remainingSeconds) : ''}
       </Text>
       {snapshot.active.slice(0, 4).map(({ bytes, file }) => (
         <Box key={file.canonicalPath}>
@@ -81,17 +81,17 @@ export function UploadProgressView({
         <Text dimColor>+{snapshot.active.length - 4} more active</Text>
       ) : null}
     </Box>
-  );
+  )
 }
 
 export class UploadProgressController {
-  readonly #active = new Map<string, ActiveFile>();
-  readonly #startedAt = Date.now();
+  readonly #active = new Map<string, ActiveFile>()
+  readonly #startedAt = Date.now()
 
-  #completedBytes = 0;
-  #completedFiles = 0;
-  #instance: Instance | undefined;
-  #lastRender = 0;
+  #completedBytes = 0
+  #completedFiles = 0
+  #instance: Instance | undefined
+  #lastRender = 0
 
   constructor(
     readonly totalBytes: number,
@@ -100,11 +100,11 @@ export class UploadProgressController {
   ) {}
 
   start(file: ProgressFile): void {
-    this.#active.set(file.canonicalPath, { bytes: 0, file });
+    this.#active.set(file.canonicalPath, { bytes: 0, file })
     if (this.output.interactive) {
-      this.#render(true);
+      this.#render(true)
     } else {
-      this.output.info("Uploading " + file.basename + " (" + formatBytes(file.size) + ")");
+      this.output.info('Uploading ' + file.basename + ' (' + formatBytes(file.size) + ')')
     }
   }
 
@@ -112,34 +112,34 @@ export class UploadProgressController {
     this.#active.set(file.canonicalPath, {
       bytes: Math.min(file.size, Math.max(0, bytes)),
       file,
-    });
-    this.#render(false);
+    })
+    this.#render(false)
   }
 
   complete(file: ProgressFile): void {
-    this.#active.delete(file.canonicalPath);
-    this.#completedBytes += file.size;
-    this.#completedFiles += 1;
+    this.#active.delete(file.canonicalPath)
+    this.#completedBytes += file.size
+    this.#completedFiles += 1
     if (this.output.interactive) {
-      this.#render(true);
+      this.#render(true)
     } else {
-      this.output.success("Uploaded " + file.basename);
+      this.output.success('Uploaded ' + file.basename)
     }
   }
 
   fail(file: ProgressFile): void {
-    this.#active.delete(file.canonicalPath);
-    this.#render(true);
+    this.#active.delete(file.canonicalPath)
+    this.#render(true)
   }
 
   async finish(): Promise<void> {
-    if (this.#instance === undefined) return;
-    this.#render(true);
-    const instance = this.#instance;
-    this.#instance = undefined;
-    await instance.waitUntilRenderFlush();
-    instance.unmount();
-    await instance.waitUntilExit();
+    if (this.#instance === undefined) return
+    this.#render(true)
+    const instance = this.#instance
+    this.#instance = undefined
+    await instance.waitUntilRenderFlush()
+    instance.unmount()
+    await instance.waitUntilExit()
   }
 
   #snapshot(): UploadProgressSnapshot {
@@ -150,19 +150,19 @@ export class UploadProgressController {
       elapsedSeconds: Math.max(0.001, (Date.now() - this.#startedAt) / 1000),
       totalBytes: this.totalBytes,
       totalFiles: this.totalFiles,
-    };
+    }
   }
 
   #render(force: boolean): void {
-    if (!this.output.interactive) return;
-    const now = Date.now();
-    if (!force && now - this.#lastRender < 100) return;
-    this.#lastRender = now;
+    if (!this.output.interactive) return
+    const now = Date.now()
+    if (!force && now - this.#lastRender < 100) return
+    this.#lastRender = now
     const view = (
       <UploadProgressView snapshot={this.#snapshot()} terminalWidth={this.output.columns} />
-    );
+    )
     if (this.#instance) {
-      this.#instance.rerender(view);
+      this.#instance.rerender(view)
     } else {
       this.#instance = render(view, {
         stdout: process.stdout,
@@ -171,7 +171,7 @@ export class UploadProgressController {
         interactive: true,
         patchConsole: true,
         maxFps: 20,
-      });
+      })
     }
   }
 }

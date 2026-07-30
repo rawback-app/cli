@@ -1,17 +1,18 @@
-import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
-import { pricingDocument } from "./features/pricing/view.ts";
-import { CliPricingDocument, type CliPricingQuery } from "@rawback/sdk";
+import { CliPricingDocument, type CliPricingQuery } from '@rawback/sdk'
 
-export type PricingInterval = "all" | "month" | "year";
+import { commandOutput, createCommandClient, type ReadCommandDependencies } from './command.ts'
+import { pricingDocument } from './features/pricing/view.ts'
+
+export type PricingInterval = 'all' | 'month' | 'year'
 
 export interface PricingOptions {
-  interval?: PricingInterval;
-  json?: boolean;
+  interval?: PricingInterval
+  json?: boolean
 }
 
-export type PricingDependencies = ReadCommandDependencies;
-type PricingTier = CliPricingQuery["pricing"]["tiers"][number];
-type PricingAddOn = CliPricingQuery["pricing"]["addOns"][number];
+export type PricingDependencies = ReadCommandDependencies
+type PricingTier = CliPricingQuery['pricing']['tiers'][number]
+type PricingAddOn = CliPricingQuery['pricing']['addOns'][number]
 
 function serializeTier(tier: PricingTier) {
   return {
@@ -26,7 +27,7 @@ function serializeTier(tier: PricingTier) {
     sharingRestricted: tier.sharingRestricted,
     sharingUnlimited: tier.sharingUnlimited,
     priorityProcessing: tier.priorityProcessing,
-  };
+  }
 }
 
 function serializeAddOn(addOn: PricingAddOn) {
@@ -37,42 +38,42 @@ function serializeAddOn(addOn: PricingAddOn) {
     kind: addOn.kind,
     amount: addOn.amount,
     description: addOn.description,
-  };
+  }
 }
 
 export async function runPricing(
   options: PricingOptions = {},
   dependencies: PricingDependencies = {},
 ): Promise<void> {
-  const interval = options.interval ?? "all";
-  if (!(["all", "month", "year"] as const).includes(interval)) {
-    throw new Error("--interval must be one of: all, month, year");
+  const interval = options.interval ?? 'all'
+  if (!(['all', 'month', 'year'] as const).includes(interval)) {
+    throw new Error('--interval must be one of: all, month, year')
   }
-  const ui = commandOutput(dependencies);
+  const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
-    "Loading pricing…",
+    'Loading pricing…',
     async () => {
-      const client = await createCommandClient(dependencies, false);
-      return client.graphql.query({ query: CliPricingDocument });
+      const client = await createCommandClient(dependencies, false)
+      return client.graphql.query({ query: CliPricingDocument })
     },
     !options.json,
-  );
-  if (result.error) throw result.error;
-  if (!result.data) throw new Error("The pricing response did not include pricing data");
+  )
+  if (result.error) throw result.error
+  if (!result.data) throw new Error('The pricing response did not include pricing data')
 
-  const addOns = result.data.pricing.addOns;
+  const addOns = result.data.pricing.addOns
   const tiers = result.data.pricing.tiers.filter(
-    (tier) => interval === "all" || tier.price === 0 || tier.billingInterval === interval,
-  );
+    (tier) => interval === 'all' || tier.price === 0 || tier.billingInterval === interval,
+  )
   if (options.json) {
     ui.json({
       pricing: {
         tiers: tiers.map(serializeTier),
         addOns: addOns.map(serializeAddOn),
       },
-    });
-    return;
+    })
+    return
   }
 
-  ui.document(pricingDocument(tiers, addOns));
+  ui.document(pricingDocument(tiers, addOns))
 }

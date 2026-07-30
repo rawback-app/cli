@@ -1,12 +1,13 @@
-import { type CliAlbumFieldsFragment, type CliAlbumImageFieldsFragment } from "@rawback/sdk";
-import { formatTimestamp, sanitizeCell } from "../../ui/format.ts";
-import { cell, type UiDocument } from "../../ui/model.ts";
+import { type CliAlbumFieldsFragment, type CliAlbumImageFieldsFragment } from '@rawback/sdk'
+
+import { formatTimestamp, sanitizeCell } from '../../ui/format.ts'
+import { cell, type UiDocument } from '../../ui/model.ts'
 
 interface PageInfo {
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
 }
 
 export function albumListDocument(
@@ -14,19 +15,19 @@ export function albumListDocument(
   pageInfo: PageInfo,
 ): UiDocument {
   return {
-    title: "Albums",
+    title: 'Albums',
     blocks: [
       {
-        type: "table",
-        emptyMessage: "No albums found.",
+        type: 'table',
+        emptyMessage: 'No albums found.',
         columns: [
-          { key: "id", label: "ID", required: true, priority: 1 },
-          { key: "name", label: "Name", required: true, priority: 1, minWidth: 12 },
-          { key: "status", label: "Status", priority: 2 },
-          { key: "permission", label: "Permission", priority: 3 },
-          { key: "images", label: "Images", priority: 2 },
-          { key: "tags", label: "Tags", priority: 5, minWidth: 8 },
-          { key: "updated", label: "Updated", priority: 4, minWidth: 10 },
+          { key: 'id', label: 'ID', required: true, priority: 1 },
+          { key: 'name', label: 'Name', required: true, priority: 1, minWidth: 12 },
+          { key: 'status', label: 'Status', priority: 2 },
+          { key: 'permission', label: 'Permission', priority: 3 },
+          { key: 'images', label: 'Images', priority: 2 },
+          { key: 'tags', label: 'Tags', priority: 5, minWidth: 8 },
+          { key: 'updated', label: 'Updated', priority: 4, minWidth: 10 },
         ],
         rows: albums.map((album) => ({
           id: album.id,
@@ -35,12 +36,12 @@ export function albumListDocument(
           permission: album.permission,
           images: album.imageCount,
           tags:
-            album.tags.map((tag) => sanitizeCell(tag.name)).join(", ") || cell("—", { dim: true }),
+            album.tags.map((tag) => sanitizeCell(tag.name)).join(', ') || cell('—', { dim: true }),
           updated: formatTimestamp(album.updatedAt).slice(0, 10),
         })),
       },
       {
-        type: "pagination",
+        type: 'pagination',
         page: pageInfo.page,
         pageSize: pageInfo.pageSize,
         count: albums.length,
@@ -48,7 +49,7 @@ export function albumListDocument(
         totalPages: pageInfo.totalPages,
       },
     ],
-  };
+  }
 }
 
 export function albumViewDocument(
@@ -57,66 +58,66 @@ export function albumViewDocument(
   pageInfo: PageInfo,
 ): UiDocument {
   const camera = album.camera
-    ? [album.camera.make, album.camera.model].filter(Boolean).join(" ")
-    : "—";
-  const lens = album.lens ? [album.lens.make, album.lens.model].filter(Boolean).join(" ") : "—";
+    ? [album.camera.make, album.camera.model].filter(Boolean).join(' ')
+    : '—'
+  const lens = album.lens ? [album.lens.make, album.lens.model].filter(Boolean).join(' ') : '—'
 
   return {
     title: album.name,
     blocks: [
       {
-        type: "fields",
+        type: 'fields',
         fields: [
-          { label: "ID", value: album.id },
+          { label: 'ID', value: album.id },
           {
-            label: "Description",
-            value: sanitizeCell(album.description) || cell("—", { dim: true }),
+            label: 'Description',
+            value: sanitizeCell(album.description) || cell('—', { dim: true }),
           },
-          { label: "Slug", value: album.slug },
-          { label: "Permission", value: album.permission },
-          { label: "Status", value: album.status },
-          { label: "Images", value: album.imageCount },
+          { label: 'Slug', value: album.slug },
+          { label: 'Permission', value: album.permission },
+          { label: 'Status', value: album.status },
+          { label: 'Images', value: album.imageCount },
           {
-            label: "Tags",
+            label: 'Tags',
             value:
-              album.tags.map((tag) => sanitizeCell(tag.name)).join(", ") ||
-              cell("—", { dim: true }),
+              album.tags.map((tag) => sanitizeCell(tag.name)).join(', ') ||
+              cell('—', { dim: true }),
           },
-          { label: "Date from", value: formatTimestamp(album.dateFrom) },
-          { label: "Date to", value: formatTimestamp(album.dateTo) },
-          { label: "Timezone", value: album.timezone ?? cell("—", { dim: true }) },
-          { label: "Camera", value: camera },
-          { label: "Lens", value: lens },
-          { label: "Updated", value: formatTimestamp(album.updatedAt) },
+          { label: 'Date from', value: formatTimestamp(album.dateFrom) },
+          { label: 'Date to', value: formatTimestamp(album.dateTo) },
+          { label: 'Timezone', value: album.timezone ?? cell('—', { dim: true }) },
+          { label: 'Camera', value: camera },
+          { label: 'Lens', value: lens },
+          { label: 'Updated', value: formatTimestamp(album.updatedAt) },
         ],
       },
-      { type: "text", text: "Photos", bold: true },
+      { type: 'text', text: 'Photos', bold: true },
       {
-        type: "table",
-        emptyMessage: "No photos in this album.",
+        type: 'table',
+        emptyMessage: 'No photos in this album.',
         columns: [
-          { key: "id", label: "ID", required: true, priority: 1 },
-          { key: "name", label: "Name", required: true, priority: 1, minWidth: 12 },
-          { key: "status", label: "Status", priority: 2 },
-          { key: "rating", label: "Rating", priority: 4 },
-          { key: "captured", label: "Captured", priority: 3, minWidth: 10 },
-          { key: "dimensions", label: "Dimensions", priority: 5 },
+          { key: 'id', label: 'ID', required: true, priority: 1 },
+          { key: 'name', label: 'Name', required: true, priority: 1, minWidth: 12 },
+          { key: 'status', label: 'Status', priority: 2 },
+          { key: 'rating', label: 'Rating', priority: 4 },
+          { key: 'captured', label: 'Captured', priority: 3, minWidth: 10 },
+          { key: 'dimensions', label: 'Dimensions', priority: 5 },
         ],
         rows: images.map((image) => ({
           id: image.id,
           name: sanitizeCell(image.displayName || image.filename),
           status: image.status,
           rating:
-            image.rate === null || image.rate === undefined ? cell("—", { dim: true }) : image.rate,
+            image.rate === null || image.rate === undefined ? cell('—', { dim: true }) : image.rate,
           captured: formatTimestamp(image.capturedAt).slice(0, 10),
           dimensions:
             image.width && image.height
-              ? String(image.width) + "×" + String(image.height)
-              : cell("—", { dim: true }),
+              ? String(image.width) + '×' + String(image.height)
+              : cell('—', { dim: true }),
         })),
       },
       {
-        type: "pagination",
+        type: 'pagination',
         page: pageInfo.page,
         pageSize: pageInfo.pageSize,
         count: images.length,
@@ -124,5 +125,5 @@ export function albumViewDocument(
         totalPages: pageInfo.totalPages,
       },
     ],
-  };
+  }
 }

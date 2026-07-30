@@ -1,23 +1,24 @@
+import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from '@rawback/sdk'
+
 import {
   createCommandClient,
   commandOutput,
   type ReadCommandDependencies,
   validatePagination,
-} from "./command.ts";
-import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from "@rawback/sdk";
-import { uploadSessionListDocument } from "./features/uploads/view.ts";
+} from './command.ts'
+import { uploadSessionListDocument } from './features/uploads/view.ts'
 
-const UPLOAD_STATUSES = new Set<string>(Object.values(UploadStatus));
+const UPLOAD_STATUSES = new Set<string>(Object.values(UploadStatus))
 
 export interface UploadSessionListOptions {
-  json?: boolean;
-  page: number;
-  pageSize: number;
-  status?: string;
+  json?: boolean
+  page: number
+  pageSize: number
+  status?: string
 }
 
-export type UploadSessionListDependencies = ReadCommandDependencies;
-type UploadSession = UploadSessionsQuery["uploads"]["edges"][number];
+export type UploadSessionListDependencies = ReadCommandDependencies
+type UploadSession = UploadSessionsQuery['uploads']['edges'][number]
 
 function serializeUpload(upload: UploadSession) {
   return {
@@ -50,37 +51,37 @@ function serializeUpload(upload: UploadSession) {
     credential: upload.credential
       ? { id: upload.credential.id, name: upload.credential.name }
       : null,
-  };
+  }
 }
 
 export async function runUploadSessionList(
   options: UploadSessionListOptions,
   dependencies: UploadSessionListDependencies = {},
 ): Promise<void> {
-  validatePagination(options.page, options.pageSize);
+  validatePagination(options.page, options.pageSize)
   if (options.status !== undefined && !UPLOAD_STATUSES.has(options.status)) {
-    throw new Error(`--status must be one of: ${[...UPLOAD_STATUSES].join(", ")}`);
+    throw new Error(`--status must be one of: ${[...UPLOAD_STATUSES].join(', ')}`)
   }
 
-  const ui = commandOutput(dependencies);
+  const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
-    "Loading upload sessions…",
+    'Loading upload sessions…',
     async () => {
-      const client = await createCommandClient(dependencies);
+      const client = await createCommandClient(dependencies)
       return client.graphql.query({
         query: UploadSessionsDocument,
         variables: {
           pagination: { page: options.page, pageSize: options.pageSize },
           ...(options.status !== undefined ? { status: options.status as UploadStatus } : {}),
         },
-      });
+      })
     },
     !options.json,
-  );
-  if (result.error) throw result.error;
-  if (!result.data) throw new Error("The upload sessions response did not include upload data");
+  )
+  if (result.error) throw result.error
+  if (!result.data) throw new Error('The upload sessions response did not include upload data')
 
-  const { edges, pageInfo } = result.data.uploads;
+  const { edges, pageInfo } = result.data.uploads
   const serializedPageInfo = {
     page: pageInfo.page,
     pageSize: pageInfo.pageSize,
@@ -88,10 +89,10 @@ export async function runUploadSessionList(
     totalPages: pageInfo.totalPages,
     hasNextPage: pageInfo.hasNextPage,
     hasPreviousPage: pageInfo.hasPreviousPage,
-  };
-  if (options.json) {
-    ui.json({ uploads: edges.map(serializeUpload), pageInfo: serializedPageInfo });
-    return;
   }
-  ui.document(uploadSessionListDocument(edges, pageInfo));
+  if (options.json) {
+    ui.json({ uploads: edges.map(serializeUpload), pageInfo: serializedPageInfo })
+    return
+  }
+  ui.document(uploadSessionListDocument(edges, pageInfo))
 }
