@@ -1,6 +1,6 @@
 import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
 import { usageDocument } from "./features/usage/view.ts";
-import { FullUsageDocument, type FullUsageQuery } from "./gql/graphql.ts";
+import { FullUsageDocument, type FullUsageQuery } from "@rawback/sdk";
 
 export interface UsageOptions {
   json?: boolean;

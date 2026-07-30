@@ -6,7 +6,7 @@ import {
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
-import { type FragmentType, useFragment } from "./gql/fragment-masking.ts";
+import { type FragmentType, useFragment } from "@rawback/sdk";
 import { articleListDocument, articleViewDocument } from "./features/articles/view.ts";
 import {
   type CliAlbumArticleQuery,
@@ -21,7 +21,7 @@ import {
   CliUnpublishArticleDocument,
   CliUpsertArticleDocument,
   type UpsertArticleInput,
-} from "./gql/graphql.ts";
+} from "@rawback/sdk";
 import { validatePositiveId } from "./albums.ts";
 
 export interface ArticlePrompts {

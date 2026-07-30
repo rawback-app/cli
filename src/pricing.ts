@@ -1,6 +1,6 @@
 import { commandOutput, createCommandClient, type ReadCommandDependencies } from "./command.ts";
 import { pricingDocument } from "./features/pricing/view.ts";
-import { CliPricingDocument, type CliPricingQuery } from "./gql/graphql.ts";
+import { CliPricingDocument, type CliPricingQuery } from "@rawback/sdk";
 
 export type PricingInterval = "all" | "month" | "year";
 

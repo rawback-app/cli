@@ -4,7 +4,7 @@ import {
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
-import { type ImageFilter, ImageStatus, PhotosDocument, type PhotosQuery } from "./gql/graphql.ts";
+import { type ImageFilter, ImageStatus, PhotosDocument, type PhotosQuery } from "@rawback/sdk";
 import { photoListDocument } from "./features/photos/view.ts";
 
 const IMAGE_STATUSES = new Set<string>(Object.values(ImageStatus));

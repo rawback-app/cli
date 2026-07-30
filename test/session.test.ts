@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { createRawbackClient } from "../src/client.ts";
 import { readCredentials } from "../src/credentials.ts";
-import { AuthStatusDocument } from "../src/gql/graphql.ts";
+import { AuthStatusDocument } from "@rawback/sdk";
 import { HttpError } from "../src/http.ts";
 import { CredentialSession } from "../src/session.ts";
 

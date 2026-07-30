@@ -2,7 +2,7 @@ import {
   type CliDreamFieldsFragment,
   type CliDreamImageFieldsFragment,
   type CliDreamSummaryFieldsFragment,
-} from "../../gql/graphql.ts";
+} from "@rawback/sdk";
 import { formatTimestamp, sanitizeCell } from "../../ui/format.ts";
 import { cell, type UiCell, type UiDocument } from "../../ui/model.ts";
 

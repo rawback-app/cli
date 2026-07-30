@@ -23,7 +23,7 @@ sftp:
   password: "generated SFTP credential password"
 
   # Optional SSH host-key pin. Without it, the first observed key is trusted
-  # and recorded in ~/.rawback/upload-progress.sqlite.
+  # and recorded in ~/.rawback/upload-state.json.
   # hostFingerprint: SHA256:base64-fingerprint
 ```
 
@@ -98,7 +98,7 @@ rawback photos upload --path /path/to/photos --dry-run
 
 The dry run authenticates, validates configuration and account quota, scans the
 input, and checks remote filenames. It does not open an SFTP connection or
-modify upload-progress state. Its time estimate uses matching local upload
+modify upload state. Its time estimate uses matching local upload
 history when available and otherwise uses a clearly labeled 10 Mbps fallback.
 
 Start the upload after reviewing the totals:
@@ -134,7 +134,9 @@ links and unrelated file types, but fails if it finds no supported files.
 
 ## Resume state and interruption
 
-Completed uploads are recorded in `~/.rawback/upload-progress.sqlite`. A later
+Completed uploads are recorded in the portable `~/.rawback/upload-state.json`
+shared with Rawback Desktop. On first use, the CLI imports its legacy
+`upload-progress.sqlite` records and retains that database for rollback. A later
 run skips a completed file only when its canonical path, size, and modification
 time still match. Incomplete files restart from the beginning because the SFTP
 transport does not append partial content.
@@ -150,12 +152,12 @@ failures are reported in the final summary.
 ## SFTP host keys
 
 By default, the CLI uses trust on first use: it saves the first observed SFTP host
-key in the upload-state database and rejects a different key on later
+key in the shared upload-state file and rejects a different key on later
 connections. For managed environments, set `sftp.hostFingerprint` to the
 expected SHA-256 fingerprint instead.
 
 Verify the fingerprint through a trusted Rawback channel before pinning it. Do
-not delete the upload database merely to bypass a host-key mismatch; investigate
+not delete the upload-state file merely to bypass a host-key mismatch; investigate
 the server or network change first.
 
 ## Troubleshooting

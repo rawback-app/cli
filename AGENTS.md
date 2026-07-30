@@ -8,7 +8,8 @@ context and checks needed to make safe, reviewable changes.
 - Runtime and package manager: Bun 1.3.14.
 - Language: strict TypeScript using ESM and explicit `.ts` imports.
 - CLI parser: Yargs; executable entry point: `src/index.ts`.
-- API transports: JSON REST and Apollo GraphQL.
+- Shared application kernel: `@rawback/sdk` (Node-compatible ESM).
+- API transports: SDK-backed JSON REST and typed GraphQL.
 - Tests: Bun test runner under `test/`.
 - Formatting and linting: `oxfmt` and `oxlint`.
 - Release flow: Conventional Commits, Release Please, and GoReleaser.
@@ -25,11 +26,8 @@ context and checks needed to make safe, reviewable changes.
 
 - Define the command tree, options, validation, and dispatch in `src/cli.ts`.
 - Put command behavior and output formatting in the relevant `src/*.ts` module.
-- Author GraphQL operations in `src/schema/*.gql`.
-- Never edit or commit `src/gql/`; it is generated and intentionally ignored.
-- Use the committed `graphql.schema.json` for normal client generation. Refresh
-  it with `bun run g` only when `../server` is available and the schema change is
-  intentional.
+- Author shared GraphQL operations and transport behavior in `../sdk`; this
+  repository should keep only CLI presentation and platform adapters.
 - Keep secrets in `~/.rawback/`, never in repository fixtures or documentation.
 
 ## Implementation expectations
@@ -62,8 +60,8 @@ bun test test/cli.test.ts
 bun run check
 ```
 
-`bun run check` is the required final validation. It covers GraphQL generation,
-typechecking, tests, lint, formatting, and the standalone build. If a check
+`bun run check` is the required final validation. It covers typechecking, tests,
+lint, formatting, and the standalone build. If a check
 cannot run, report exactly which command was skipped and why.
 
 ## Documentation changes

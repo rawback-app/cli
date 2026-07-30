@@ -1,4 +1,4 @@
-import { type CliPricingQuery } from "../../gql/graphql.ts";
+import { type CliPricingQuery } from "@rawback/sdk";
 import { cell, type UiDocument } from "../../ui/model.ts";
 
 type PricingTier = CliPricingQuery["pricing"]["tiers"][number];

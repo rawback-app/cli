@@ -7,7 +7,7 @@ import {
   SftpCredentialsDocument,
   type CreateSftpCredentialMutation,
   type SftpCredentialsQuery,
-} from "./gql/graphql.ts";
+} from "@rawback/sdk";
 
 type SftpCredential = SftpCredentialsQuery["sftpCredentials"][number];
 type CreatedSftpCredential = CreateSftpCredentialMutation["createSFTPCredential"];

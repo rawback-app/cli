@@ -13,7 +13,7 @@ import {
   ExistingUploadImagesDocument,
   UploadPreflightDocument,
   type UploadPreflightQuery,
-} from "./gql/graphql.ts";
+} from "@rawback/sdk";
 import {
   createSftpClient,
   isConnectionFailure,
@@ -401,7 +401,7 @@ export async function runUpload(
       return;
     }
 
-    state.acquireLock(preflightResult.account, preflightResult.endpoint);
+    await state.acquireLock(preflightResult.account, preflightResult.endpoint);
     let transport: UploadTransport | null = null;
     let interrupted = false;
     let signalCount = 0;
@@ -492,9 +492,9 @@ export async function runUpload(
     } finally {
       process.removeListener("SIGINT", onInterrupt);
       await transport?.close();
-      state.releaseLock(preflightResult.account, preflightResult.endpoint);
+      await state.releaseLock(preflightResult.account, preflightResult.endpoint);
     }
   } finally {
-    state?.close();
+    await state?.close();
   }
 }

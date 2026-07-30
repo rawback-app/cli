@@ -1,7 +1,17 @@
 import { Database } from "bun:sqlite";
-import { chmod, mkdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, join } from "node:path";
+
+import {
+  DEFAULT_UPLOAD_STATE_PATH,
+  type PortableUploadState,
+  type StoredUploadTask,
+  UploadStateStore,
+} from "@rawback/sdk";
+
+export { DEFAULT_UPLOAD_STATE_PATH };
+export const LEGACY_UPLOAD_STATE_PATH = join(homedir(), ".rawback", "upload-progress.sqlite");
 
 export type UploadFileStatus = "pending" | "in_progress" | "completed" | "failed";
 
@@ -18,12 +28,26 @@ interface ThroughputRow {
   durationMs: number;
 }
 
+interface CliRun {
+  id: number;
+  account: string;
+  endpoint: string;
+  concurrency: number;
+  startedAt: number;
+  finishedAt?: number;
+  bytes: number;
+  status: "running" | "completed" | "partial" | "cancelled";
+}
+
+interface CliMetadata {
+  nextRunId: number;
+  runs: CliRun[];
+}
+
 export interface ThroughputEstimate {
   bytesPerSecond: number;
   source: "matching concurrency history" | "endpoint history";
 }
-
-export const DEFAULT_UPLOAD_STATE_PATH = join(homedir(), ".rawback", "upload-progress.sqlite");
 
 export class UploadStateError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -32,281 +56,350 @@ export class UploadStateError extends Error {
   }
 }
 
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+function terminalStatus(status: StoredUploadTask["status"]): boolean {
+  return ["success", "failed", "cancelled", "skipped"].includes(status);
+}
+
+function taskStatus(status: UploadFileStatus): StoredUploadTask["status"] {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "failed";
+    case "in_progress":
+      return "uploading";
+    case "pending":
+      return "queued";
   }
 }
 
+function metadata(state: PortableUploadState): CliMetadata {
+  const value = state.metadata?.cli;
+  if (typeof value !== "object" || value === null) return { nextRunId: 1, runs: [] };
+  const candidate = value as Partial<CliMetadata>;
+  return {
+    nextRunId:
+      typeof candidate.nextRunId === "number" && candidate.nextRunId > 0 ? candidate.nextRunId : 1,
+    runs: Array.isArray(candidate.runs) ? candidate.runs : [],
+  };
+}
+
+function withMetadata(state: PortableUploadState, cli: CliMetadata): void {
+  state.metadata = { ...state.metadata, cli };
+}
+
+function sameFile(task: StoredUploadTask, file: UploadStateFile): boolean {
+  return (
+    task.accountId === file.account &&
+    task.endpoint === file.endpoint &&
+    task.canonicalPath === file.path
+  );
+}
+
 export class UploadState {
+  private pendingWrite: Promise<void> = Promise.resolve();
+  private releaseLease: (() => Promise<void>) | undefined;
+
   private constructor(
-    private readonly database: Database,
+    private readonly store: UploadStateStore,
+    private state: PortableUploadState,
     readonly path: string,
     readonly readonly: boolean,
   ) {}
 
   static async open(path = DEFAULT_UPLOAD_STATE_PATH): Promise<UploadState> {
-    await mkdir(dirname(path), { mode: 0o700, recursive: true });
-    if (process.platform !== "win32") await chmod(dirname(path), 0o700);
-
-    const database = new Database(path, { create: true, strict: true });
-    database.exec(
-      "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;",
-    );
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS upload_files (
-        account TEXT NOT NULL,
-        endpoint TEXT NOT NULL,
-        canonical_path TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        mtime_ms REAL NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'in_progress', 'completed', 'failed')),
-        transferred_bytes INTEGER NOT NULL DEFAULT 0,
-        error TEXT,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (account, endpoint, canonical_path)
-      );
-      CREATE TABLE IF NOT EXISTS upload_runs (
-        id INTEGER PRIMARY KEY,
-        account TEXT NOT NULL,
-        endpoint TEXT NOT NULL,
-        concurrency INTEGER NOT NULL,
-        started_at INTEGER NOT NULL,
-        finished_at INTEGER,
-        bytes INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS upload_locks (
-        account TEXT NOT NULL,
-        endpoint TEXT NOT NULL,
-        pid INTEGER NOT NULL,
-        started_at INTEGER NOT NULL,
-        PRIMARY KEY (account, endpoint)
-      );
-      CREATE TABLE IF NOT EXISTS known_hosts (
-        host TEXT NOT NULL,
-        port INTEGER NOT NULL,
-        fingerprint TEXT NOT NULL,
-        first_seen_at INTEGER NOT NULL,
-        PRIMARY KEY (host, port)
-      );
-    `);
-    if (process.platform !== "win32") await chmod(path, 0o600);
-    return new UploadState(database, path, false);
+    const store = new UploadStateStore(path);
+    if (path === DEFAULT_UPLOAD_STATE_PATH) await migrateLegacySqlite(store);
+    return new UploadState(store, await store.read(), path, false);
   }
 
   static async openReadonly(path = DEFAULT_UPLOAD_STATE_PATH): Promise<UploadState | null> {
+    if (path === DEFAULT_UPLOAD_STATE_PATH) await migrateLegacySqlite(new UploadStateStore(path));
     try {
       await stat(path);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
-    try {
-      return new UploadState(new Database(path, { readonly: true, strict: true }), path, true);
-    } catch (error) {
-      throw new UploadStateError(`Unable to read upload progress at ${path}`, { cause: error });
-    }
+    const store = new UploadStateStore(path);
+    return new UploadState(store, await store.read(), path, true);
   }
 
-  close(): void {
-    this.database.close();
+  async close(): Promise<void> {
+    await this.pendingWrite;
+    if (this.releaseLease) {
+      await this.releaseLease();
+      this.releaseLease = undefined;
+    }
   }
 
   private assertWritable(): void {
-    if (this.readonly) throw new UploadStateError("Upload progress database is read-only");
+    if (this.readonly) throw new UploadStateError("Upload progress is read-only");
   }
 
   isCompleted(file: UploadStateFile): boolean {
-    try {
-      return Boolean(
-        this.database
-          .query(
-            `SELECT 1 FROM upload_files
-             WHERE account = ? AND endpoint = ? AND canonical_path = ?
-               AND size = ? AND mtime_ms = ? AND status = 'completed'`,
-          )
-          .get(file.account, file.endpoint, file.path, file.size, file.mtimeMs),
-      );
-    } catch (error) {
-      if (this.readonly && String(error).includes("no such table")) return false;
-      throw error;
-    }
+    return this.state.tasks.some(
+      (task) =>
+        sameFile(task, file) &&
+        task.size === file.size &&
+        task.mtimeMs === file.mtimeMs &&
+        task.status === "success",
+    );
   }
 
   prepareFile(file: UploadStateFile): void {
     this.assertWritable();
-    this.database
-      .query(
-        `INSERT INTO upload_files
-           (account, endpoint, canonical_path, size, mtime_ms, status, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?)
-         ON CONFLICT(account, endpoint, canonical_path) DO UPDATE SET
-           status = CASE
-             WHEN size = excluded.size AND mtime_ms = excluded.mtime_ms
-               AND status = 'completed' THEN 'completed'
-             ELSE 'pending'
-           END,
-           size = excluded.size,
-           mtime_ms = excluded.mtime_ms,
-           transferred_bytes = CASE
-             WHEN size = excluded.size AND mtime_ms = excluded.mtime_ms
-               AND status = 'completed' THEN transferred_bytes
-             ELSE 0
-           END,
-           error = NULL,
-           updated_at = excluded.updated_at`,
-      )
-      .run(file.account, file.endpoint, file.path, file.size, file.mtimeMs, Date.now());
+    const existing = this.state.tasks.find((task) => sameFile(task, file));
+    const preserve =
+      existing?.status === "success" &&
+      existing.size === file.size &&
+      existing.mtimeMs === file.mtimeMs;
+    if (existing) {
+      existing.size = file.size;
+      existing.mtimeMs = file.mtimeMs;
+      existing.status = preserve ? "success" : "queued";
+      existing.progress = preserve ? 100 : 0;
+      existing.transferredBytes = preserve ? file.size : 0;
+      delete existing.error;
+      if (!preserve) delete existing.finishedAt;
+    } else {
+      this.state.tasks.push({
+        id: crypto.randomUUID(),
+        accountId: file.account,
+        batchId: `cli:${file.account}:${file.endpoint}`,
+        canonicalPath: file.path,
+        endpoint: file.endpoint,
+        path: file.path,
+        mtimeMs: file.mtimeMs,
+        name: basename(file.path),
+        size: file.size,
+        status: "queued",
+        progress: 0,
+        transferredBytes: 0,
+        addedAt: new Date().toISOString(),
+      });
+    }
+    this.persist();
   }
 
   setFileStatus(file: UploadStateFile, status: UploadFileStatus, error?: string): void {
     this.assertWritable();
-    this.database
-      .query(
-        `UPDATE upload_files SET status = ?, transferred_bytes = ?, error = ?, updated_at = ?
-         WHERE account = ? AND endpoint = ? AND canonical_path = ?`,
-      )
-      .run(
-        status,
-        status === "completed" ? file.size : 0,
-        error ?? null,
-        Date.now(),
-        file.account,
-        file.endpoint,
-        file.path,
-      );
+    const task = this.state.tasks.find((candidate) => sameFile(candidate, file));
+    if (!task) return;
+    task.status = taskStatus(status);
+    task.progress = status === "completed" ? 100 : 0;
+    task.transferredBytes = status === "completed" ? file.size : 0;
+    if (error) task.error = error;
+    else delete task.error;
+    if (terminalStatus(task.status)) task.finishedAt = new Date().toISOString();
+    else delete task.finishedAt;
+    this.persist();
   }
 
   resetInterrupted(account: string, endpoint: string): void {
     this.assertWritable();
-    this.database
-      .query(
-        `UPDATE upload_files SET status = 'pending', transferred_bytes = 0, error = NULL,
-           updated_at = ?
-         WHERE account = ? AND endpoint = ? AND status IN ('in_progress', 'failed')`,
-      )
-      .run(Date.now(), account, endpoint);
-  }
-
-  acquireLock(account: string, endpoint: string): void {
-    this.assertWritable();
-    const transaction = this.database.transaction(() => {
-      const lock = this.database
-        .query("SELECT pid FROM upload_locks WHERE account = ? AND endpoint = ?")
-        .get(account, endpoint) as { pid: number } | null;
-      if (lock && lock.pid !== process.pid && processIsAlive(lock.pid)) {
-        throw new UploadStateError(
-          `Another upload is already running for ${account} on ${endpoint} (PID ${lock.pid})`,
-        );
+    for (const task of this.state.tasks) {
+      if (
+        task.accountId === account &&
+        task.endpoint === endpoint &&
+        ["uploading", "failed", "interrupted"].includes(task.status)
+      ) {
+        task.status = "queued";
+        task.progress = 0;
+        task.transferredBytes = 0;
+        delete task.error;
+        delete task.finishedAt;
       }
-      this.database
-        .query("DELETE FROM upload_locks WHERE account = ? AND endpoint = ?")
-        .run(account, endpoint);
-      this.database
-        .query("INSERT INTO upload_locks (account, endpoint, pid, started_at) VALUES (?, ?, ?, ?)")
-        .run(account, endpoint, process.pid, Date.now());
-    });
-    transaction();
+    }
+    this.persist();
   }
 
-  releaseLock(account: string, endpoint: string): void {
-    if (this.readonly) return;
-    this.database
-      .query("DELETE FROM upload_locks WHERE account = ? AND endpoint = ? AND pid = ?")
-      .run(account, endpoint, process.pid);
+  async acquireLock(account: string, endpoint: string): Promise<void> {
+    this.assertWritable();
+    if (this.releaseLease) return;
+    try {
+      this.releaseLease = await this.store.acquireLease(`upload:${account}:${endpoint}`);
+    } catch (error) {
+      throw new UploadStateError(
+        `Another upload is already running for ${account} on ${endpoint}`,
+        {
+          cause: error,
+        },
+      );
+    }
+  }
+
+  async releaseLock(_account: string, _endpoint: string): Promise<void> {
+    if (!this.releaseLease) return;
+    await this.releaseLease();
+    this.releaseLease = undefined;
   }
 
   beginRun(account: string, endpoint: string, concurrency: number): number {
     this.assertWritable();
-    const result = this.database
-      .query(
-        `INSERT INTO upload_runs (account, endpoint, concurrency, started_at, status)
-         VALUES (?, ?, ?, ?, 'running')`,
-      )
-      .run(account, endpoint, concurrency, Date.now());
-    return Number(result.lastInsertRowid);
+    const cli = metadata(this.state);
+    const id = cli.nextRunId++;
+    cli.runs.push({
+      id,
+      account,
+      endpoint,
+      concurrency,
+      startedAt: Date.now(),
+      bytes: 0,
+      status: "running",
+    });
+    withMetadata(this.state, cli);
+    this.persist();
+    return id;
   }
 
   finishRun(runId: number, bytes: number, status: "completed" | "partial" | "cancelled"): void {
     this.assertWritable();
-    this.database
-      .query("UPDATE upload_runs SET finished_at = ?, bytes = ?, status = ? WHERE id = ?")
-      .run(Date.now(), bytes, status, runId);
+    const cli = metadata(this.state);
+    const run = cli.runs.find(({ id }) => id === runId);
+    if (!run) return;
+    run.finishedAt = Date.now();
+    run.bytes = bytes;
+    run.status = status;
+    withMetadata(this.state, cli);
+    this.persist();
   }
 
   throughput(account: string, endpoint: string, concurrency: number): ThroughputEstimate | null {
-    const select = (matchConcurrency: boolean): ThroughputRow | null => {
-      try {
-        return this.database
-          .query(
-            `SELECT COALESCE(SUM(bytes), 0) AS bytes,
-                    COALESCE(SUM(finished_at - started_at), 0) AS durationMs
-             FROM upload_runs
-             WHERE account = ? AND endpoint = ? AND status IN ('completed', 'partial')
-               AND bytes > 0 AND finished_at > started_at
-               ${matchConcurrency ? "AND concurrency = ?" : ""}`,
-          )
-          .get(
-            ...(matchConcurrency ? [account, endpoint, concurrency] : [account, endpoint]),
-          ) as ThroughputRow | null;
-      } catch (error) {
-        if (this.readonly && String(error).includes("no such table")) return null;
-        throw error;
-      }
+    const runs = metadata(this.state).runs.filter(
+      (run) =>
+        run.account === account &&
+        run.endpoint === endpoint &&
+        ["completed", "partial"].includes(run.status) &&
+        run.bytes > 0 &&
+        run.finishedAt !== undefined &&
+        run.finishedAt > run.startedAt,
+    );
+    const estimate = (rows: CliRun[], source: ThroughputEstimate["source"]) => {
+      const aggregate = rows.reduce<ThroughputRow>(
+        (total, run) => ({
+          bytes: total.bytes + run.bytes,
+          durationMs: total.durationMs + (run.finishedAt! - run.startedAt),
+        }),
+        { bytes: 0, durationMs: 0 },
+      );
+      return aggregate.bytes > 0 && aggregate.durationMs > 0
+        ? { bytesPerSecond: (aggregate.bytes * 1_000) / aggregate.durationMs, source }
+        : null;
     };
-
-    const exact = select(true);
-    if (exact && exact.bytes > 0 && exact.durationMs > 0) {
-      return {
-        bytesPerSecond: (exact.bytes * 1000) / exact.durationMs,
-        source: "matching concurrency history",
-      };
-    }
-    const endpointHistory = select(false);
-    if (endpointHistory && endpointHistory.bytes > 0 && endpointHistory.durationMs > 0) {
-      return {
-        bytesPerSecond: (endpointHistory.bytes * 1000) / endpointHistory.durationMs,
-        source: "endpoint history",
-      };
-    }
-    return null;
+    return (
+      estimate(
+        runs.filter((run) => run.concurrency === concurrency),
+        "matching concurrency history",
+      ) ?? estimate(runs, "endpoint history")
+    );
   }
 
   getFingerprint(host: string, port: number): string | null {
-    try {
-      const row = this.database
-        .query("SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?")
-        .get(host, port) as { fingerprint: string } | null;
-      return row?.fingerprint ?? null;
-    } catch (error) {
-      if (this.readonly && String(error).includes("no such table")) return null;
-      throw error;
-    }
+    return this.state.knownHosts[`${host}:${port}`] ?? null;
   }
 
   trustFingerprint(host: string, port: number, fingerprint: string): void {
     this.assertWritable();
-    const transaction = this.database.transaction(() => {
-      const existing = this.database
-        .query("SELECT fingerprint FROM known_hosts WHERE host = ? AND port = ?")
-        .get(host, port) as { fingerprint: string } | null;
-      if (existing && existing.fingerprint !== fingerprint) {
-        throw new UploadStateError(
-          `SFTP host key changed for ${host}:${port}: expected ${existing.fingerprint}, received ${fingerprint}`,
-        );
-      }
-      if (!existing) {
-        this.database
-          .query(
-            "INSERT INTO known_hosts (host, port, fingerprint, first_seen_at) VALUES (?, ?, ?, ?)",
-          )
-          .run(host, port, fingerprint, Date.now());
-      }
+    const key = `${host}:${port}`;
+    const existing = this.state.knownHosts[key];
+    if (existing && existing !== fingerprint) {
+      throw new UploadStateError(
+        `SFTP host key changed for ${host}:${port}: expected ${existing}, received ${fingerprint}`,
+      );
+    }
+    if (!existing) {
+      this.state.knownHosts[key] = fingerprint;
+      this.persist();
+    }
+  }
+
+  private persist(): void {
+    const snapshot = structuredClone(this.state);
+    this.pendingWrite = this.pendingWrite.then(() => this.store.write(snapshot));
+  }
+}
+
+export async function migrateLegacyUploadState(
+  legacyPath: string,
+  targetPath: string,
+): Promise<void> {
+  await migrateLegacySqlite(new UploadStateStore(targetPath), legacyPath);
+}
+
+async function migrateLegacySqlite(
+  store: UploadStateStore,
+  legacyPath = LEGACY_UPLOAD_STATE_PATH,
+): Promise<void> {
+  const current = await store.read();
+  if (current.migratedFrom?.includes("rawback-cli-sqlite-v1")) return;
+  try {
+    await stat(legacyPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+
+  let database: Database | undefined;
+  try {
+    database = new Database(legacyPath, { readonly: true, strict: true });
+    const rows = database
+      .query(
+        "SELECT account, endpoint, canonical_path, size, mtime_ms, status, error, updated_at FROM upload_files",
+      )
+      .all() as Array<{
+      account: string;
+      endpoint: string;
+      canonical_path: string;
+      size: number;
+      mtime_ms: number;
+      status: UploadFileStatus;
+      error: string | null;
+      updated_at: number;
+    }>;
+    const tasks = rows.map((row): StoredUploadTask => {
+      const status =
+        row.status === "completed" ? "success" : row.status === "failed" ? "failed" : "interrupted";
+      const at = new Date(row.updated_at).toISOString();
+      return {
+        id: crypto.randomUUID(),
+        accountId: row.account,
+        batchId: `cli:${row.account}:${row.endpoint}`,
+        canonicalPath: row.canonical_path,
+        endpoint: row.endpoint,
+        path: row.canonical_path,
+        mtimeMs: row.mtime_ms,
+        name: basename(row.canonical_path),
+        size: row.size,
+        status,
+        progress: status === "success" ? 100 : 0,
+        transferredBytes: status === "success" ? row.size : 0,
+        addedAt: at,
+        ...(row.error ? { error: row.error } : {}),
+        ...(terminalStatus(status) ? { finishedAt: at } : {}),
+      };
     });
-    transaction();
+    let knownHosts: Record<string, string> = {};
+    try {
+      const hostRows = database
+        .query("SELECT host, port, fingerprint FROM known_hosts")
+        .all() as Array<{
+        host: string;
+        port: number;
+        fingerprint: string;
+      }>;
+      knownHosts = Object.fromEntries(
+        hostRows.map(({ host, port, fingerprint }) => [`${host}:${port}`, fingerprint]),
+      );
+    } catch {
+      // Older databases may not contain host-key state.
+    }
+    await store.importLegacy("rawback-cli-sqlite-v1", { tasks, knownHosts });
+  } catch (error) {
+    throw new UploadStateError(`Unable to migrate upload progress from ${legacyPath}`, {
+      cause: error,
+    });
+  } finally {
+    database?.close();
   }
 }

@@ -1,4 +1,4 @@
-import { type CliArticleFieldsFragment } from "../../gql/graphql.ts";
+import { type CliArticleFieldsFragment } from "@rawback/sdk";
 import { formatTimestamp, sanitizeCell } from "../../ui/format.ts";
 import { cell, type UiDocument } from "../../ui/model.ts";
 

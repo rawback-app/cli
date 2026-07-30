@@ -31,14 +31,12 @@ The extra `--` separates arguments for the package script from CLI arguments.
 | `src/features/*`      | Feature-specific presenters and UI controllers       |
 | `src/ui/*`            | Shared Ink components, output ports, and formatters  |
 | `src/api.ts`          | Public re-exports for API and credential clients     |
-| `src/client.ts`       | Shared REST/GraphQL client factory                   |
-| `src/session.ts`      | Token refresh and one-time request retry             |
-| `src/config.ts`       | YAML parsing and validation                          |
+| `src/client.ts`       | CLI identity adapter for `@rawback/sdk`              |
+| `src/session.ts`      | SDK token-session compatibility adapter              |
+| `src/config.ts`       | SDK config re-exports                                |
 | `src/upload.ts`       | Upload preflight, scanning, retry, and orchestration |
-| `src/sftp-client.ts`  | SFTP transport and host-key verification             |
-| `src/upload-state.ts` | SQLite resume history, locks, and trusted keys       |
-| `src/schema/*.gql`    | Authored GraphQL operations                          |
-| `src/gql/`            | Generated, ignored GraphQL client                    |
+| `src/sftp-client.ts`  | SDK SFTP compatibility adapter                       |
+| `src/upload-state.ts` | Portable JSON state and legacy SQLite migration      |
 | `test/*.test.ts`      | Bun unit and CLI integration tests                   |
 
 Command modules keep behavior separate from the CLI declaration and build
@@ -59,12 +57,11 @@ Run all checks before opening a pull request:
 bun run check
 ```
 
-That command generates and verifies the GraphQL client, typechecks, tests, lints,
-checks formatting, and builds `dist/rawback`. Focused commands are available
+That command typechecks, tests, lints, checks formatting, and builds
+`dist/rawback`. Focused commands are available
 while iterating:
 
 ```bash
-bun run graphql:check
 bun run typecheck
 bun run test
 bun run lint
@@ -85,30 +82,19 @@ After a build, smoke-test the standalone artifact with:
 ./dist/rawback --version
 ```
 
-## GraphQL generation
+## Shared SDK
 
-Author operations in `src/schema/*.gql`. The committed
-`graphql.schema.json` allows a standalone checkout to generate typed documents:
-
-```bash
-bun run graphql:generate
-```
-
-When the sibling `../server` repository is available, refresh both the schema
-snapshot and generated documents:
-
-```bash
-bun run g
-```
-
-`src/gql/` is generated and ignored. Do not commit it or edit it by hand. Commit
-`graphql.schema.json` when an intentional server schema refresh changes it.
+Network, authentication, configuration, GraphQL operations, SFTP transport, and
+portable upload state live in the sibling `../sdk` repository and are published
+as `@rawback/sdk`. Make shared contract changes there first, run `pnpm check`,
+then update the pinned SDK version in this repository. The CLI should retain
+only Bun/Yargs/Ink behavior and thin compatibility adapters.
 
 ## API clients
 
 Commands share `createRawbackClient` from `src/api.ts`. The factory reads
-credentials and configuration, builds a JSON REST client, and creates an Apollo
-Client for `/api/v2/graphql`:
+credentials and configuration through `@rawback/sdk` and exposes its native
+fetch-based REST and GraphQL clients:
 
 ```ts
 import { createRawbackClient } from "./api.ts";
@@ -123,9 +109,9 @@ The API host resolves in this order:
 3. `https://api.rawback.app`
 
 REST and GraphQL requests send `User-Agent: rawback-cli@<version>`. Authenticated
-requests send the saved access token as a Bearer token. Apollo queries default
-to `no-cache` and `errorPolicy: "all"`, so callers must inspect both partial data
-and GraphQL errors.
+requests send the saved access token as a Bearer token. The compatibility
+GraphQL client returns partial data together with a typed error when the server
+does both.
 
 The REST helper currently handles JSON requests and responses:
 

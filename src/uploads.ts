@@ -4,7 +4,7 @@ import {
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
-import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from "./gql/graphql.ts";
+import { UploadSessionsDocument, type UploadSessionsQuery, UploadStatus } from "@rawback/sdk";
 import { uploadSessionListDocument } from "./features/uploads/view.ts";
 
 const UPLOAD_STATUSES = new Set<string>(Object.values(UploadStatus));

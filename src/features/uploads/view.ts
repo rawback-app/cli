@@ -1,4 +1,4 @@
-import { type UploadSessionsQuery } from "../../gql/graphql.ts";
+import { type UploadSessionsQuery } from "@rawback/sdk";
 import { formatBytes, formatDuration, formatTimestamp } from "../../ui/format.ts";
 import { cell, type UiDocument } from "../../ui/model.ts";
 

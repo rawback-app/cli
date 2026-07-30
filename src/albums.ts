@@ -4,7 +4,7 @@ import {
   type ReadCommandDependencies,
   validatePagination,
 } from "./command.ts";
-import { type FragmentType, useFragment } from "./gql/fragment-masking.ts";
+import { type FragmentType, useFragment } from "@rawback/sdk";
 import { albumListDocument, albumViewDocument } from "./features/albums/view.ts";
 import {
   AlbumPermission,
@@ -24,7 +24,7 @@ import {
   CliRemoveTagsFromAlbumDocument,
   type CreateAlbumInput,
   type UpdateAlbumInput,
-} from "./gql/graphql.ts";
+} from "@rawback/sdk";
 
 export interface AlbumPrompts {
   confirm(message: string): Promise<boolean>;

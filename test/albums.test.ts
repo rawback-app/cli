@@ -28,7 +28,7 @@ import {
   runArticleView,
 } from "../src/articles.ts";
 import { writeCredentials } from "../src/credentials.ts";
-import { AlbumPermission } from "../src/gql/graphql.ts";
+import { AlbumPermission } from "@rawback/sdk";
 
 const temporaryDirectories: string[] = [];
 

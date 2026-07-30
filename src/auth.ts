@@ -1,5 +1,5 @@
-import { CombinedGraphQLErrors, ServerError } from "@apollo/client";
 import { arch as systemArchitecture, platform as operatingSystem } from "node:os";
+import { RawbackGraphqlError } from "@rawback/sdk";
 import { commandOutput, type ReadCommandDependencies } from "./command.ts";
 import { authStatusDocument } from "./features/auth/view.ts";
 import { type RawbackClient, createRawbackClient } from "./client.ts";
@@ -11,7 +11,7 @@ import {
   readCredentials,
   writeCredentials,
 } from "./credentials.ts";
-import { AuthStatusDocument, type AuthStatusQuery } from "./gql/graphql.ts";
+import { AuthStatusDocument, type AuthStatusQuery } from "@rawback/sdk";
 import { type ApiEnvelope, HttpError, JsonResponseError } from "./http.ts";
 import { browserCommand, defaultOpen } from "./web.ts";
 
@@ -95,12 +95,7 @@ function createClient(
 }
 
 function isUnauthorizedError(error: unknown): boolean {
-  if (ServerError.is(error)) {
-    return error.statusCode === 401;
-  }
-  if (!CombinedGraphQLErrors.is(error)) {
-    return false;
-  }
+  if (!(error instanceof RawbackGraphqlError)) return false;
   return error.errors.some((item) => {
     const code = item.extensions?.code;
     return code === 401 || code === "401" || code === "UNAUTHENTICATED";

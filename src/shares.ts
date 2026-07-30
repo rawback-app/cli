@@ -9,7 +9,7 @@ import {
   shareListDocument,
   shareRecipientsDocument,
 } from "./features/shares/view.ts";
-import { type FragmentType, useFragment } from "./gql/fragment-masking.ts";
+import { type FragmentType, useFragment } from "@rawback/sdk";
 import {
   type CliLinkShareFieldsFragment,
   CliLinkShareFieldsFragmentDoc,
@@ -36,7 +36,7 @@ import {
   ShareResourceType,
   ShareStatus,
   type UpdateShareInput,
-} from "./gql/graphql.ts";
+} from "@rawback/sdk";
 import type { RawbackClient } from "./client.ts";
 
 export type ShareScope = "by-me" | "with-me";
