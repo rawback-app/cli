@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -26,13 +26,13 @@ describe('config', () => {
     const path = await temporaryConfigPath()
     expect(await readConfig(path)).toEqual({})
 
-    await writeFile(path, '')
+    await Bun.write(path, '')
     expect(await readConfig(path)).toEqual({})
   })
 
   test('loads apiHost and ignores unknown keys', async () => {
     const path = await temporaryConfigPath()
-    await writeFile(path, 'apiHost: " https://staging.rawback.app/ "\nfutureSetting: enabled\n')
+    await Bun.write(path, 'apiHost: " https://staging.rawback.app/ "\nfutureSetting: enabled\n')
 
     expect(await readConfig(path)).toEqual({
       apiHost: 'https://staging.rawback.app/',
@@ -47,7 +47,7 @@ describe('config', () => {
     ['an unsupported protocol', 'apiHost: file:///tmp/rawback', 'HTTP or HTTPS'],
   ])('rejects %s', async (_description, contents, expectedMessage) => {
     const path = await temporaryConfigPath()
-    await writeFile(path, contents)
+    await Bun.write(path, contents)
 
     try {
       await readConfig(path)
@@ -63,7 +63,7 @@ describe('config', () => {
 describe('SFTP config', () => {
   test('loads nested endpoint and credentials', async () => {
     const path = await temporaryConfigPath()
-    await writeFile(
+    await Bun.write(
       path,
       [
         'sftp:',
@@ -101,14 +101,14 @@ describe('SFTP config', () => {
     ['an empty username', 'sftp:\n  username: ""', 'non-empty string'],
   ])('rejects %s', async (_description, contents, expectedMessage) => {
     const path = await temporaryConfigPath()
-    await writeFile(path, contents)
+    await Bun.write(path, contents)
 
     await expect(readConfig(path)).rejects.toThrow(expectedMessage)
   })
 
   test('does not include invalid credential values in validation errors', async () => {
     const path = await temporaryConfigPath()
-    await writeFile(path, 'sftp:\n  password: 123456\n')
+    await Bun.write(path, 'sftp:\n  password: 123456\n')
 
     try {
       await readConfig(path)

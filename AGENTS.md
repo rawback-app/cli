@@ -44,8 +44,9 @@ context and checks needed to make safe, reviewable changes.
 - Preserve upload safety checks: config permissions, account/username matching,
   enabled credentials, unique basenames, remote duplicates, quota, locks, resume
   identity, and SFTP host keys.
-- Use `node:` imports for Node-compatible built-ins and follow the surrounding
-  module's import ordering and formatting.
+- Prefer Bun-native or standard APIs when they provide equivalent behavior. Use
+  `node:` imports for compatibility APIs without a suitable Bun replacement,
+  and follow the surrounding module's import ordering and formatting.
 
 ## Tests and generated code
 

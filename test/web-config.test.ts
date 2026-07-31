@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -17,7 +17,7 @@ describe('web host config', () => {
     const directory = await mkdtemp(join(tmpdir(), 'rawback-web-config-'))
     directories.push(directory)
     const path = join(directory, 'config.yml')
-    await writeFile(path, 'webHost: http://localhost:3407/\n')
+    await Bun.write(path, 'webHost: http://localhost:3407/\n')
     expect(await readConfig(path)).toEqual({ webHost: 'http://localhost:3407/' })
   })
 
@@ -29,7 +29,7 @@ describe('web host config', () => {
     const directory = await mkdtemp(join(tmpdir(), 'rawback-web-config-'))
     directories.push(directory)
     const path = join(directory, 'config.yml')
-    await writeFile(path, `${contents}\n`)
+    await Bun.write(path, `${contents}\n`)
     await expect(readConfig(path)).rejects.toThrow(expected)
   })
 })

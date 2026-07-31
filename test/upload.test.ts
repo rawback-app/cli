@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -56,7 +56,7 @@ afterEach(async () => {
 
 async function writeConfig(directory: string, username = 'annatarhe'): Promise<string> {
   const path = join(directory, 'config.yml')
-  await writeFile(
+  await Bun.write(
     path,
     [
       'sftp:',
@@ -154,7 +154,7 @@ class RecordingTransport implements UploadTransport {
     this.maxActive = Math.max(this.maxActive, this.active)
     this.uploads.push(basename(remotePath))
     try {
-      const information = await stat(localPath)
+      const information = await Bun.file(localPath).stat()
       onProgress(information.size)
       await Bun.sleep(15)
       if (this.fail.has(basename(remotePath))) throw new Error('rejected by test server')
@@ -185,7 +185,7 @@ describe('upload path scanning', () => {
       (extension, index) =>
         `photo-${index}${index % 2 === 0 ? extension : extension.toUpperCase()}`,
     )
-    await Promise.all(filenames.map((filename) => writeFile(join(directory, filename), filename)))
+    await Promise.all(filenames.map((filename) => Bun.write(join(directory, filename), filename)))
 
     const files = await scanUploadPath(directory)
 
@@ -195,10 +195,9 @@ describe('upload path scanning', () => {
 
   test('recurses through directories, filters formats, and skips symlinks', async () => {
     const directory = await temporaryDirectory()
-    await mkdir(join(directory, 'nested'))
-    await writeFile(join(directory, 'first.JPG'), 'one')
-    await writeFile(join(directory, 'notes.txt'), 'ignored')
-    await writeFile(join(directory, 'nested', 'second.cr3'), 'two')
+    await Bun.write(join(directory, 'first.JPG'), 'one')
+    await Bun.write(join(directory, 'notes.txt'), 'ignored')
+    await Bun.write(join(directory, 'nested', 'second.cr3'), 'two')
     await symlink(join(directory, 'first.JPG'), join(directory, 'linked.jpg'))
 
     const files = await scanUploadPath(directory)
@@ -212,7 +211,7 @@ describe('upload path scanning', () => {
 
     await expect(scanUploadPath(directory)).rejects.toThrow('No supported image or RAW files found')
 
-    await writeFile(unsupportedFile, 'ignored')
+    await Bun.write(unsupportedFile, 'ignored')
 
     await expect(scanUploadPath(directory)).rejects.toThrow('Supported extensions: .jpg')
     await expect(scanUploadPath(unsupportedFile)).rejects.toThrow(
@@ -222,10 +221,8 @@ describe('upload path scanning', () => {
 
   test('allows basename collisions for identity-aware deduplication', async () => {
     const directory = await temporaryDirectory()
-    await mkdir(join(directory, 'a'))
-    await mkdir(join(directory, 'b'))
-    await writeFile(join(directory, 'a', 'same.jpg'), 'one')
-    await writeFile(join(directory, 'b', 'same.jpg'), 'two')
+    await Bun.write(join(directory, 'a', 'same.jpg'), 'one')
+    await Bun.write(join(directory, 'b', 'same.jpg'), 'two')
 
     await expect(scanUploadPath(directory)).resolves.toHaveLength(2)
   })
@@ -237,7 +234,7 @@ describe('upload command', () => {
     const configPath = await writeConfig(directory)
     const statePath = join(directory, 'progress.sqlite')
     for (const filename of ['one.jpg', 'two.png', 'three.nef']) {
-      await writeFile(join(directory, filename), filename)
+      await Bun.write(join(directory, filename), filename)
     }
     const transport = new RecordingTransport()
     const captured: SftpClientOptions[] = []
@@ -272,8 +269,8 @@ describe('upload command', () => {
     const directory = await temporaryDirectory()
     const configPath = await writeConfig(directory)
     const statePath = join(directory, 'missing-progress.sqlite')
-    await writeFile(join(directory, 'local.jpg'), new Uint8Array(2_000_000))
-    await writeFile(join(directory, 'remote.jpg'), 'remote')
+    await Bun.write(join(directory, 'local.jpg'), new Uint8Array(2_000_000))
+    await Bun.write(join(directory, 'remote.jpg'), 'remote')
     const lines: string[] = []
 
     await runUpload(
@@ -293,17 +290,15 @@ describe('upload command', () => {
     expect(lines[0]).toContain('Files           1')
     expect(lines[0]).toContain('Remote          1')
     expect(lines[0]).toContain('10 Mbps fallback')
-    await expect(stat(statePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(Bun.file(statePath).stat()).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   test('collapses local exact identities and fails open when the API check fails', async () => {
     const directory = await temporaryDirectory()
     const first = join(directory, 'first')
     const second = join(directory, 'second')
-    await mkdir(first)
-    await mkdir(second)
-    await writeFile(join(first, 'same.jpg'), 'first')
-    await writeFile(join(second, 'same.jpg'), 'second')
+    await Bun.write(join(first, 'same.jpg'), 'first')
+    await Bun.write(join(second, 'same.jpg'), 'second')
     const configPath = await writeConfig(directory)
     const transport = new RecordingTransport()
     const warnings: string[] = []
@@ -358,8 +353,8 @@ describe('upload command', () => {
   test('continues after a per-file failure and reports a partial batch', async () => {
     const directory = await temporaryDirectory()
     const configPath = await writeConfig(directory)
-    await writeFile(join(directory, 'good.jpg'), 'good')
-    await writeFile(join(directory, 'bad.jpg'), 'bad')
+    await Bun.write(join(directory, 'good.jpg'), 'good')
+    await Bun.write(join(directory, 'bad.jpg'), 'bad')
     const transport = new RecordingTransport(new Set(['bad.jpg']))
     const errors: string[] = []
 

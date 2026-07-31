@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises'
-
 import { type FragmentType, useFragment } from '@rawback/sdk'
 import {
   type CliAlbumArticleQuery,
@@ -171,7 +169,7 @@ function requireArticle(album: AlbumArticle): CliArticleFieldsFragment {
 
 async function defaultReadContent(path: string): Promise<string> {
   if (path === '-') return Bun.stdin.text()
-  return readFile(path, 'utf8')
+  return Bun.file(path).text()
 }
 
 async function confirm(

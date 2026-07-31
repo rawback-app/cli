@@ -357,7 +357,7 @@ describe('album article commands', () => {
     expect(output[1]).toBe(article.content)
   })
 
-  test('edits article Markdown and derives image IDs', async () => {
+  test('reads and edits article Markdown while deriving image IDs', async () => {
     const markdown = [
       '# Trip',
       '![Waterfall](rawback://image/11)',
@@ -379,16 +379,15 @@ describe('album article commands', () => {
         return Response.json({ data: { upsertArticle: article } })
       },
       {
-        async readContent(path) {
-          expect(path).toBe('-')
-          return markdown
-        },
         stdout: (message) => output.push(message),
       },
     )
+    if (dependencies.credentialsPath === undefined) throw new Error('Missing test credentials path')
+    const contentPath = join(dependencies.credentialsPath, '..', 'article.md')
+    await Bun.write(contentPath, markdown)
 
     await runArticleEdit(
-      { albumId: 7, contentFile: '-', title: '  Trip notes  ', json: true },
+      { albumId: 7, contentFile: contentPath, title: '  Trip notes  ', json: true },
       dependencies,
     )
     expect(JSON.parse(output[0] ?? '')).toMatchObject({ id: 21, content: article.content })

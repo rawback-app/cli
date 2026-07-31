@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmod, copyFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 
 const installer =
   process.platform === 'win32'
-    ? fileURLToPath(new URL('../install.ps1', import.meta.url))
-    : fileURLToPath(new URL('../install.sh', import.meta.url))
+    ? Bun.fileURLToPath(new URL('../install.ps1', import.meta.url))
+    : Bun.fileURLToPath(new URL('../install.sh', import.meta.url))
 
 const temporaryDirectories: string[] = []
 
@@ -23,8 +22,6 @@ async function createFixture(options: { validChecksum: boolean }) {
 
   const payloadDirectory = join(root, 'payload')
   const installDirectory = join(root, 'install')
-  await mkdir(payloadDirectory)
-  await mkdir(join(payloadDirectory, 'exiftool'))
 
   const assetOs =
     process.platform === 'darwin' ? 'Darwin' : process.platform === 'win32' ? 'Windows' : 'Linux'
@@ -36,13 +33,13 @@ async function createFixture(options: { validChecksum: boolean }) {
   const payloadBinary = join(payloadDirectory, binaryName)
 
   if (process.platform === 'win32') {
-    await copyFile(process.execPath, payloadBinary)
-    await copyFile(process.execPath, join(payloadDirectory, 'exiftool', 'exiftool.exe'))
+    await Bun.write(payloadBinary, Bun.file(process.execPath))
+    await Bun.write(join(payloadDirectory, 'exiftool', 'exiftool.exe'), Bun.file(process.execPath))
   } else {
-    await writeFile(payloadBinary, '#!/bin/sh\necho 9.9.9\n')
+    await Bun.write(payloadBinary, '#!/bin/sh\necho 9.9.9\n')
     await chmod(payloadBinary, 0o755)
     const exiftool = join(payloadDirectory, 'exiftool', 'exiftool')
-    await writeFile(exiftool, '#!/bin/sh\n')
+    await Bun.write(exiftool, '#!/bin/sh\n')
     await chmod(exiftool, 0o755)
   }
 
@@ -116,8 +113,7 @@ describe('release installers', () => {
   test('verifies, replaces, and installs the platform archive', async () => {
     const fixture = await createFixture({ validChecksum: true })
     const target = join(fixture.installDirectory, fixture.binaryName)
-    await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, 'stale')
+    await Bun.write(target, 'stale')
 
     try {
       const result = await runInstaller(fixture.releaseBaseUrl, fixture.installDirectory)
@@ -157,8 +153,7 @@ describe('release installers', () => {
     const fixture = await createFixture({ validChecksum: true })
     const fakeBin = join(fixture.root, 'fake-bin')
     const fakeUname = join(fakeBin, 'uname')
-    await mkdir(fakeBin)
-    await writeFile(
+    await Bun.write(
       fakeUname,
       '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else echo mips64; fi\n',
     )
