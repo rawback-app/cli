@@ -24,6 +24,7 @@ async function createFixture(options: { validChecksum: boolean }) {
   const payloadDirectory = join(root, 'payload')
   const installDirectory = join(root, 'install')
   await mkdir(payloadDirectory)
+  await mkdir(join(payloadDirectory, 'exiftool'))
 
   const assetOs =
     process.platform === 'darwin' ? 'Darwin' : process.platform === 'win32' ? 'Windows' : 'Linux'
@@ -36,15 +37,28 @@ async function createFixture(options: { validChecksum: boolean }) {
 
   if (process.platform === 'win32') {
     await copyFile(process.execPath, payloadBinary)
+    await copyFile(process.execPath, join(payloadDirectory, 'exiftool', 'exiftool.exe'))
   } else {
     await writeFile(payloadBinary, '#!/bin/sh\necho 9.9.9\n')
     await chmod(payloadBinary, 0o755)
+    const exiftool = join(payloadDirectory, 'exiftool', 'exiftool')
+    await writeFile(exiftool, '#!/bin/sh\n')
+    await chmod(exiftool, 0o755)
   }
 
   const archiveResult =
     process.platform === 'win32'
-      ? Bun.spawnSync(['tar', '-a', '-cf', archivePath, '-C', payloadDirectory, binaryName])
-      : Bun.spawnSync(['tar', '-czf', archivePath, '-C', payloadDirectory, binaryName])
+      ? Bun.spawnSync([
+          'tar',
+          '-a',
+          '-cf',
+          archivePath,
+          '-C',
+          payloadDirectory,
+          binaryName,
+          'exiftool',
+        ])
+      : Bun.spawnSync(['tar', '-czf', archivePath, '-C', payloadDirectory, binaryName, 'exiftool'])
   expect(archiveResult.exitCode).toBe(0)
 
   const hasher = new Bun.CryptoHasher('sha256')
@@ -113,6 +127,12 @@ describe('release installers', () => {
       expect(result.stderr).toContain('is not on PATH')
       expect(await Bun.file(target).exists()).toBe(true)
       expect(await Bun.file(target).text()).not.toBe('stale')
+      const exiftool = join(
+        fixture.installDirectory,
+        'exiftool',
+        process.platform === 'win32' ? 'exiftool.exe' : 'exiftool',
+      )
+      expect(await Bun.file(exiftool).exists()).toBe(true)
     } finally {
       fixture.server.stop(true)
     }

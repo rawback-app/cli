@@ -3,6 +3,8 @@ import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
+import type { UploadIdentityExtractor } from '@rawback/sdk'
+
 import type { RawbackClient } from '../src/client.ts'
 import type {
   SftpClientOptions,
@@ -78,7 +80,7 @@ function operationName(query: unknown): string {
 
 function fakeClient(
   remote: string[] = [],
-  options: { credentials?: boolean; enabled?: boolean } = {},
+  options: { credentials?: boolean; enabled?: boolean; duplicateQueryFails?: boolean } = {},
 ): RawbackClient {
   const remoteSet = new Set(remote)
   return {
@@ -88,7 +90,12 @@ function fakeClient(
         ? null
         : { token: 'access-token', refreshToken: 'refresh-token' },
     graphql: {
-      async query(request: { query: unknown; variables?: { filenames?: string[] } }) {
+      async query(request: {
+        query: unknown
+        variables?: {
+          identities?: Array<{ clientKey: string; originalFilename: string; capturedAt: string }>
+        }
+      }) {
         if (operationName(request.query) === 'UploadPreflight') {
           return {
             data: {
@@ -102,12 +109,13 @@ function fakeClient(
             },
           }
         }
-        const filenames = request.variables?.filenames ?? []
+        if (options.duplicateQueryFails) return { error: new Error('query unavailable') }
+        const identities = request.variables?.identities ?? []
         return {
           data: {
-            imagesByFilenames: filenames
-              .filter((filename) => remoteSet.has(filename))
-              .map((originalFilename, index) => ({ id: index + 1, originalFilename })),
+            existingUploadIdentities: identities
+              .filter(({ originalFilename }) => remoteSet.has(originalFilename))
+              .map(({ clientKey }, index) => ({ clientKey, imageId: index + 1 })),
           },
         }
       },
@@ -115,6 +123,14 @@ function fakeClient(
     http: {},
   } as unknown as RawbackClient
 }
+
+const capturedAt = '2026-06-04T09:57:01.123457Z'
+
+const identityExtractor: UploadIdentityExtractor = async (candidates) => ({
+  identities: candidates.map((candidate) => ({ ...candidate, capturedAt })),
+  uncheckedClientKeys: [],
+  failedClientKeys: [],
+})
 
 class RecordingTransport implements UploadTransport {
   active = 0
@@ -204,14 +220,14 @@ describe('upload path scanning', () => {
     )
   })
 
-  test('rejects basename collisions before upload', async () => {
+  test('allows basename collisions for identity-aware deduplication', async () => {
     const directory = await temporaryDirectory()
     await mkdir(join(directory, 'a'))
     await mkdir(join(directory, 'b'))
     await writeFile(join(directory, 'a', 'same.jpg'), 'one')
     await writeFile(join(directory, 'b', 'same.jpg'), 'two')
 
-    await expect(scanUploadPath(directory)).rejects.toThrow('unique basenames')
+    await expect(scanUploadPath(directory)).resolves.toHaveLength(2)
   })
 })
 
@@ -267,6 +283,7 @@ describe('upload command', () => {
         configPath,
         statePath,
         stdout: (message) => lines.push(message),
+        identityExtractor,
         transportFactory: () => {
           throw new Error('dry-run must not create an SFTP client')
         },
@@ -277,6 +294,34 @@ describe('upload command', () => {
     expect(lines[0]).toContain('Remote          1')
     expect(lines[0]).toContain('10 Mbps fallback')
     await expect(stat(statePath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('collapses local exact identities and fails open when the API check fails', async () => {
+    const directory = await temporaryDirectory()
+    const first = join(directory, 'first')
+    const second = join(directory, 'second')
+    await mkdir(first)
+    await mkdir(second)
+    await writeFile(join(first, 'same.jpg'), 'first')
+    await writeFile(join(second, 'same.jpg'), 'second')
+    const configPath = await writeConfig(directory)
+    const transport = new RecordingTransport()
+    const warnings: string[] = []
+
+    await runUpload(
+      { concurrency: 2, dryRun: false, path: directory },
+      {
+        client: fakeClient([], { duplicateQueryFails: true }),
+        configPath,
+        identityExtractor,
+        statePath: join(directory, 'progress.sqlite'),
+        stderr: (message) => warnings.push(message),
+        transportFactory: factoryFor(transport),
+      },
+    )
+
+    expect(transport.uploads).toEqual(['same.jpg'])
+    expect(warnings.some((message) => message.includes('continuing with SFTP'))).toBe(true)
   })
 
   test('checks stored authentication before scanning the upload path', async () => {

@@ -8,6 +8,7 @@ const artifactDirectory = join(import.meta.dir, '..', '.release-artifacts')
 const archivePath = join(artifactDirectory, 'rawback_Windows_arm64.zip')
 const temporaryDirectory = await mkdtemp(join(tmpdir(), 'rawback-windows-arm64-'))
 const executablePath = join(temporaryDirectory, 'rawback.exe')
+const exiftoolPath = join(artifactDirectory, 'exiftool', 'windows', 'exiftool.exe')
 
 try {
   const result = await Bun.build({
@@ -29,9 +30,11 @@ try {
   }
 
   const executable = await readFile(executablePath)
+  const exiftool = await readFile(exiftoolPath)
   const archive = zipSync(
     {
       'rawback.exe': executable,
+      'exiftool/exiftool.exe': exiftool,
     },
     { level: 9 },
   )
