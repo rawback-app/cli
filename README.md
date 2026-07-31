@@ -8,7 +8,7 @@ in a browser.
 ## What you can do
 
 - Upload a file or recursively upload a directory over SFTP.
-- Safely resume an interrupted upload and skip files already uploaded.
+- Safely resume an interrupted upload and skip exact files already uploaded.
 - Search photos by metadata, capture date, rating, location, and GPS data.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
@@ -189,6 +189,9 @@ rawback photos upload --path ~/Pictures/Export
 
 Directories are scanned recursively. Symbolic links and unsupported files are
 skipped; the command fails if the selected path contains no supported files.
+Before SFTP transfer, the CLI reads capture metadata locally and skips a photo
+only when both its filename and capture time match an existing Rawback image.
+Files without usable capture metadata continue through normal SFTP verification.
 Supported image formats are JPEG/JPG, PNG, WebP, GIF, TIFF, HEIC/HEIF, BMP, and
 AVIF. Supported RAW formats are CR2, CR3, NEF, ARW, DNG, RAF, ORF, PEF, RW2,
 SRW, and X3F.

@@ -69,6 +69,10 @@ try {
   if (-not (Test-Path -LiteralPath $sourceBinary -PathType Leaf)) {
     throw 'rawback installer: archive does not contain rawback.exe'
   }
+  $sourceExifTool = Join-Path $temporaryDirectory 'exiftool\exiftool.exe'
+  if (-not (Test-Path -LiteralPath $sourceExifTool -PathType Leaf)) {
+    throw 'rawback installer: archive does not contain the ExifTool runtime'
+  }
 
   New-Item -ItemType Directory -Force -Path $installDirectory | Out-Null
   $targetBinary = Join-Path $installDirectory 'rawback.exe'
@@ -81,6 +85,12 @@ try {
     Move-Item -LiteralPath $stagedBinary -Destination $targetBinary
   }
   $stagedBinary = $null
+
+  $targetExifTool = Join-Path $installDirectory 'exiftool'
+  if (Test-Path -LiteralPath $targetExifTool) {
+    Remove-Item -LiteralPath $targetExifTool -Recurse -Force
+  }
+  Copy-Item -LiteralPath (Join-Path $temporaryDirectory 'exiftool') -Destination $targetExifTool -Recurse
 
   Write-Host "Installed rawback to $targetBinary"
   & $targetBinary --version

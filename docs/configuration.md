@@ -110,7 +110,7 @@ rawback photos upload --path /path/to/photos --dry-run
 ```
 
 The dry run authenticates, validates configuration and account quota, scans the
-input, and checks remote filenames. It does not open an SFTP connection or
+input, and checks exact remote upload identities. It does not open an SFTP connection or
 modify upload state. Its time estimate uses matching local upload
 history when available and otherwise uses a clearly labeled 10 Mbps fallback.
 
@@ -133,11 +133,17 @@ Before connecting, the CLI verifies:
 - The local path is a regular file or directory and not a symbolic link.
 - Recursively discovered files have supported extensions.
 - At least one supported image or RAW file is found.
-- Every file has a unique basename, because the remote upload list is flat.
 - The authenticated account slug matches `sftp.username`.
 - The account has at least one enabled SFTP credential.
-- Remote files with the same basename are skipped.
+- A remote photo is skipped only when its filename and EXIF capture time both match.
 - The pending bytes fit in the account's remaining storage quota.
+
+Capture metadata is extracted locally with the bundled ExifTool runtime. Files
+without usable capture metadata upload normally. If local extraction or the API
+duplicate query is unavailable, the check fails open and the SFTP service remains
+the authoritative duplicate guard. When the selected tree contains multiple
+files with the same filename and capture time, only the first is queued; files
+that merely share a basename are kept.
 
 Supported image extensions are `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.tif`,
 `.tiff`, `.heic`, `.heif`, `.bmp`, and `.avif`. Supported RAW extensions are
@@ -204,11 +210,11 @@ Run `rawback auth status` and copy the slug after `Profile: @` into
 Create one with `rawback cred add`. If one is listed but disabled, create a new
 credential or correct its status through Rawback before retrying.
 
-### Files must have unique basenames
+### Duplicate checking is unavailable
 
-Two files in different input directories share a filename. Rename one of them or
-upload the directories separately after confirming how you want the remote names
-to appear.
+The CLI warns and continues uploading when EXIF extraction or the API identity
+query fails. The SFTP service performs the authoritative duplicate check, so no
+file is discarded solely because the preflight optimization was unavailable.
 
 ### Host-key mismatch
 

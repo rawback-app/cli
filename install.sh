@@ -53,10 +53,14 @@ release_base_url="${RELEASE_BASE_URL%/}"
 temporary_directory="$(mktemp -d 2>/dev/null || mktemp -d -t rawback-install)" ||
   fail "could not create a temporary directory"
 staged_binary=""
+staged_exiftool=""
 
 cleanup() {
   if [ -n "$staged_binary" ]; then
     rm -f "$staged_binary"
+  fi
+  if [ -n "$staged_exiftool" ]; then
+    rm -rf "$staged_exiftool"
   fi
   rm -rf "$temporary_directory"
 }
@@ -91,6 +95,8 @@ tar -xzf "$archive_path" -C "$temporary_directory" ||
   fail "failed to extract $archive"
 source_binary="$temporary_directory/rawback"
 [ -f "$source_binary" ] || fail "archive does not contain the rawback binary"
+source_exiftool="$temporary_directory/exiftool/exiftool"
+[ -f "$source_exiftool" ] || fail "archive does not contain the ExifTool runtime"
 
 mkdir -p "$INSTALL_DIR" || fail "could not create $INSTALL_DIR"
 staged_binary="$INSTALL_DIR/.rawback.$$.tmp"
@@ -98,6 +104,14 @@ cp "$source_binary" "$staged_binary" || fail "could not stage rawback in $INSTAL
 chmod 0755 "$staged_binary" || fail "could not mark rawback executable"
 mv -f "$staged_binary" "$INSTALL_DIR/rawback" || fail "could not install rawback"
 staged_binary=""
+staged_exiftool="$INSTALL_DIR/.rawback-exiftool.$$.tmp"
+mkdir -p "$staged_exiftool" || fail "could not stage ExifTool in $INSTALL_DIR"
+cp -R "$temporary_directory/exiftool/." "$staged_exiftool/" ||
+  fail "could not stage ExifTool in $INSTALL_DIR"
+chmod 0755 "$staged_exiftool/exiftool" || fail "could not mark ExifTool executable"
+rm -rf "$INSTALL_DIR/exiftool"
+mv "$staged_exiftool" "$INSTALL_DIR/exiftool" || fail "could not install ExifTool"
+staged_exiftool=""
 
 echo "Installed rawback to $INSTALL_DIR/rawback"
 "$INSTALL_DIR/rawback" --version

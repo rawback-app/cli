@@ -5,6 +5,7 @@ project_name: rawback
 
 before:
   hooks:
+    - bun run scripts/stage-exiftool.ts
     - bun run scripts/build-windows-arm64.ts
 
 builds:
@@ -39,6 +40,13 @@ archives:
       - goos: windows
         formats:
           - zip
+    files:
+      - README.md
+      - LICENSE*
+      - src: .release-artifacts/exiftool/{{ .Os }}/**/*
+        dst: exiftool
+      - src: .release-artifacts/exiftool/{{ .Os }}/exiftool*
+        dst: exiftool
 
 checksum:
   name_template: checksums.txt

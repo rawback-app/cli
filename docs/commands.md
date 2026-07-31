@@ -159,7 +159,8 @@ rawback photos upload --path <file-or-directory> [options]
 Upload setup and safety behavior are covered in
 [Configuration and uploads](configuration.md). Unsupported files are skipped
 during directory scans; the command fails if the selected path contains no
-supported files.
+supported files. Exact duplicates use the filename plus the locally extracted
+EXIF capture time; duplicate-check failures do not block the SFTP upload.
 
 ## `rawback dream`
 

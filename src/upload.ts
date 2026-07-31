@@ -1,9 +1,12 @@
+import { existsSync, realpathSync } from 'node:fs'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 
 import {
-  ExistingUploadImagesDocument,
+  ExistingUploadIdentitiesDocument,
   UploadPreflightDocument,
+  extractUploadIdentities,
+  type UploadIdentityExtractor,
   type UploadPreflightQuery,
 } from '@rawback/sdk'
 
@@ -60,11 +63,14 @@ export interface UploadCommandDependencies extends ReadCommandDependencies {
   sleep?: (milliseconds: number) => Promise<void>
   statePath?: string
   transportFactory?: UploadTransportFactory
+  identityExtractor?: UploadIdentityExtractor
 }
 
 export interface UploadFile {
   basename: string
   canonicalPath: string
+  clientKey?: string
+  capturedAt?: string
   mtimeMs: number
   path: string
   size: number
@@ -169,16 +175,6 @@ export async function scanUploadPath(path: string): Promise<UploadFile[]> {
   }
 
   files.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath))
-  const names = new Map<string, string>()
-  for (const file of files) {
-    const previous = names.get(file.basename)
-    if (previous) {
-      throw new Error(
-        `Files must have unique basenames because the SFTP server stores a flat upload list: ${previous} and ${file.path}`,
-      )
-    }
-    names.set(file.basename, file.path)
-  }
   return files
 }
 
@@ -235,24 +231,99 @@ async function preflight(
   }
 }
 
-async function remoteFilenames(client: RawbackClient, files: UploadFile[]): Promise<Set<string>> {
+async function remoteIdentities(
+  client: RawbackClient,
+  files: UploadFile[],
+  dependencies: UploadCommandDependencies,
+): Promise<Set<string>> {
   const result = new Set<string>()
-  for (let index = 0; index < files.length; index += REMOTE_QUERY_BATCH_SIZE) {
-    const filenames = files
-      .slice(index, index + REMOTE_QUERY_BATCH_SIZE)
-      .map((file) => file.basename)
-    const response = await client.graphql.query({
-      query: ExistingUploadImagesDocument,
-      variables: { filenames },
-    })
-    if (response.error) throw response.error
-    if (!response.data) throw new Error('Remote duplicate check did not return image data')
-    const requested = new Set(filenames)
-    for (const image of response.data.imagesByFilenames) {
-      if (requested.has(image.originalFilename)) result.add(image.originalFilename)
+  const candidates = files.filter(
+    (file): file is UploadFile & { capturedAt: string; clientKey: string } =>
+      Boolean(file.capturedAt && file.clientKey),
+  )
+  try {
+    for (let index = 0; index < candidates.length; index += REMOTE_QUERY_BATCH_SIZE) {
+      const identities = candidates.slice(index, index + REMOTE_QUERY_BATCH_SIZE).map((file) => ({
+        clientKey: file.clientKey,
+        originalFilename: file.basename,
+        capturedAt: file.capturedAt,
+      }))
+      const response = await client.graphql.query({
+        query: ExistingUploadIdentitiesDocument,
+        variables: { identities },
+      })
+      if (response.error) throw response.error
+      if (!response.data) throw new Error('Remote duplicate check did not return image data')
+      for (const match of response.data.existingUploadIdentities) result.add(match.clientKey)
     }
+  } catch {
+    commandOutput(dependencies).warning(
+      'Remote duplicate checking is unavailable; continuing with SFTP verification.',
+    )
+    result.clear()
   }
   return result
+}
+
+function adjacentExiftoolPath(): string | undefined {
+  const executable = process.platform === 'win32' ? 'exiftool.exe' : 'exiftool'
+  const candidates = [process.execPath, realpathSync(process.execPath)].map((path) =>
+    join(dirname(path), 'exiftool', executable),
+  )
+  return candidates.find((candidate) => existsSync(candidate))
+}
+
+async function identifyFiles(
+  files: UploadFile[],
+  dependencies: UploadCommandDependencies,
+): Promise<UploadFile[]> {
+  const sidecarPath = adjacentExiftoolPath()
+  const extractor =
+    dependencies.identityExtractor ??
+    ((candidates) =>
+      extractUploadIdentities(candidates, sidecarPath ? { exiftoolPath: sidecarPath } : {}))
+  const keyed = files.map((file) => ({ file, clientKey: crypto.randomUUID() }))
+  try {
+    const extracted = await extractor(
+      keyed.map(({ file, clientKey }) => ({
+        clientKey,
+        originalFilename: file.basename,
+        path: file.path,
+      })),
+    )
+    if (extracted.failedClientKeys.length > 0) {
+      commandOutput(dependencies).warning(
+        'Some photo metadata could not be read; those files will upload normally.',
+      )
+    }
+    const capturedAt = new Map(
+      extracted.identities.map((identity) => [identity.clientKey, identity.capturedAt]),
+    )
+    return keyed.map(({ file, clientKey }) => {
+      const timestamp = capturedAt.get(clientKey)
+      return {
+        ...file,
+        clientKey,
+        ...(timestamp ? { capturedAt: timestamp } : {}),
+      }
+    })
+  } catch {
+    commandOutput(dependencies).warning(
+      'Photo duplicate checking is unavailable; files will upload normally.',
+    )
+    return files
+  }
+}
+
+function collapseLocalIdentities(files: UploadFile[]): UploadFile[] {
+  const seen = new Set<string>()
+  return files.filter((file) => {
+    if (!file.capturedAt) return true
+    const identity = `${file.basename}\0${file.capturedAt}`
+    if (seen.has(identity)) return false
+    seen.add(identity)
+    return true
+  })
 }
 
 function stateFile(preflightResult: UploadPreflight, file: UploadFile): UploadStateFile {
@@ -353,18 +424,19 @@ export async function runUpload(
     : await UploadState.open(statePath)
 
   try {
+    const identified = collapseLocalIdentities(
+      await identifyFiles(preflightResult.files, dependencies),
+    )
     const locallyCompleted = new Set(
       state
-        ? preflightResult.files
+        ? identified
             .filter((file) => state.isCompleted(stateFile(preflightResult, file)))
             .map((file) => file.canonicalPath)
         : [],
     )
-    const localPending = preflightResult.files.filter(
-      (file) => !locallyCompleted.has(file.canonicalPath),
-    )
-    const remote = await remoteFilenames(preflightResult.client, localPending)
-    const pending = localPending.filter((file) => !remote.has(file.basename))
+    const localPending = identified.filter((file) => !locallyCompleted.has(file.canonicalPath))
+    const remote = await remoteIdentities(preflightResult.client, localPending, dependencies)
+    const pending = localPending.filter((file) => !file.clientKey || !remote.has(file.clientKey))
     const pendingBytes = pending.reduce((sum, file) => sum + file.size, 0)
     const remainingQuota = Math.max(0, preflightResult.quotaBytes - preflightResult.usedBytes)
     if (pendingBytes > remainingQuota) {
