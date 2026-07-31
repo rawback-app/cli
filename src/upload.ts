@@ -1,5 +1,4 @@
-import { existsSync, realpathSync } from 'node:fs'
-import { lstat, readdir, realpath, stat } from 'node:fs/promises'
+import { lstat, readdir, realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import {
@@ -124,7 +123,7 @@ function requiredSftpConfig(
 
 async function checkConfigPermissions(path: string): Promise<void> {
   if (process.platform === 'win32') return
-  const information = await stat(path)
+  const information = await Bun.file(path).stat()
   if ((information.mode & 0o077) !== 0) {
     throw new Error(
       `Config ${path} contains an SFTP password and must not be accessible by group or others; run chmod 600 ${path}`,
@@ -143,7 +142,7 @@ export async function scanUploadPath(path: string): Promise<UploadFile[]> {
     const extensionIndex = name.lastIndexOf('.')
     const extension = extensionIndex < 0 ? '' : name.slice(extensionIndex).toLowerCase()
     if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) return
-    const information = await stat(filePath)
+    const information = await Bun.file(filePath).stat()
     files.push({
       basename: name,
       canonicalPath: await realpath(filePath),
@@ -265,19 +264,22 @@ async function remoteIdentities(
   return result
 }
 
-function adjacentExiftoolPath(): string | undefined {
+async function adjacentExiftoolPath(): Promise<string | undefined> {
   const executable = process.platform === 'win32' ? 'exiftool.exe' : 'exiftool'
-  const candidates = [process.execPath, realpathSync(process.execPath)].map((path) =>
+  const candidates = [process.execPath, await realpath(process.execPath)].map((path) =>
     join(dirname(path), 'exiftool', executable),
   )
-  return candidates.find((candidate) => existsSync(candidate))
+  for (const candidate of candidates) {
+    if (await Bun.file(candidate).exists()) return candidate
+  }
+  return undefined
 }
 
 async function identifyFiles(
   files: UploadFile[],
   dependencies: UploadCommandDependencies,
 ): Promise<UploadFile[]> {
-  const sidecarPath = adjacentExiftoolPath()
+  const sidecarPath = await adjacentExiftoolPath()
   const extractor =
     dependencies.identityExtractor ??
     ((candidates) =>

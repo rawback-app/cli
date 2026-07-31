@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -270,7 +270,7 @@ describe('pricing', () => {
 describe('web', () => {
   test('opens the configured authenticated profile without shell interpolation', async () => {
     const paths = await authenticatedPaths()
-    await writeFile(paths.configPath, 'webHost: https://staging.rawback.app/\n')
+    await Bun.write(paths.configPath, 'webHost: https://staging.rawback.app/\n')
     const opened: Array<{ command: string; args: string[] }> = []
     const lines: string[] = []
     await runWeb({

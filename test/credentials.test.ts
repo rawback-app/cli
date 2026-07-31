@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -43,11 +43,11 @@ describe('credentials', () => {
     await writeCredentials(credentials, path)
 
     expect(await readCredentials(path)).toEqual(credentials)
-    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(credentials)
+    expect(await Bun.file(path).json()).toEqual(credentials)
 
     if (process.platform !== 'win32') {
-      expect((await stat(path)).mode & 0o777).toBe(0o600)
-      expect((await stat(join(path, '..'))).mode & 0o777).toBe(0o700)
+      expect((await Bun.file(path).stat()).mode & 0o777).toBe(0o600)
+      expect((await Bun.file(join(path, '..')).stat()).mode & 0o777).toBe(0o700)
     }
   })
 
@@ -66,7 +66,7 @@ describe('credentials', () => {
   test('reports invalid JSON', async () => {
     const path = await temporaryCredentialsPath()
     await writeCredentials({ token: 'old', refreshToken: 'old-refresh' }, path)
-    await writeFile(path, 'not json')
+    await Bun.write(path, 'not json')
 
     expect(readCredentials(path)).rejects.toBeInstanceOf(CredentialsError)
   })
@@ -74,7 +74,7 @@ describe('credentials', () => {
   test('reports missing credential fields', async () => {
     const path = await temporaryCredentialsPath()
     await writeCredentials({ token: 'old', refreshToken: 'old-refresh' }, path)
-    await writeFile(path, JSON.stringify({ token: 'only-access' }))
+    await Bun.write(path, JSON.stringify({ token: 'only-access' }))
 
     expect(readCredentials(path)).rejects.toThrow('token and refreshToken')
   })

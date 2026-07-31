@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -469,7 +469,7 @@ describe('auth commands', () => {
       { token: 'old-token', refreshToken: 'old-refresh' },
       paths.credentialsPath,
     )
-    await writeFile(paths.credentialsPath, 'not json')
+    await Bun.write(paths.credentialsPath, 'not json')
     const warnings: string[] = []
 
     await runAuth(
@@ -546,13 +546,7 @@ describe('auth commands', () => {
     expect(runAuthStatus(missingPaths)).rejects.toThrow('Not authenticated')
 
     const malformedPaths = await temporaryPaths()
-    await writeFile(malformedPaths.credentialsPath, 'not json').catch(async () => {
-      await writeCredentials(
-        { token: 'temporary', refreshToken: 'temporary' },
-        malformedPaths.credentialsPath,
-      )
-      await writeFile(malformedPaths.credentialsPath, 'not json')
-    })
+    await Bun.write(malformedPaths.credentialsPath, 'not json')
     expect(runAuthStatus(malformedPaths)).rejects.toThrow('rawback auth --force')
 
     const expiredPaths = await temporaryPaths()

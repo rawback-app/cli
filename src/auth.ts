@@ -1,5 +1,3 @@
-import { arch as systemArchitecture, platform as operatingSystem } from 'node:os'
-
 import { RawbackGraphqlError } from '@rawback/sdk'
 import { AuthStatusDocument, type AuthStatusQuery } from '@rawback/sdk'
 
@@ -43,6 +41,8 @@ type DevicePollResponse =
 const DEVICE_SESSION_CREATE_ATTEMPTS = 3
 const DEVICE_SESSION_CREATE_RETRY_DELAYS = [1_000, 2_000] as const
 const MAX_RETRY_AFTER_MILLISECONDS = 10_000
+const operatingSystem = () => process.platform
+const systemArchitecture = () => process.arch
 
 export interface AuthPrompts {
   confirm(message: string): Promise<boolean>

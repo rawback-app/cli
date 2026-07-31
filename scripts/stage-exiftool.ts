@@ -1,8 +1,6 @@
 import { cp, mkdir, rm } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
-const require = createRequire(import.meta.url)
 const outputRoot = join(import.meta.dir, '..', '.release-artifacts', 'exiftool')
 
 async function installFor(os: NodeJS.Platform, cpu: 'arm64' | 'x64'): Promise<void> {
@@ -14,13 +12,16 @@ async function installFor(os: NodeJS.Platform, cpu: 'arm64' | 'x64'): Promise<vo
 }
 
 async function stagePackage(packageName: string, platforms: string[], executable: string) {
-  const source = String(require(packageName))
+  const source: unknown = (await import(packageName)).default
+  if (typeof source !== 'string') {
+    throw new Error(`${packageName} did not resolve to an executable path`)
+  }
   for (const platform of platforms) {
     const destination = join(outputRoot, platform)
     await mkdir(destination, { recursive: true })
     await cp(dirname(source), destination, { recursive: true })
     if (source !== join(dirname(source), executable)) {
-      await cp(source, join(destination, executable))
+      await Bun.write(join(destination, executable), Bun.file(source))
     }
   }
 }

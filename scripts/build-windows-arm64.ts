@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -29,8 +29,8 @@ try {
     throw new Error('Failed to build the Windows arm64 executable')
   }
 
-  const executable = await readFile(executablePath)
-  const exiftool = await readFile(exiftoolPath)
+  const executable = await Bun.file(executablePath).bytes()
+  const exiftool = await Bun.file(exiftoolPath).bytes()
   const archive = zipSync(
     {
       'rawback.exe': executable,
@@ -39,7 +39,6 @@ try {
     { level: 9 },
   )
 
-  await mkdir(artifactDirectory, { recursive: true })
   await Bun.write(archivePath, archive)
   console.log(`Created ${archivePath}`)
 } finally {

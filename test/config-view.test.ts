@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -33,7 +33,7 @@ describe('config view', () => {
       '  password: secret-password',
       '',
     ].join('\n')
-    await writeFile(configPath, source)
+    await Bun.write(configPath, source)
     const lines: string[] = []
 
     await runConfigView({}, { configPath, stdout: (message) => lines.push(message) })
@@ -42,12 +42,12 @@ describe('config view', () => {
     expect(lines.join('\n')).toContain('futureSetting: enabled')
     expect(lines.join('\n')).toContain('[REDACTED]')
     expect(lines.join('\n')).not.toContain('secret-password')
-    expect(await readFile(configPath, 'utf8')).toBe(source)
+    expect(await Bun.file(configPath).text()).toBe(source)
   })
 
   test('emits only redacted JSON including unknown keys', async () => {
     const configPath = await temporaryConfigPath()
-    await writeFile(
+    await Bun.write(
       configPath,
       'webHost: https://rawback.test\nfutureSetting: enabled\nsftp:\n  password: secret\n',
     )
@@ -72,7 +72,7 @@ describe('config view', () => {
     await runConfigView({ json: true }, { configPath, stdout: (message) => json.push(message) })
     expect(JSON.parse(json.join('\n'))).toEqual({})
 
-    await writeFile(configPath, '')
+    await Bun.write(configPath, '')
     const empty: string[] = []
     await runConfigView({}, { configPath, stdout: (message) => empty.push(message) })
     expect(empty.join('\n')).toContain('{}')
@@ -80,7 +80,7 @@ describe('config view', () => {
 
   test('rejects invalid YAML without printing its contents', async () => {
     const configPath = await temporaryConfigPath()
-    await writeFile(configPath, 'sftp:\n  password: secret\napiHost: [')
+    await Bun.write(configPath, 'sftp:\n  password: secret\napiHost: [')
 
     await expect(runConfigView({}, { configPath })).rejects.toThrow('invalid YAML')
     await expect(runConfigView({}, { configPath })).rejects.not.toThrow('secret')

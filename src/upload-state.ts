@@ -1,5 +1,4 @@
 import { Database } from 'bun:sqlite'
-import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -116,7 +115,7 @@ export class UploadState {
   static async openReadonly(path = DEFAULT_UPLOAD_STATE_PATH): Promise<UploadState | null> {
     if (path === DEFAULT_UPLOAD_STATE_PATH) await migrateLegacySqlite(new UploadStateStore(path))
     try {
-      await stat(path)
+      await Bun.file(path).stat()
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw error
@@ -334,7 +333,7 @@ async function migrateLegacySqlite(
   const current = await store.read()
   if (current.migratedFrom?.includes('rawback-cli-sqlite-v1')) return
   try {
-    await stat(legacyPath)
+    await Bun.file(legacyPath).stat()
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
     throw error
