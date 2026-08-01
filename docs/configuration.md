@@ -138,12 +138,15 @@ Before connecting, the CLI verifies:
 - A remote photo is skipped only when its filename and EXIF capture time both match.
 - The pending bytes fit in the account's remaining storage quota.
 
-Capture metadata is extracted locally with the bundled ExifTool runtime. Files
-without usable capture metadata upload normally. If local extraction or the API
-duplicate query is unavailable, the check fails open and the SFTP service remains
-the authoritative duplicate guard. When the selected tree contains multiple
-files with the same filename and capture time, only the first is queued; files
-that merely share a basename are kept.
+Capture metadata is extracted locally with the bundled ExifTool runtime. The
+extractor automatically chooses up to twice the available CPU parallelism while
+accounting for free and total memory, without treating reclaimable system cache
+as unavailable RAM. Automatic concurrency has a ceiling of 64 worker processes.
+Files without usable capture metadata upload normally. If local extraction or
+the API duplicate query is unavailable, the check fails open and the SFTP
+service remains the authoritative duplicate guard. When the selected tree
+contains multiple files with the same filename and capture time, only the first
+is queued; files that merely share a basename are kept.
 
 Supported image extensions are `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.tif`,
 `.tiff`, `.heic`, `.heif`, `.bmp`, and `.avif`. Supported RAW extensions are
