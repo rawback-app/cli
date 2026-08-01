@@ -415,8 +415,10 @@ function transportOptions(
   preflightResult: UploadPreflight,
   state: UploadState,
   configured: SftpConfig,
+  channelCount: number,
 ): SftpClientOptions {
   return {
+    channelCount,
     endpoint: preflightResult.endpoint,
     username: preflightResult.username,
     password: preflightResult.password,
@@ -514,7 +516,14 @@ export async function runUpload(
         options.concurrency,
       )
       const factory = dependencies.transportFactory ?? createSftpClient
-      transport = factory(transportOptions(preflightResult, state, config.sftp ?? {}))
+      transport = factory(
+        transportOptions(
+          preflightResult,
+          state,
+          config.sftp ?? {},
+          Math.min(options.concurrency, pending.length),
+        ),
+      )
       await retryConnect(transport, dependencies)
 
       let remaining = pending

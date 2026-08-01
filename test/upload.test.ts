@@ -234,7 +234,7 @@ describe('upload path scanning', () => {
 })
 
 describe('upload command', () => {
-  test('uploads in parallel over one connection and resumes completed files', async () => {
+  test('sizes the SFTP channel pool to pending work and resumes completed files', async () => {
     const directory = await temporaryDirectory()
     const configPath = await writeConfig(directory)
     const statePath = join(directory, 'progress.sqlite')
@@ -252,13 +252,14 @@ describe('upload command', () => {
       transportFactory: factoryFor(transport, captured),
     }
 
-    await runUpload({ concurrency: 3, dryRun: false, path: directory }, dependencies)
+    await runUpload({ concurrency: 8, dryRun: false, path: directory }, dependencies)
 
     expect(transport.connected).toBe(1)
     expect(transport.maxActive).toBeGreaterThan(1)
     expect(transport.uploads.sort()).toEqual(['one.jpg', 'three.nef', 'two.png'])
     expect(captured).toHaveLength(1)
     expect(captured[0]).toMatchObject({
+      channelCount: 3,
       endpoint: 'sftp://ftp.rawback.app:2222',
       identity: { source: 'cli', version: expect.any(String) },
       password: 'upload-secret',
@@ -266,7 +267,7 @@ describe('upload command', () => {
     })
     expect(lines.at(-1)).toContain('Failed       0')
 
-    await runUpload({ concurrency: 3, dryRun: false, path: directory }, dependencies)
+    await runUpload({ concurrency: 8, dryRun: false, path: directory }, dependencies)
     expect(transport.uploads).toHaveLength(3)
     expect(lines.at(-1)).toContain('Nothing to upload')
   })
