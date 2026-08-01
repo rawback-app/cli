@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.6](https://github.com/rawback-app/cli/compare/v1.0.5...v1.0.6) (2026-08-01)
+
+
+### Features
+
+* add local photo duplicate check ([f105fd5](https://github.com/rawback-app/cli/commit/f105fd50ffba9e7d77ca64272c8817502880682b))
+* add local photo duplicate check ([6826f9d](https://github.com/rawback-app/cli/commit/6826f9d3e5aa1ad44784b8d772a9ade731b67796))
+
+
+### Miscellaneous
+
+* **deps:** update sdk to 0.2.1 ([78b12fa](https://github.com/rawback-app/cli/commit/78b12fa8492cb4b884c4d26c6713032154799b44))
+* **deps:** update sdk to 0.2.1 ([b37c427](https://github.com/rawback-app/cli/commit/b37c42708a50c4a3a88ce955e5d77dd79a15ef9c))
+* ignore generated GraphQL files ([13bc091](https://github.com/rawback-app/cli/commit/13bc0917fa2ea7ab725001d04402b30732c192df))
+
 ## [1.0.5](https://github.com/rawback-app/cli/compare/v1.0.4...v1.0.5) (2026-08-01)
 
 
