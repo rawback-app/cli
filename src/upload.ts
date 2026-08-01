@@ -16,6 +16,7 @@ import { DEFAULT_CONFIG_PATH, readConfig, type SftpConfig } from './config.ts'
 import { DEFAULT_CREDENTIALS_PATH } from './credentials.ts'
 import { UploadProgressController } from './features/upload/progress.tsx'
 import { uploadDryRunDocument, uploadSummaryDocument } from './features/upload/view.ts'
+import { CLIENT_SOURCE, CLIENT_VERSION } from './http.ts'
 import {
   createSftpClient,
   isConnectionFailure,
@@ -407,7 +408,10 @@ function transportOptions(
     username: preflightResult.username,
     password: preflightResult.password,
     knownHosts: state,
+    identity: { source: CLIENT_SOURCE, version: CLIENT_VERSION },
     ...(configured.hostFingerprint ? { hostFingerprint: configured.hostFingerprint } : {}),
+  } as SftpClientOptions & {
+    identity: { source: typeof CLIENT_SOURCE; version: string }
   }
 }
 

@@ -255,6 +255,7 @@ describe('upload command', () => {
     expect(captured).toHaveLength(1)
     expect(captured[0]).toMatchObject({
       endpoint: 'sftp://ftp.rawback.app:2222',
+      identity: { source: 'cli', version: expect.any(String) },
       password: 'upload-secret',
       username: 'annatarhe',
     })
