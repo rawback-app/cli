@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { UploadIdentityExtractor } from '@rawback/sdk'
 
 import type { RawbackClient } from '../src/client.ts'
+import type { PhotoCheckProgress } from '../src/features/photos/check-progress.tsx'
 import {
   runPhotoCheck,
   type PhotoCheckDependencies,
@@ -181,6 +182,49 @@ describe('photos check', () => {
     expect(lines[0]).toContain('2')
   })
 
+  test('reports scanning, metadata, and Rawback progress without affecting JSON', async () => {
+    const directory = await temporaryDirectory()
+    for (const filename of ['first.jpg', 'notes.txt', 'second.jpg', 'unchecked.jpg']) {
+      await Bun.write(join(directory, filename), filename)
+    }
+    const client = fakeClient(() => ({ data: { existingUploadIdentities: [] } }))
+    const identityExtractor: UploadIdentityExtractor = async (candidates, options) => {
+      options?.onProgress?.(1, candidates.length)
+      options?.onProgress?.(2, candidates.length)
+      return {
+        identities: candidates.slice(0, 2).map((candidate) => ({ ...candidate, capturedAt })),
+        failedClientKeys: [],
+        uncheckedClientKeys: [candidates[2]!.clientKey],
+      }
+    }
+    const lines: string[] = []
+    const progress: Array<PhotoCheckProgress | null> = []
+
+    await expect(
+      runPhotoCheck(
+        { json: true, path: directory },
+        {
+          ...jsonDependencies(client, identityExtractor, lines),
+          onProgress: (next) => progress.push(next),
+        },
+      ),
+    ).rejects.toThrow('1 local photo could not be checked')
+
+    expect(lines).toHaveLength(1)
+    expect(progress).toContainEqual({ stage: 'scanning', completed: 4 })
+    expect(progress).toContainEqual({ stage: 'metadata', completed: 1, total: 3 })
+    expect(progress).toContainEqual({ stage: 'metadata', completed: 3, total: 3 })
+    expect(progress).toContainEqual({ stage: 'checking', completed: 1, total: 3 })
+    expect(progress).toContainEqual({ stage: 'checking', completed: 3, total: 3 })
+    expect(
+      progress
+        .filter((entry): entry is PhotoCheckProgress => entry !== null)
+        .map(({ stage }) => stage)
+        .filter((stage, index, stages) => stage !== stages[index - 1]),
+    ).toEqual(['scanning', 'metadata', 'checking'])
+    expect(progress.at(-1)).toBeNull()
+  })
+
   test('uses 500-file batches and retains successful results after a batch failure', async () => {
     const directory = await temporaryDirectory()
     await Promise.all(
@@ -200,11 +244,15 @@ describe('photos check', () => {
       uncheckedClientKeys: [],
     })
     const lines: string[] = []
+    const progress: Array<PhotoCheckProgress | null> = []
 
     await expect(
       runPhotoCheck(
         { json: true, path: directory },
-        jsonDependencies(client, identityExtractor, lines),
+        {
+          ...jsonDependencies(client, identityExtractor, lines),
+          onProgress: (next) => progress.push(next),
+        },
       ),
     ).rejects.toThrow('1 local photo could not be checked')
 
@@ -216,6 +264,8 @@ describe('photos check', () => {
       reason: 'remote-check-failed',
       status: 'unknown',
     })
+    expect(progress).toContainEqual({ stage: 'checking', completed: 501, total: 501 })
+    expect(progress.at(-1)).toBeNull()
   })
 
   test('reports a global metadata extraction failure without making an API request', async () => {

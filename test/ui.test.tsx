@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { renderToString } from 'ink'
 
 import { helpDocument } from '../src/features/cli/help.ts'
+import { PhotoCheckProgressView } from '../src/features/photos/check-progress.tsx'
 import {
   UploadProgressView,
   type UploadProgressSnapshot,
@@ -142,5 +143,36 @@ describe('Ink output', () => {
     expect(rendered).toContain('250 Bytes/s')
     expect(rendered).toContain('ETA 2s')
     expect(rendered).toContain('photo.jpg')
+  })
+
+  test('renders indeterminate scanning and determinate photo-check progress', () => {
+    const scanning = renderToString(
+      <PhotoCheckProgressView
+        frame={0}
+        progress={{ stage: 'scanning', completed: 1_250 }}
+        terminalWidth={80}
+      />,
+      { columns: 80 },
+    )
+    const metadata = renderToString(
+      <PhotoCheckProgressView
+        frame={0}
+        progress={{ stage: 'metadata', completed: 250, total: 1_000 }}
+        terminalWidth={80}
+      />,
+      { columns: 80 },
+    )
+    const checking = renderToString(
+      <PhotoCheckProgressView
+        frame={0}
+        progress={{ stage: 'checking', completed: 500, total: 1_000 }}
+        terminalWidth={80}
+      />,
+      { columns: 80 },
+    )
+
+    expect(scanning).toContain('Scanning files — 1,250 scanned')
+    expect(metadata).toContain('Reading photo metadata — 250 of 1,000 (25%)')
+    expect(checking).toContain('Checking Rawback — 500 of 1,000 (50%)')
   })
 })

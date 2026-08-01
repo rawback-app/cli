@@ -199,10 +199,15 @@ describe('upload path scanning', () => {
     await Bun.write(join(directory, 'notes.txt'), 'ignored')
     await Bun.write(join(directory, 'nested', 'second.cr3'), 'two')
     await symlink(join(directory, 'first.JPG'), join(directory, 'linked.jpg'))
+    const scanned: number[] = []
 
-    const files = await scanUploadPath(directory)
+    const files = await scanUploadPath(directory, (completed) => {
+      scanned.push(completed)
+      if (completed === 1) throw new Error('observer failed')
+    })
 
     expect(files.map((file) => file.basename).sort()).toEqual(['first.JPG', 'second.cr3'])
+    expect(scanned).toEqual([1, 2, 3])
   })
 
   test('rejects paths that contain no supported files', async () => {
