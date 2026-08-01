@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.5](https://github.com/rawback-app/cli/compare/v1.0.4...v1.0.5) (2026-08-01)
+
+
+### Features
+
+* add identity-aware upload deduplication ([a6b9652](https://github.com/rawback-app/cli/commit/a6b96521788edc8555b028499f35966aad9da04d))
+* add identity-aware upload deduplication ([c97a6c7](https://github.com/rawback-app/cli/commit/c97a6c797e47b14325510848df1aefbaed8c6e96))
+* **uploads:** identify CLI SFTP sessions ([a1fb82a](https://github.com/rawback-app/cli/commit/a1fb82ab03fd8fb2a008e7da9a9358a984b5c154))
+* **uploads:** identify CLI SFTP sessions ([bcb4590](https://github.com/rawback-app/cli/commit/bcb45906b2ed919da05736115d32970cae7f4fd9))
+
+
+### Code Refactoring
+
+* prefer Bun native APIs ([a8a7da3](https://github.com/rawback-app/cli/commit/a8a7da3da18089e072635fde228b5a2fce9e4793))
+* prefer Bun native APIs ([c36ebba](https://github.com/rawback-app/cli/commit/c36ebba90eebe99e763c67574768d4b7abd05ae3))
+
+
+### Miscellaneous
+
+* **deps:** update SDK to 0.1.2 ([2abb69b](https://github.com/rawback-app/cli/commit/2abb69b743c2d8db764c2480b9015d035a36a3d5))
+* **deps:** update SDK to 0.1.2 ([f4c7e67](https://github.com/rawback-app/cli/commit/f4c7e67b9c49094e6ba893736b1bc24c80a5aa69))
+* **deps:** update SDK to 0.2.0 ([93cc4cc](https://github.com/rawback-app/cli/commit/93cc4ccffb3a32ad6962f066b4313c2ece08f92d))
+* **deps:** update SDK to 0.2.0 ([70369db](https://github.com/rawback-app/cli/commit/70369db49747f5eb1e6f73072a15681789634448))
+
 ## [1.0.4](https://github.com/rawback-app/cli/compare/v1.0.3...v1.0.4) (2026-07-30)
 
 
