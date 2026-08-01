@@ -160,6 +160,10 @@ Present files include the matching Rawback image ID. JSON output contains a
 `files` array and `summary` counts; unavailable image IDs and reasons are
 represented by `null`.
 
+Interactive terminals show staged progress for file scanning, metadata reading,
+and the Rawback check. Redirected output remains line-oriented, and `--json`
+prints only the machine-readable report.
+
 Matching uses the exact upload identity shared with Rawback Desktop and the
 upload service: the local basename plus its EXIF capture time. It is not a
 byte-content comparison. A missing capture time, unreadable metadata, or failed

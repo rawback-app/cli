@@ -202,6 +202,9 @@ SRW, and X3F.
 Rawback, or unknown. Add `--json` for a machine-readable report. A file is an
 exact match when its filename and locally extracted EXIF capture time match an
 image in the authenticated library; this is not a byte-content comparison.
+In an interactive terminal, the command shows live progress while scanning
+files, reading photo metadata, and checking Rawback. Redirected and JSON output
+remain undecorated.
 
 For host-key pinning, resumable-upload behavior, and troubleshooting, see
 [Configuration and uploads](docs/configuration.md).

@@ -133,12 +133,24 @@ async function checkConfigPermissions(path: string): Promise<void> {
   }
 }
 
-export async function scanUploadPath(path: string): Promise<UploadFile[]> {
+export async function scanUploadPath(
+  path: string,
+  onScanned?: (completed: number) => void,
+): Promise<UploadFile[]> {
   const root = resolve(path)
   const rootInfo = await lstat(root)
   if (rootInfo.isSymbolicLink()) throw new Error(`Upload path must not be a symbolic link: ${path}`)
 
   const files: UploadFile[] = []
+  let scanned = 0
+  const reportScanned = () => {
+    scanned += 1
+    try {
+      onScanned?.(scanned)
+    } catch {
+      // Scanning progress is observational and must not interrupt file discovery.
+    }
+  }
   const addFile = async (filePath: string) => {
     const name = basename(filePath)
     const extensionIndex = name.lastIndexOf('.')
@@ -161,13 +173,24 @@ export async function scanUploadPath(path: string): Promise<UploadFile[]> {
       const entryPath = join(directory, entry.name)
       if (entry.isSymbolicLink()) continue
       if (entry.isDirectory()) await walk(entryPath)
-      else if (entry.isFile()) await addFile(entryPath)
+      else if (entry.isFile()) {
+        try {
+          await addFile(entryPath)
+        } finally {
+          reportScanned()
+        }
+      }
     }
   }
 
   if (rootInfo.isDirectory()) await walk(root)
-  else if (rootInfo.isFile()) await addFile(root)
-  else throw new Error(`Upload path is not a regular file or directory: ${path}`)
+  else if (rootInfo.isFile()) {
+    try {
+      await addFile(root)
+    } finally {
+      reportScanned()
+    }
+  } else throw new Error(`Upload path is not a regular file or directory: ${path}`)
 
   if (files.length === 0) {
     throw new Error(
