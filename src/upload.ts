@@ -410,8 +410,6 @@ function transportOptions(
     knownHosts: state,
     identity: { source: CLIENT_SOURCE, version: CLIENT_VERSION },
     ...(configured.hostFingerprint ? { hostFingerprint: configured.hostFingerprint } : {}),
-  } as SftpClientOptions & {
-    identity: { source: typeof CLIENT_SOURCE; version: string }
   }
 }
 
