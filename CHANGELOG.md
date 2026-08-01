@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.7](https://github.com/rawback-app/cli/compare/v1.0.6...v1.0.7) (2026-08-01)
+
+
+### Features
+
+* show progress for photo checks ([6564e44](https://github.com/rawback-app/cli/commit/6564e4496121db47117219dacd319a3c111749b2))
+
+
+### Performance Improvements
+
+* **uploads:** size SFTP channels from concurrency ([c2c14af](https://github.com/rawback-app/cli/commit/c2c14afc76ba340a396b7cbd2232b1f81167d47c))
+* **uploads:** size SFTP channels from concurrency ([d98682a](https://github.com/rawback-app/cli/commit/d98682ac74a2ef6d5c904f892278a3cd473fe750))
+
+
+### Documentation
+
+* **uploads:** document adaptive metadata extraction ([#40](https://github.com/rawback-app/cli/issues/40)) ([c0d820b](https://github.com/rawback-app/cli/commit/c0d820b0d1e569a9ec3226e39c988466b1d5536e))
+
+
+### Build System
+
+* **deps:** update rawback sdk to 0.2.2 ([9b04b5f](https://github.com/rawback-app/cli/commit/9b04b5fe0484b0e44990dd9c9441009e391c7db5))
+* **deps:** update rawback sdk to 0.2.2 ([9e47d6b](https://github.com/rawback-app/cli/commit/9e47d6b25a227562414277fd1496c520f9b84d20))
+* **deps:** update rawback sdk to 0.2.3 ([54c2430](https://github.com/rawback-app/cli/commit/54c2430b47089ffc64083096f634d127bc7e2e1e))
+* **deps:** update rawback sdk to 0.2.3 ([ca89a88](https://github.com/rawback-app/cli/commit/ca89a88fb35e00236e25c9785497b3f471a07c0b))
+
 ## [1.0.6](https://github.com/rawback-app/cli/compare/v1.0.5...v1.0.6) (2026-08-01)
 
 
