@@ -322,6 +322,32 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             },
           )
           .command(
+            'check',
+            'check which local photos are already in Rawback',
+            (check) =>
+              check
+                .option('path', {
+                  demandOption: true,
+                  describe: 'image/RAW file or directory to scan recursively',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runPhotoCheck } = await import('./photo-check.ts')
+              await runCommand(() =>
+                runPhotoCheck({
+                  json: args.json,
+                  path: args.path,
+                }),
+              )
+            },
+          )
+          .command(
             'upload',
             'upload photos and RAW files over SFTP',
             (upload) =>
@@ -363,7 +389,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
-          .demandCommand(1, 'Choose a photos command: list or upload')
+          .demandCommand(1, 'Choose a photos command: list, check, or upload')
           .strict(),
       () => {},
     )

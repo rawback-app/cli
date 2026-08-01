@@ -141,6 +141,35 @@ Photo statuses are `pending`, `processing`, `completed`, and `failed`.
 Minimum values cannot exceed their corresponding maximum values. Capture dates
 must form a valid chronological range.
 
+## `rawback photos check`
+
+Checks whether supported local photo and RAW files are already in the
+authenticated Rawback library:
+
+```bash
+rawback photos check --path <file-or-directory> [--json]
+```
+
+| Option          | Description                                              | Default |
+| --------------- | -------------------------------------------------------- | ------- |
+| `--path <path>` | Required image/RAW file or recursively scanned directory | —       |
+| `--json`        | Print a machine-readable result report                   | `false` |
+
+The command reports every discovered file as `present`, `absent`, or `unknown`.
+Present files include the matching Rawback image ID. JSON output contains a
+`files` array and `summary` counts; unavailable image IDs and reasons are
+represented by `null`.
+
+Matching uses the exact upload identity shared with Rawback Desktop and the
+upload service: the local basename plus its EXIF capture time. It is not a
+byte-content comparison. A missing capture time, unreadable metadata, or failed
+API batch produces an `unknown` result. The complete report is still printed,
+but the command exits nonzero when any result is unknown. Finding an existing
+photo is a normal successful result.
+
+Directories use the same supported extensions and symlink behavior as
+`photos upload`.
+
 ## `rawback photos upload`
 
 Uploads one supported image or RAW file, or recursively scans and uploads a
