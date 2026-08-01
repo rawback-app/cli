@@ -9,6 +9,7 @@ in a browser.
 
 - Upload a file or recursively upload a directory over SFTP.
 - Safely resume an interrupted upload and skip exact files already uploaded.
+- Check which local photo and RAW files are already in your Rawback library.
 - Search photos by metadata, capture date, rating, location, and GPS data.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
@@ -183,6 +184,7 @@ The viewer does not apply environment overrides or built-in defaults. It prints
 Preview an upload, then run it:
 
 ```bash
+rawback photos check --path ~/Pictures/Export
 rawback photos upload --path ~/Pictures/Export --dry-run
 rawback photos upload --path ~/Pictures/Export
 ```
@@ -195,6 +197,11 @@ Files without usable capture metadata continue through normal SFTP verification.
 Supported image formats are JPEG/JPG, PNG, WebP, GIF, TIFF, HEIC/HEIF, BMP, and
 AVIF. Supported RAW formats are CR2, CR3, NEF, ARW, DNG, RAF, ORF, PEF, RW2,
 SRW, and X3F.
+
+`photos check` reports every supported local file as already in Rawback, not in
+Rawback, or unknown. Add `--json` for a machine-readable report. A file is an
+exact match when its filename and locally extracted EXIF capture time match an
+image in the authenticated library; this is not a byte-content comparison.
 
 For host-key pinning, resumable-upload behavior, and troubleshooting, see
 [Configuration and uploads](docs/configuration.md).

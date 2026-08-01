@@ -141,6 +141,26 @@ describe('rawback CLI', () => {
   })
 })
 
+describe('rawback photos check CLI', () => {
+  test('documents check options', () => {
+    const result = runCli('photos', 'check', '--help')
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toContain('already in Rawback')
+    expect(result.stdout).toContain('--path')
+    expect(result.stdout).toContain('image/RAW file')
+    expect(result.stdout).toContain('--json')
+  })
+
+  test('requires a check path before reading local files', () => {
+    const result = runCli('photos', 'check')
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('Missing required argument: path')
+  })
+})
+
 describe('rawback photos upload CLI', () => {
   test('documents upload options', () => {
     const result = runCli('photos', 'upload', '--help')

@@ -1,5 +1,5 @@
 import { lstat, readdir, realpath } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 import {
   ExistingUploadIdentitiesDocument,
@@ -25,6 +25,7 @@ import {
   type UploadTransportFactory,
 } from './sftp-client.ts'
 import { formatBytes } from './ui/format.ts'
+import { findBundledExiftoolPath } from './upload-identity.ts'
 import { DEFAULT_UPLOAD_STATE_PATH, UploadState, type UploadStateFile } from './upload-state.ts'
 
 export const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
@@ -265,22 +266,11 @@ async function remoteIdentities(
   return result
 }
 
-async function adjacentExiftoolPath(): Promise<string | undefined> {
-  const executable = process.platform === 'win32' ? 'exiftool.exe' : 'exiftool'
-  const candidates = [process.execPath, await realpath(process.execPath)].map((path) =>
-    join(dirname(path), 'exiftool', executable),
-  )
-  for (const candidate of candidates) {
-    if (await Bun.file(candidate).exists()) return candidate
-  }
-  return undefined
-}
-
 async function identifyFiles(
   files: UploadFile[],
   dependencies: UploadCommandDependencies,
 ): Promise<UploadFile[]> {
-  const sidecarPath = await adjacentExiftoolPath()
+  const sidecarPath = await findBundledExiftoolPath()
   const extractor =
     dependencies.identityExtractor ??
     ((candidates) =>
