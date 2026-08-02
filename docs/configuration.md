@@ -16,6 +16,11 @@ apiHost: https://api.rawback.app
 # Optional. Used by `rawback web`; defaults to https://rawback.app
 webHost: https://rawback.app
 
+# Optional. Exact local metadata worker count from 1 through 64.
+# Omit this block to size the worker pool automatically.
+metadata:
+  concurrency: 8
+
 # Required only by `rawback photos upload`
 sftp:
   endpoint: sftp://ftp.rawback.app:2222
@@ -54,6 +59,22 @@ chmod 600 ~/.rawback/config.yml
 `apiHost` is intended for development or self-hosted environments. Supplying an
 API host directly to the programmatic client factory takes precedence over the
 value in this file.
+
+### Metadata concurrency
+
+`metadata.concurrency` controls ExifTool workers used by `photos check` and the
+local duplicate-check stage of `photos upload`. When omitted, Rawback chooses a
+worker count from the number of files, available CPU parallelism, and free and
+total memory, with an automatic ceiling of 64 workers.
+
+An explicit value is used exactly, up to the number of files being examined, and
+bypasses the memory-aware choice. Higher values may improve large-folder review
+on a fast SSD, but they consume more CPU and memory and may reduce throughput on
+hard disks or network volumes. Start with automatic mode and change the value in
+small steps against representative files. Each CLI invocation rereads the file.
+
+This setting does not control file transfers. `photos upload --concurrency`
+continues to select 1 through 16 parallel SFTP transfers.
 
 ## Authentication files
 
@@ -120,7 +141,7 @@ Start the upload after reviewing the totals:
 rawback photos upload --path /path/to/photos --concurrency 4
 ```
 
-Concurrency defaults to `4` and accepts integers from `1` through `16`. All
+Transfer concurrency defaults to `4` and accepts integers from `1` through `16`. All
 
 While an upload is running in an interactive terminal, the CLI shows aggregate
 bytes and files, transfer speed, ETA, and up to four active filenames. When
@@ -138,10 +159,11 @@ Before connecting, the CLI verifies:
 - A remote photo is skipped only when its filename and EXIF capture time both match.
 - The pending bytes fit in the account's remaining storage quota.
 
-Capture metadata is extracted locally with the bundled ExifTool runtime. The
-extractor automatically chooses up to twice the available CPU parallelism while
-accounting for free and total memory, without treating reclaimable system cache
-as unavailable RAM. Automatic concurrency has a ceiling of 64 worker processes.
+Capture metadata is extracted locally with the bundled ExifTool runtime. Unless
+`metadata.concurrency` is configured, the extractor automatically chooses up to
+twice the available CPU parallelism while accounting for free and total memory,
+without treating reclaimable system cache as unavailable RAM. Automatic
+concurrency has a ceiling of 64 worker processes.
 Files without usable capture metadata upload normally. If local extraction or
 the API duplicate query is unavailable, the check fails open and the SFTP
 service remains the authoritative duplicate guard. When the selected tree

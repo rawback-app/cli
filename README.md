@@ -181,6 +181,18 @@ rawback config view --json
 The viewer does not apply environment overrides or built-in defaults. It prints
 `[REDACTED]` in place of the stored SFTP password.
 
+Local metadata parsing is sized automatically from the machine's CPU and memory.
+To test an exact worker count, add an integer from 1 through 64; omit this block
+to keep the recommended automatic behavior:
+
+```yaml
+metadata:
+  concurrency: 8
+```
+
+This setting affects `photos check` and the metadata stage of `photos upload`.
+The upload command's `--concurrency` option controls SFTP transfers separately.
+
 Preview an upload, then run it:
 
 ```bash
@@ -279,7 +291,7 @@ Rawback stores local state under `~/.rawback/`:
 | File                | Purpose                                             |
 | ------------------- | --------------------------------------------------- |
 | `credentials.json`  | Access and refresh tokens created by `rawback auth` |
-| `config.yml`        | Optional API/web hosts and SFTP upload settings     |
+| `config.yml`        | Optional hosts, metadata workers, and SFTP settings |
 | `upload-state.json` | Shared upload queue, history, and trusted host keys |
 
 The CLI creates credential and upload-state files with restrictive permissions

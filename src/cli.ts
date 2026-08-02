@@ -359,7 +359,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 })
                 .option('concurrency', {
                   default: 4,
-                  describe: 'number of parallel uploads',
+                  describe: 'number of parallel SFTP transfers',
                   type: 'number',
                 })
                 .option('dry-run', {

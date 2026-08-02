@@ -7,6 +7,7 @@ export {
   FileConfigStore,
   readConfig,
   type ConfigView,
+  type MetadataConfig,
   type RawbackConfig,
   type SftpConfig,
 } from '@rawback/sdk'

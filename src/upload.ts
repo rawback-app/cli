@@ -292,12 +292,10 @@ async function remoteIdentities(
 async function identifyFiles(
   files: UploadFile[],
   dependencies: UploadCommandDependencies,
+  metadataConcurrency?: number,
 ): Promise<UploadFile[]> {
   const sidecarPath = await findBundledExiftoolPath()
-  const extractor =
-    dependencies.identityExtractor ??
-    ((candidates) =>
-      extractUploadIdentities(candidates, sidecarPath ? { exiftoolPath: sidecarPath } : {}))
+  const extractor = dependencies.identityExtractor ?? extractUploadIdentities
   const keyed = files.map((file) => ({ file, clientKey: crypto.randomUUID() }))
   try {
     const extracted = await extractor(
@@ -306,6 +304,10 @@ async function identifyFiles(
         originalFilename: file.basename,
         path: file.path,
       })),
+      {
+        ...(metadataConcurrency !== undefined ? { concurrency: metadataConcurrency } : {}),
+        ...(sidecarPath ? { exiftoolPath: sidecarPath } : {}),
+      },
     )
     if (extracted.failedClientKeys.length > 0) {
       commandOutput(dependencies).warning(
@@ -444,7 +446,7 @@ export async function runUpload(
 
   try {
     const identified = collapseLocalIdentities(
-      await identifyFiles(preflightResult.files, dependencies),
+      await identifyFiles(preflightResult.files, dependencies, config.metadata?.concurrency),
     )
     const locallyCompleted = new Set(
       state

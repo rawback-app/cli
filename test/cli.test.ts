@@ -170,6 +170,7 @@ describe('rawback photos upload CLI', () => {
     expect(result.stdout).toContain('--path')
     expect(result.stdout).toContain('image/RAW file')
     expect(result.stdout).toContain('--concurrency')
+    expect(result.stdout).toContain('parallel SFTP transfers')
     expect(result.stdout).toContain('--dry-run')
   })
 

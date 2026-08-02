@@ -199,6 +199,9 @@ export async function runPhotoCheck(
           path: file.path,
         })),
         {
+          ...(client.config.metadata?.concurrency !== undefined
+            ? { concurrency: client.config.metadata.concurrency }
+            : {}),
           ...(sidecarPath ? { exiftoolPath: sidecarPath } : {}),
           onProgress: (completed, total) => reportProgress({ stage: 'metadata', completed, total }),
         },
