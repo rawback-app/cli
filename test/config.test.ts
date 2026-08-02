@@ -39,6 +39,25 @@ describe('config', () => {
     })
   })
 
+  test('loads a bounded metadata concurrency override', async () => {
+    const path = await temporaryConfigPath()
+    await Bun.write(path, 'metadata:\n  concurrency: 12\n')
+
+    expect(await readConfig(path)).toEqual({ metadata: { concurrency: 12 } })
+  })
+
+  test.each([
+    ['metadata: value', 'YAML mapping'],
+    ['metadata:\n  concurrency: 0', 'at least 1'],
+    ['metadata:\n  concurrency: 65', 'at most 64'],
+    ['metadata:\n  concurrency: 1.5', 'integer'],
+  ])('rejects invalid metadata concurrency in %s', async (contents, expected) => {
+    const path = await temporaryConfigPath()
+    await Bun.write(path, `${contents}\n`)
+
+    await expect(readConfig(path)).rejects.toThrow(expected)
+  })
+
   test.each([
     ['invalid YAML', 'apiHost: [', 'invalid YAML'],
     ['a non-mapping document', '- value', 'YAML mapping'],

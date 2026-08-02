@@ -172,7 +172,9 @@ but the command exits nonzero when any result is unknown. Finding an existing
 photo is a normal successful result.
 
 Directories use the same supported extensions and symlink behavior as
-`photos upload`.
+`photos upload`. Metadata workers use the shared `metadata.concurrency` setting
+when configured and otherwise use automatic CPU- and memory-aware sizing; see
+[Configuration and uploads](configuration.md#metadata-concurrency).
 
 ## `rawback photos upload`
 
@@ -186,7 +188,7 @@ rawback photos upload --path <file-or-directory> [options]
 | Option                   | Description                                                 | Default |
 | ------------------------ | ----------------------------------------------------------- | ------- |
 | `--path <path>`          | Required image/RAW file or recursively scanned directory    | —       |
-| `--concurrency <number>` | Parallel uploads; integer from 1 through 16                 | `4`     |
+| `--concurrency <number>` | Parallel SFTP transfers; integer from 1 through 16          | `4`     |
 | `--dry-run`              | Report pending/skipped files, bytes, and estimated duration | `false` |
 
 Upload setup and safety behavior are covered in
@@ -194,6 +196,8 @@ Upload setup and safety behavior are covered in
 during directory scans; the command fails if the selected path contains no
 supported files. Exact duplicates use the filename plus the locally extracted
 EXIF capture time; duplicate-check failures do not block the SFTP upload.
+Local EXIF workers are controlled separately by `metadata.concurrency` in the
+shared configuration file.
 
 ## `rawback dream`
 

@@ -188,7 +188,10 @@ describe('photos check', () => {
       await Bun.write(join(directory, filename), filename)
     }
     const client = fakeClient(() => ({ data: { existingUploadIdentities: [] } }))
+    client.config.metadata = { concurrency: 7 }
+    let receivedConcurrency: number | undefined
     const identityExtractor: UploadIdentityExtractor = async (candidates, options) => {
+      receivedConcurrency = options?.concurrency
       options?.onProgress?.(1, candidates.length)
       options?.onProgress?.(2, candidates.length)
       return {
@@ -211,6 +214,7 @@ describe('photos check', () => {
     ).rejects.toThrow('1 local photo could not be checked')
 
     expect(lines).toHaveLength(1)
+    expect(receivedConcurrency).toBe(7)
     expect(progress).toContainEqual({ stage: 'scanning', completed: 4 })
     expect(progress).toContainEqual({ stage: 'metadata', completed: 1, total: 3 })
     expect(progress).toContainEqual({ stage: 'metadata', completed: 3, total: 3 })

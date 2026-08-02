@@ -54,11 +54,18 @@ afterEach(async () => {
   )
 })
 
-async function writeConfig(directory: string, username = 'annatarhe'): Promise<string> {
+async function writeConfig(
+  directory: string,
+  username = 'annatarhe',
+  metadataConcurrency?: number,
+): Promise<string> {
   const path = join(directory, 'config.yml')
   await Bun.write(
     path,
     [
+      ...(metadataConcurrency === undefined
+        ? []
+        : ['metadata:', `  concurrency: ${metadataConcurrency}`]),
       'sftp:',
       '  endpoint: sftp://ftp.rawback.app:2222',
       `  username: ${username}`,
@@ -298,6 +305,34 @@ describe('upload command', () => {
     expect(lines[0]).toContain('Remote          1')
     expect(lines[0]).toContain('10 Mbps fallback')
     await expect(Bun.file(statePath).stat()).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('uses configured metadata concurrency during upload review', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory, 'annatarhe', 12)
+    await Bun.write(join(directory, 'photo.jpg'), 'photo')
+    let receivedConcurrency: number | undefined
+    const configuredExtractor: UploadIdentityExtractor = async (candidates, options) => {
+      receivedConcurrency = options?.concurrency
+      return {
+        identities: candidates.map((candidate) => ({ ...candidate, capturedAt })),
+        uncheckedClientKeys: [],
+        failedClientKeys: [],
+      }
+    }
+
+    await runUpload(
+      { concurrency: 4, dryRun: true, path: directory },
+      {
+        client: fakeClient(),
+        configPath,
+        identityExtractor: configuredExtractor,
+        statePath: join(directory, 'missing-state.json'),
+        stdout: () => undefined,
+      },
+    )
+
+    expect(receivedConcurrency).toBe(12)
   })
 
   test('collapses local exact identities and fails open when the API check fails', async () => {

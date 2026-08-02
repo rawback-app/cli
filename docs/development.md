@@ -90,6 +90,10 @@ as `@rawback/sdk`. Make shared contract changes there first, run `pnpm check`,
 then update the pinned SDK version in this repository. The CLI should retain
 only Bun/Yargs/Ink behavior and thin compatibility adapters.
 
+The SDK validates `metadata.concurrency` and owns the automatic CPU/memory worker
+policy. CLI upload and photo-check adapters only forward the parsed setting; do
+not duplicate its range or resource calculation here.
+
 ## API clients
 
 Commands share `createRawbackClient` from `src/api.ts`. The factory reads
