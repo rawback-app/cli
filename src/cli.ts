@@ -1,7 +1,7 @@
 import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
-import { traceIdOf } from './http.ts'
+import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
 
 /**
