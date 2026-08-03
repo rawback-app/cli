@@ -6,7 +6,7 @@
       "name": "@rawback/cli",
       "dependencies": {
         "@inquirer/prompts": "^8.5.2",
-        "@rawback/sdk": "0.2.4",
+        "@rawback/sdk": "0.2.5",
         "ink": "^7.1.0",
         "react": "^19.2.0",
         "react-devtools-core": "^7.0.1",
@@ -156,7 +156,7 @@
 
     "@photostructure/tz-lookup": ["@photostructure/tz-lookup@11.6.0", "", {}, "sha512-AHXaBp/bY9nd2pyGi7ldtzXYEZ3ARf7p4EG0XsizmmCxLYMbq+yITj7Z1etO29BiA3YW7aqrcrfToDcBD0grbA=="],
 
-    "@rawback/sdk": ["@rawback/sdk@0.2.4", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "exiftool-vendored": "37.0.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-MMU/lncIWT/F98Lb67K+X4H/C1BC7uslyTuryokUFGpVsj+qu2w6Ve1S8FtGzCmRWGky2alEwwzZC2E1Xl9Qhw=="],
+    "@rawback/sdk": ["@rawback/sdk@0.2.5", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "exiftool-vendored": "37.0.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-65/prhBE2Y76aIJQJ9A166s2YOHPAKVILgaGWSr2t6eg3KO1rSbUhj7dcV3ncpuvxVyRRCA9WSq2MwDVj3L1Hw=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

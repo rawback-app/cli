@@ -221,6 +221,24 @@ remain undecorated.
 For host-key pinning, resumable-upload behavior, and troubleshooting, see
 [Configuration and uploads](docs/configuration.md).
 
+## Videos
+
+Videos upload directly to storage instead of over SFTP, so they do not share
+the photo upload pipeline:
+
+```bash
+rawback videos list
+rawback videos upload --file ~/Movies/hike.mp4
+rawback videos upload --file ~/Movies/hike.mp4 --thumbnail ~/Pictures/poster.jpg
+rawback videos update --id 7 --title "Hike, day two"
+rawback videos delete --id 7
+```
+
+Supported containers are MP4, M4V, MOV, WebM, MKV, AVI, MPEG, 3GP, and TS, up
+to 100 GB. The file is sent in parts to presigned URLs and read from disk on
+demand, so memory use stays flat regardless of file size. Pass `--thumbnail` to
+attach a poster frame; otherwise set one later from the web app.
+
 ## Common examples
 
 ```bash
