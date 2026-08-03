@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { writeFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { writeCredentials } from '../src/credentials.ts'
 import {
+  resolveThumbnailMimeType,
   resolveVideoMimeType,
   runVideoDelete,
   runVideoList,
@@ -231,5 +233,51 @@ describe('videos delete', () => {
     await runVideoDelete({ id: 7, json: true }, deps)
 
     expect(JSON.parse(lines.join(''))).toEqual({ deleted: true })
+  })
+})
+
+describe('resolveThumbnailMimeType', () => {
+  test('maps image extensions and rejects anything else', () => {
+    expect(resolveThumbnailMimeType('/tmp/a.jpg')).toBe('image/jpeg')
+    expect(resolveThumbnailMimeType('/tmp/a.PNG')).toBe('image/png')
+    expect(resolveThumbnailMimeType('/tmp/a.webp')).toBe('image/webp')
+    // Previously anything non-.png was labelled JPEG, and the server signs the
+    // content type into the presign, so the stored object rendered broken.
+    expect(() => resolveThumbnailMimeType('/tmp/a.gif')).toThrow(/Unsupported thumbnail/)
+  })
+})
+
+describe('videos upload short reads', () => {
+  test('fails loudly when the file shrinks mid-upload instead of padding zeroes', async () => {
+    const directory = await scratchDirectory()
+    const file = join(directory, 'clip.mp4')
+    // stat() sees 30 bytes, so the plan is 3 parts...
+    await writeFile(file, Buffer.alloc(30, 7))
+
+    const lines: string[] = []
+    const deps = await dependencies((url, init) => {
+      if (url.endsWith('/videos')) {
+        // ...but truncate the file before the parts are read.
+        return HttpResponse_init(url, init)
+      }
+      throw new Error(`unexpected request to ${url}`)
+    }, lines)
+
+    function HttpResponse_init(_url: string, _init: RequestInit | undefined) {
+      writeFileSync(file, Buffer.alloc(5, 7))
+      return Response.json({
+        code: 200,
+        data: {
+          videoId: 7,
+          s3Key: 'k',
+          partSizeBytes: 10,
+          partCount: 3,
+          contentType: 'video/mp4',
+        },
+        msg: '',
+      })
+    }
+
+    await expect(runVideoUpload({ file, json: true }, deps)).rejects.toThrow(/ended early/)
   })
 })

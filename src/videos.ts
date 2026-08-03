@@ -1,4 +1,4 @@
-import { open, stat } from 'node:fs/promises'
+import { open, readFile, stat } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 
 import {
@@ -35,6 +35,24 @@ const VIDEO_MIME_TYPES: Record<string, string> = {
   '.mpg': 'video/mpeg',
   '.3gp': 'video/3gpp',
   '.ts': 'video/mp2t',
+}
+
+/** The server signs the content type into the presign, so it must be right. */
+const THUMBNAIL_MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+}
+
+export function resolveThumbnailMimeType(filePath: string): string {
+  const mime = THUMBNAIL_MIME_TYPES[extname(filePath).toLowerCase()]
+  if (!mime) {
+    throw new Error(
+      `Unsupported thumbnail type for ${basename(filePath)}. Supported: ${Object.keys(THUMBNAIL_MIME_TYPES).join(', ')}`,
+    )
+  }
+  return mime
 }
 
 export function resolveVideoMimeType(filePath: string): string {
@@ -126,7 +144,10 @@ export async function runVideoUpload(
 
   const mimeType = resolveVideoMimeType(options.file)
   const client = await createCommandClient(dependencies)
-  const videos = new VideoService(client.http)
+  // Storage PUTs must carry no Rawback headers, so hand the service a bare
+  // fetch rather than relying on the session client happening not to inject
+  // any. Honour an injected fetch so tests can still intercept.
+  const videos = new VideoService(client.http, dependencies.fetch ?? globalThis.fetch)
 
   const handle = await open(options.file, 'r')
   try {
@@ -134,19 +155,33 @@ export async function runVideoUpload(
       `Uploading ${basename(options.file)}…`,
       async () => {
         // Parts are read on demand so a very large video is never held in
-        // memory all at once.
+        // memory all at once. A positional read can come back short, so keep
+        // reading until the part is full — otherwise the unfilled tail is
+        // zeroes and would upload as silently corrupt data.
         const readPart = async (_partNumber: number, start: number, end: number) => {
           const buffer = new Uint8Array(end - start)
-          await handle.read(buffer, 0, buffer.byteLength, start)
+          let filled = 0
+          while (filled < buffer.byteLength) {
+            const { bytesRead } = await handle.read(
+              buffer,
+              filled,
+              buffer.byteLength - filled,
+              start + filled,
+            )
+            if (bytesRead === 0) {
+              throw new Error(`${basename(options.file)} ended early; it changed while uploading`)
+            }
+            filled += bytesRead
+          }
           return buffer
         }
 
         const thumbnail = options.thumbnail
           ? {
-              body: new Uint8Array(await (await open(options.thumbnail, 'r')).readFile()),
-              mimeType: options.thumbnail.toLowerCase().endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg',
+              // readFile rather than open(): the handle from open() was never
+              // closed and leaked a descriptor.
+              body: new Uint8Array(await readFile(options.thumbnail)),
+              mimeType: resolveThumbnailMimeType(options.thumbnail),
             }
           : undefined
 
