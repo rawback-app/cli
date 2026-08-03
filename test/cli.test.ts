@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
+import { RawbackHttpError } from '@rawback/sdk'
+
 import packageJson from '../package.json' with { type: 'json' }
+import { describeError } from '../src/cli.ts'
 
 const entrypoint = new URL('../src/index.ts', import.meta.url).pathname
 
@@ -138,6 +141,33 @@ describe('rawback CLI', () => {
     expect(result.stdout).toBe('')
     expect(result.stderr).toContain('cred add does not accept an ID or --force')
     expect(result.stderr).not.toContain('unauthorized')
+  })
+})
+
+describe('describeError', () => {
+  test('appends the trace ID of a failed request', () => {
+    const error = new RawbackHttpError(
+      500,
+      'https://api.rawback.app/api/v1/photos',
+      new Headers({ 'x-trace-id': '0af7651916cd43dd8448eb211c80319c' }),
+      { code: 500, msg: 'upload failed' },
+    )
+    expect(describeError(error)).toBe('upload failed Trace ID: 0af7651916cd43dd8448eb211c80319c.')
+  })
+
+  test('does not repeat a trace ID the message already carries', () => {
+    const error = new RawbackHttpError(
+      503,
+      'https://api.rawback.app/api/v1/photos',
+      new Headers({ 'x-trace-id': 'abc123' }),
+      { code: 503, msg: 'failed. Trace ID: abc123.' },
+    )
+    expect(describeError(error)).toBe('failed. Trace ID: abc123.')
+  })
+
+  test('passes through errors without a trace ID', () => {
+    expect(describeError(new Error('plain failure'))).toBe('plain failure')
+    expect(describeError('not an error')).toBe('not an error')
   })
 })
 

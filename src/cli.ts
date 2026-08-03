@@ -1,7 +1,20 @@
 import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
+import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
+
+/**
+ * Appends the trace ID of a failed request so the user can quote it — the same
+ * ID identifies the request in the server's traces. Messages that already
+ * embed it (the device authorization errors) are left alone.
+ */
+export function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const traceID = traceIdOf(error)
+  if (!traceID || message.includes(traceID)) return message
+  return `${message} Trace ID: ${traceID}.`
+}
 
 async function runCommand(
   action: () => Promise<void>,
@@ -16,7 +29,7 @@ async function runCommand(
       process.exitCode = 130
       return
     }
-    output.error(error instanceof Error ? error.message : String(error))
+    output.error(describeError(error))
     process.exitCode = 1
   }
 }
@@ -1610,7 +1623,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
     )
     .strict()
     .fail((message, error) => {
-      output.error(error?.message ?? message, "Run 'rawback --help' for usage.")
+      output.error(error ? describeError(error) : message, "Run 'rawback --help' for usage.")
       process.exitCode = 1
     })
 }

@@ -39,6 +39,8 @@ export class HttpClient extends SdkHttpClient {
   }
 }
 
+export { TRACE_ID_HEADER, traceIdOf } from './trace.ts'
+
 export {
   JsonResponseError,
   RawbackHttpError,
