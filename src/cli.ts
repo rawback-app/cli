@@ -394,6 +394,140 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       () => {},
     )
     .command(
+      'videos',
+      'list, upload, and manage videos',
+      (command) =>
+        command
+          .command(
+            'list',
+            'list videos in the authenticated library',
+            (list) =>
+              list
+                .option('page', {
+                  default: 1,
+                  describe: 'page number',
+                  type: 'number',
+                })
+                .option('page-size', {
+                  default: 24,
+                  describe: 'items per page (1-100)',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoList } = await import('./videos.ts')
+              await runCommand(() =>
+                runVideoList({
+                  json: args.json,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                }),
+              )
+            },
+          )
+          .command(
+            'upload',
+            'upload a video directly to storage',
+            (upload) =>
+              upload
+                .option('file', {
+                  demandOption: true,
+                  describe: 'video file to upload',
+                  type: 'string',
+                })
+                .option('thumbnail', {
+                  describe: 'JPEG or PNG to use as the poster frame',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoUpload } = await import('./videos.ts')
+              await runCommand(() =>
+                runVideoUpload({
+                  file: args.file,
+                  json: args.json,
+                  ...(args.thumbnail !== undefined ? { thumbnail: args.thumbnail } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'update',
+            'change a video title or description',
+            (update) =>
+              update
+                .option('id', {
+                  demandOption: true,
+                  describe: 'video id',
+                  type: 'number',
+                })
+                .option('title', {
+                  describe: 'new title',
+                  type: 'string',
+                })
+                .option('description', {
+                  describe: 'new description',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoUpdate } = await import('./videos.ts')
+              await runCommand(() =>
+                runVideoUpdate({
+                  id: args.id,
+                  json: args.json,
+                  ...(args.title !== undefined ? { title: args.title } : {}),
+                  ...(args.description !== undefined ? { description: args.description } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'delete',
+            'delete a video and release its storage',
+            (remove) =>
+              remove
+                .option('id', {
+                  demandOption: true,
+                  describe: 'video id',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoDelete } = await import('./videos.ts')
+              await runCommand(() =>
+                runVideoDelete({
+                  id: args.id,
+                  json: args.json,
+                }),
+              )
+            },
+          )
+          .demandCommand(1, 'Choose a videos command: list, upload, update, or delete')
+          .strict(),
+      () => {},
+    )
+    .command(
       'dream',
       'list, inspect, and retry daily photo recaps',
       (command) =>

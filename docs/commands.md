@@ -199,6 +199,60 @@ EXIF capture time; duplicate-check failures do not block the SFTP upload.
 Local EXIF workers are controlled separately by `metadata.concurrency` in the
 shared configuration file.
 
+## `rawback videos`
+
+Lists, uploads, and manages videos. Videos upload directly to storage rather
+than over SFTP: the CLI asks the API for a multipart plan, PUTs each part to a
+presigned URL, and then confirms so the record is saved. Parts are read from
+disk on demand, so a very large file is never held in memory.
+
+### `videos list`
+
+```bash
+rawback videos list [options]
+```
+
+| Option                 | Description                   | Default |
+| ---------------------- | ----------------------------- | ------- |
+| `--page <number>`      | Page number                   | `1`     |
+| `--page-size <number>` | Items per page, 1 through 100 | `24`    |
+| `--json`               | Output machine-readable JSON  | `false` |
+
+### `videos upload`
+
+```bash
+rawback videos upload --file <path> [options]
+```
+
+| Option               | Description                               | Default |
+| -------------------- | ----------------------------------------- | ------- |
+| `--file <path>`      | Required video file to upload             | —       |
+| `--thumbnail <path>` | JPEG or PNG to attach as the poster frame | —       |
+| `--json`             | Output machine-readable JSON              | `false` |
+
+Supported containers are `.mp4`, `.m4v`, `.mov`, `.webm`, `.mkv`, `.avi`,
+`.mpeg`/`.mpg`, `.3gp`, and `.ts`, up to 100 GB. The CLI does not extract a
+poster frame itself; pass `--thumbnail` to attach one, or set it later from the
+web app.
+
+### `videos update`
+
+```bash
+rawback videos update --id <id> [--title <title>] [--description <text>]
+```
+
+At least one of `--title` or `--description` is required. Passing an empty
+description clears it.
+
+### `videos delete`
+
+```bash
+rawback videos delete --id <id>
+```
+
+Deletes the video and its poster frame and releases the storage against the
+account quota. This cannot be undone.
+
 ## `rawback dream`
 
 Lists, inspects, and retries daily AI-generated photo recaps. Lists contain
