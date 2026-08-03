@@ -39,6 +39,18 @@ export class HttpClient extends SdkHttpClient {
   }
 }
 
+/** Header the API echoes with the trace ID identifying the request server-side. */
+export const TRACE_ID_HEADER = 'x-trace-id'
+
+/**
+ * Reads the trace ID off a failed request so it can be shown to the user. The
+ * same ID identifies the request in the server's traces.
+ */
+export function traceIdOf(error: unknown): string | undefined {
+  if (!(error instanceof RawbackHttpError)) return undefined
+  return error.headers.get(TRACE_ID_HEADER)?.trim() || undefined
+}
+
 export {
   JsonResponseError,
   RawbackHttpError,

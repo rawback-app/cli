@@ -12,7 +12,7 @@ import {
   writeCredentials,
 } from './credentials.ts'
 import { authStatusDocument } from './features/auth/view.ts'
-import { type ApiEnvelope, HttpError, JsonResponseError } from './http.ts'
+import { type ApiEnvelope, HttpError, JsonResponseError, traceIdOf } from './http.ts'
 import { browserCommand, defaultOpen } from './web.ts'
 
 interface LoginUser {
@@ -254,7 +254,7 @@ function retryAfterMilliseconds(error: unknown, fallback: number, now: () => num
 }
 
 function exhaustedDeviceSessionError(error: unknown): Error {
-  const traceID = error instanceof HttpError ? error.headers.get('x-trace-id')?.trim() : undefined
+  const traceID = traceIdOf(error)
   const traceSuffix = traceID ? ` Trace ID: ${traceID}.` : ''
 
   if (error instanceof HttpError) {
@@ -273,7 +273,7 @@ function exhaustedDeviceSessionError(error: unknown): Error {
 
 function exhaustedDevicePollError(error: unknown): Error {
   const detail = error instanceof Error && error.message ? error.message : String(error)
-  const traceID = error instanceof HttpError ? error.headers.get('x-trace-id')?.trim() : undefined
+  const traceID = traceIdOf(error)
   const traceSuffix = traceID ? ` Trace ID: ${traceID}.` : ''
   return new Error(
     `Device authorization could not be completed before the session expired: ${detail}${traceSuffix}`,
