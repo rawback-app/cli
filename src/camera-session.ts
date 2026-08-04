@@ -102,7 +102,10 @@ export async function resolveCameraTarget(
   dependencies: CameraCommandDependencies = {},
 ): Promise<ResolvedTarget> {
   const store = cameraStore(dependencies)
-  const named = options.url ?? options.camera ?? (dependencies.env ?? process.env)[CAMERA_URL_ENV]
+  // An exported-but-empty `RAWBACK_CAMERA_URL=` is a common shell-profile
+  // shape and means "unset", not "connect to the empty string".
+  const fromEnv = (dependencies.env ?? process.env)[CAMERA_URL_ENV]?.trim()
+  const named = options.url ?? options.camera ?? (fromEnv !== '' ? fromEnv : undefined)
 
   if (named === undefined) {
     const saved = await store.defaultCamera()

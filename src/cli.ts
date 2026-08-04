@@ -34,6 +34,62 @@ async function runCommand(
   }
 }
 
+/**
+ * Options every camera subcommand accepts. Declared once so the target can be
+ * named the same way everywhere.
+ */
+function cameraTargetOptions<T>(command: Argv<T>) {
+  return command
+    .option('camera', {
+      describe: 'camera URL, e.g. http://user:password@192.168.0.1:8080',
+      type: 'string',
+    })
+    .option('insecure', {
+      default: false,
+      describe: "accept the camera's self-signed TLS certificate",
+      type: 'boolean',
+    })
+    .option('timeout', {
+      default: 12000,
+      describe: 'per-request timeout in milliseconds (0 disables it)',
+      type: 'number',
+    })
+    .option('refresh', {
+      default: false,
+      describe: 're-read the camera capability map instead of using the cached one',
+      type: 'boolean',
+    })
+}
+
+/**
+ * Validates the shared camera options before any network or filesystem access,
+ * so a malformed target fails fast rather than after a connection attempt.
+ */
+function checkCameraTarget(args: {
+  camera?: string | undefined
+  insecure?: boolean | undefined
+  timeout?: number | undefined
+}): true {
+  if (args.camera !== undefined) {
+    let url: URL
+    try {
+      url = new URL(args.camera)
+    } catch {
+      throw new Error('--camera must be a URL like http://user:password@192.168.0.1:8080')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('--camera must use http:// or https://')
+    }
+    if (args.insecure === true && url.protocol === 'http:') {
+      throw new Error('--insecure only applies to an https:// camera')
+    }
+  }
+  if (args.timeout !== undefined && (!Number.isSafeInteger(args.timeout) || args.timeout < 0)) {
+    throw new Error('--timeout must be a non-negative whole number of milliseconds')
+  }
+  return true
+}
+
 function albumMetadataOptions<T>(command: Argv<T>) {
   return command
     .option('description', {
@@ -1586,6 +1642,196 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
         const { runPricing } = await import('./pricing.ts')
         await runCommand(() => runPricing({ interval: args.interval, json: args.json }))
       },
+    )
+    .command(
+      'camera',
+      'control a Canon camera over CCAPI',
+      (command) =>
+        command
+          .command(
+            'connect [url]',
+            'connect to a camera and save it',
+            (connect) =>
+              cameraTargetOptions(connect)
+                .positional('url', {
+                  describe: 'camera URL, e.g. http://user:password@192.168.0.1:8080',
+                  type: 'string',
+                })
+                .option('name', {
+                  describe: 'label for the saved camera (defaults to the model name)',
+                  type: 'string',
+                })
+                .option('save-password', {
+                  default: false,
+                  describe: 'store the CCAPI password in ~/.rawback/cameras.json',
+                  type: 'boolean',
+                })
+                .option('default', {
+                  default: true,
+                  describe: 'target this camera when no --camera is given',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.url !== undefined && args.camera !== undefined) {
+                    throw new Error('rawback camera connect takes a URL or --camera, not both')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraConnect } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraConnect({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    savePassword: args.savePassword,
+                    makeDefault: args.default,
+                    ...(args.url !== undefined ? { url: args.url } : {}),
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                    ...(args.name !== undefined ? { name: args.name } : {}),
+                  }),
+                'Camera connection cancelled.',
+              )
+            },
+          )
+          .command(
+            'list',
+            'list saved cameras',
+            (list) =>
+              list.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraList } = await import('./camera.ts')
+              await runCommand(
+                () => runCameraList({ json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'use <id>',
+            'target a saved camera by default',
+            (use) =>
+              use
+                .positional('id', { describe: 'saved camera ID (host:port)', type: 'string' })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraUse } = await import('./camera.ts')
+              await runCommand(
+                () => runCameraUse({ id: args.id as string, json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'forget <id>',
+            'remove a saved camera',
+            (forget) =>
+              forget
+                .positional('id', { describe: 'saved camera ID (host:port)', type: 'string' })
+                .option('force', {
+                  default: false,
+                  describe: 'remove without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  if (!args.force && !process.stdin.isTTY) {
+                    throw new Error(
+                      'rawback camera forget needs an interactive terminal unless --force is provided',
+                    )
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraForget } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraForget({ id: args.id as string, force: args.force, json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'info',
+            'show camera model, firmware, lens, and storage',
+            (info) =>
+              cameraTargetOptions(info)
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraInfo } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraInfo({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'status',
+            'show battery, temperature, storage, and remaining capacity',
+            (status) =>
+              cameraTargetOptions(status)
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraStatus } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraStatus({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .demandCommand(1, 'Choose a camera command: connect, list, use, forget, info, or status')
+          .strict(),
+      () => {},
     )
     .command(
       'config',
