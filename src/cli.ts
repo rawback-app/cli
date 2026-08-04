@@ -2388,9 +2388,31 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
+          .command(
+            ['interactive', 'tui'],
+            'browse and run endpoints in a full-screen explorer',
+            (interactive) =>
+              cameraTargetOptions(interactive).check((args) => {
+                checkCameraTarget(args)
+                if (!process.stdin.isTTY || !process.stdout.isTTY) {
+                  throw new Error(
+                    'rawback camera interactive needs an interactive terminal; use rawback camera api in a script',
+                  )
+                }
+                return true
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraInteractive } = await import('./camera-interactive.ts')
+              await runCommand(
+                () => runCameraInteractive(cameraTargetArgs(args)),
+                'Explorer closed.',
+              )
+            },
+          )
           .demandCommand(
             1,
-            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, events, or api',
+            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, events, api, or interactive',
           )
           .strict(),
       () => {},
