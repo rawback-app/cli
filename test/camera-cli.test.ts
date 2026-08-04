@@ -149,3 +149,30 @@ describe('local camera commands work with no camera present', () => {
     expect(result.stderr).not.toContain('Authentication credentials')
   })
 })
+
+describe('module boundaries', () => {
+  const source = (path: string) =>
+    Bun.file(new URL(`../src/${path}`, import.meta.url).pathname).text()
+
+  test('cli.ts never imports the camera client', async () => {
+    // The camera group must be declarations plus a lazy import, or every
+    // `rawback --help` would pay to load @rawback/ccapi-js.
+    expect(await source('cli.ts')).not.toContain('@rawback/ccapi-js')
+  })
+
+  test('camera modules never import the Rawback SDK', async () => {
+    const glob = new Bun.Glob('camera*.ts')
+    const root = new URL('../src/', import.meta.url).pathname
+    for await (const file of glob.scan({ cwd: root })) {
+      expect(await source(file), file).not.toContain('@rawback/sdk')
+    }
+  })
+
+  test('camera --help does not load the camera client', async () => {
+    // A proxy for the startup-path rule: help must render without the dynamic
+    // import chain ever being taken.
+    const result = await runCli('camera', '--help')
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+  })
+})

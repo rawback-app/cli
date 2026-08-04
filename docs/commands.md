@@ -99,6 +99,188 @@ rawback cred delete <id> [--force] [--json]
 
 `--force` skips confirmation and is required for non-interactive deletion.
 
+## `rawback camera`
+
+Controls a Canon camera over CCAPI, where the camera is the HTTP server. Enable
+CCAPI in the camera's Wi-Fi menu before the first connection.
+
+```bash
+rawback camera <command> [options]
+```
+
+### Camera targets
+
+Every camera command resolves its target in this order:
+
+1. the `connect` positional URL
+2. `--camera <url>`
+3. the `RAWBACK_CAMERA_URL` environment variable (an empty value counts as unset)
+4. the saved default in `~/.rawback/cameras.json`
+
+| Option           | Purpose                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `--camera <url>` | `http://user:password@192.168.0.1:8080`. A password containing `@` or `:` must be percent-encoded (`%40`, `%3A`).      |
+| `--insecure`     | Accept the camera's self-signed TLS certificate. Only valid for an `https://` target, and remembered per saved camera. |
+| `--timeout <ms>` | Per-request deadline, default `12000`. `0` disables it.                                                                |
+| `--refresh`      | Ignore the cached capability map and re-read it from the camera.                                                       |
+| `--json`         | Machine-readable output.                                                                                               |
+
+Connecting reads the camera's capability map and caches it, so later commands
+skip four round-trips. The cache is keyed on firmware and serial: swap a
+different body onto the same address and it is replaced automatically.
+
+### `camera connect`
+
+```bash
+rawback camera connect [url] [--name <label>] [--save-password] [--no-default] [--json]
+```
+
+Verifies the camera, saves it, and makes it the default target. `--save-password`
+writes the CCAPI password to `~/.rawback/cameras.json` in plain text; without it
+only the user name is stored.
+
+### `camera list`, `camera use`, `camera forget`
+
+```bash
+rawback camera list [--json]
+rawback camera use <id> [--json]
+rawback camera forget <id> [--force] [--json]
+```
+
+These read and write the saved-camera file only, so they work with no camera
+present. `list` never prints a password. `forget` asks for confirmation unless
+`--force` is given.
+
+### `camera info`, `camera status`
+
+```bash
+rawback camera info [--json]
+rawback camera status [--json]
+```
+
+`info` reports model, firmware, serial, lens, and storage. `status` reports
+battery, temperature, current storage and directory, and remaining capacity.
+Anything the camera does not advertise comes back as `null` and is named in the
+`unsupported` array rather than failing the command.
+
+### `camera shoot`
+
+```bash
+rawback camera shoot [--af|--no-af] [--manual <half_press|full_press|release>] [--force] [--json]
+```
+
+Releases the shutter. Accumulated events are cleared first, so `addedContents`
+in the response names the file this command produced. Confirms first unless
+`--force`; `--json` requires `--force`, because a script cannot answer a prompt.
+
+### `camera settings`
+
+```bash
+rawback camera settings list [--json]
+rawback camera settings get <name> [--json]
+rawback camera settings set <name> <value> [--int] [--force] [--json]
+```
+
+`get` returns `value` plus either `ability` (a list of choices) or `range`
+(`min`, `max`, `step`). Settings whose ability is a range — the colour
+temperatures, focus-bracketing shot count and increment, and sound-recording
+levels — are read as ranges automatically, so a locked setting reports `null`
+rather than `0`. `set` writes the value and reads back what the camera accepted.
+
+### `camera contents`
+
+```bash
+rawback camera contents storages [--json]
+rawback camera contents dirs <storage> [--json]
+rawback camera contents list <storage> <directory> [--type <t>] [--order <asc|desc>] [--page <n>] [--all] [--json]
+rawback camera contents info <locator> [--json]
+rawback camera contents get <locator> --output <path> [--kind <main|thumbnail|display|embedded>] [--overwrite] [--json]
+rawback camera contents delete <locator> [--force] [--json]
+```
+
+A **locator** is the string the camera returns from `contents list`; pass it back
+verbatim. Newer bodies insert an extra path segment, which the CLI handles for
+you.
+
+`get` streams to disk rather than buffering, so a RAW file costs no memory. Point
+`--output` at a directory to keep the camera's own filename. An existing file is
+never replaced without `--overwrite`. `--all` streams every page instead of one.
+
+### `camera liveview`
+
+```bash
+rawback camera liveview start [--size <off|small|medium>] [--display <on|keep|off>] [--force] [--json]
+rawback camera liveview frame <output> [--json]
+rawback camera liveview stream --output-dir <dir> [--frames <n>] [--duration <s>] [--json]
+rawback camera liveview stop [--json]
+```
+
+`stream` runs until Ctrl-C, `--frames`, or `--duration`, writing numbered JPEGs.
+`--output-dir -` writes raw JPEG bytes to stdout instead and cannot be combined
+with `--json`. `stop` releases every live-view resource and is safe to run when
+the camera is already idle — it is the recovery command after a killed stream.
+
+### `camera events`
+
+```bash
+rawback camera events poll [--wait] [--timeout-kind <short|long>] [--json]
+rawback camera events watch [--count <n>] [--duration <s>] [--json]
+rawback camera events clear [--force] [--json]
+```
+
+`watch` streams changes until Ctrl-C, `--count`, or `--duration`. Every event
+carries `changedKeys`, which lists every key the camera reported, including ones
+the client does not model.
+
+### `camera api`
+
+```bash
+rawback camera api --list [--namespace <ns>] [--mutating] [--json]
+rawback camera api <id> [--arg key=value ...] [--describe] [--force] [--json]
+```
+
+Reaches every catalogued CCAPI endpoint by ID, including ones without a dedicated
+command. `--arg` is repeatable and is validated against the endpoint's declared
+parameters before any connection is attempted. `--describe` prints an endpoint
+without calling the camera. Endpoints that change the camera need `--force` in a
+script.
+
+Binary endpoints are not in this catalogue; use `camera contents get`,
+`camera liveview frame`, and `camera liveview stream` instead.
+
+### `camera interactive`
+
+```bash
+rawback camera interactive
+```
+
+A full-screen explorer over the same catalogue: `↑`/`↓` to move, `enter` to run,
+`/` to filter, `[`/`]` to scroll a long result, `q` to quit. Requires a terminal;
+use `camera api` in scripts. Aliased as `camera tui`.
+
+### Long-running camera commands
+
+`camera liveview stream` and `camera events watch` emit **NDJSON** under `--json`
+— one object per frame or event, then a final summary object such as
+`{"stopped":true,"frames":183,"seconds":30.2,"reason":"signal"}`. This is a
+deliberate exception to the single-document rule, because buffering an unbounded
+stream would defeat the purpose; the summary is how a consumer distinguishes a
+clean end from a truncated one.
+
+The first Ctrl-C stops the stream, releases the camera, and exits `0` — a
+user-requested stop is a success. A second Ctrl-C exits `130` without waiting for
+the release, and names the command that will clear it.
+
+### Camera troubleshooting
+
+| Message                                              | Cause                                                                                                             |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `The camera ... refused the connection`              | A camera serves one client at a time. Close the Canon app, Rawback Desktop, or a browser tab holding the session. |
+| `The camera rejected those credentials`              | The CCAPI user name or password does not match the camera's menu.                                                 |
+| `CCAPI is not enabled on this camera`                | Enable CCAPI in the camera menu, then run `rawback camera connect` again.                                         |
+| `This camera does not advertise "<endpoint>"`        | The body or firmware does not support it. `rawback camera api --list` shows what it does.                         |
+| `The camera's TLS certificate could not be verified` | Expected for a Canon body over HTTPS. Re-run with `--insecure`.                                                   |
+
 ## `rawback photos list`
 
 Lists the authenticated photo library as a table, or as a `photos` and

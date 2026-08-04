@@ -99,6 +99,87 @@ again:
 rawback auth --force
 ```
 
+## Camera connections
+
+`rawback camera connect` records the camera in `~/.rawback/cameras.json`. **The
+Rawback desktop app reads and writes the same file**, so pairing in one places
+the camera in the other's list too.
+
+```jsonc
+{
+  "version": 1,
+  "default": "192.168.0.1:8080",
+  "cameras": [
+    {
+      "id": "192.168.0.1:8080",
+      "host": "192.168.0.1",
+      "port": 8080,
+      "useTLS": false,
+      "name": "Canon EOS R6m2",
+      "username": "ccapi",
+      "lastUsedAt": "2026-08-04T09:00:00.000Z",
+    },
+  ],
+}
+```
+
+The file is written atomically at mode `0600`, inside a `0700` directory, and is
+capped at twenty cameras with the least recently used dropped first. Fields the
+CLI does not recognise are preserved, so an older build cannot discard what a
+newer one saved.
+
+### Camera passwords
+
+A CCAPI password is stored **only** when you pass `--save-password`:
+
+```bash
+rawback camera connect 'http://ccapi:secret@192.168.0.1:8080' --save-password
+```
+
+It is then held in plain text, exactly as `config.yml` holds `sftp.password`.
+Sharing the file with the desktop app rules out encrypting it, because the
+desktop's OS-keychain encryption is not readable from a CLI. Camera commands
+reject the file if group or others can read it while it holds a password:
+
+```bash
+chmod 600 ~/.rawback/cameras.json
+```
+
+Without `--save-password` the entry keeps only the user name, and the password
+comes from the URL, from `RAWBACK_CAMERA_URL`, or from a prompt.
+
+`rawback camera list` never prints a password, in either output format. Remove a
+camera and its saved password with `rawback camera forget <id>`.
+
+### Capability cache
+
+CCAPI requires a discovery step before any endpoint call, and a fresh process
+would otherwise repeat it every time. Each saved camera therefore carries a
+cached capability map under `discovery`, keyed on the camera's firmware version
+and serial number.
+
+The cache is re-read when it is more than seven days old, when `--refresh` is
+passed, or when the camera reports an endpoint it previously advertised as
+missing — so moving a different body onto the same address fixes itself. The
+Digest authentication handshake is deliberately _not_ cached across runs, because
+its nonce counter must not repeat, so each invocation pays one extra round-trip
+when the camera has authentication enabled.
+
+### Self-signed camera certificates
+
+Canon bodies serve HTTPS with a self-signed certificate. `rawback` verifies
+certificates by default and reports what to do when verification fails, rather
+than trusting silently:
+
+```bash
+rawback camera connect https://192.168.0.1 --insecure
+```
+
+The choice is remembered for that camera, and `rawback camera list` shows it.
+Requests are also pinned to the camera's hostname, so a relaxed certificate check
+cannot follow a redirect elsewhere. `--insecure` is rejected for an `http://`
+target, where there is no TLS to relax.
+
 ## SFTP credential setup
 
 SFTP credentials are separate from the tokens used for API authentication.
