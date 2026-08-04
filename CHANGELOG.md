@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.0.8](https://github.com/rawback-app/cli/compare/v1.0.7...v1.0.8) (2026-08-04)
+
+
+### Features
+
+* **config:** add metadata concurrency override ([72312e4](https://github.com/rawback-app/cli/commit/72312e4a311414add14049d6a45517d263c94d96))
+* **config:** add metadata concurrency override ([d3ccc20](https://github.com/rawback-app/cli/commit/d3ccc20901f39764b4f211e307b662308f686140))
+* **errors:** show the request trace ID on every command failure ([034b8aa](https://github.com/rawback-app/cli/commit/034b8aa01d13b9617fe5f8c6cf19b8840eb66695))
+* **errors:** show the request trace ID on every command failure ([a887699](https://github.com/rawback-app/cli/commit/a88769934b2100ebaba780b2beb81a2a98253002))
+* **videos:** add videos command ([4ba51e4](https://github.com/rawback-app/cli/commit/4ba51e42dd07584af9f34608677d7faeee45491f))
+* **videos:** add videos command ([de48bed](https://github.com/rawback-app/cli/commit/de48bed4fcc6615ff8891b1d4e64568826288cac))
+
+
+### Bug Fixes
+
+* **ci:** grant Claude workflows write access to PRs and issues ([3d1a094](https://github.com/rawback-app/cli/commit/3d1a094ef3c11eca7475d4a6828c907e05c46016))
+* **ci:** grant Claude workflows write access to PRs and issues ([5ac1947](https://github.com/rawback-app/cli/commit/5ac194708ac32702168d2c19f1b5eb0dd076b982))
+* **ci:** use /claude as the Claude Code workflow trigger ([3526ec4](https://github.com/rawback-app/cli/commit/3526ec432ab736cc01be7f24ec4053931dd15ff1))
+* **ci:** use /claude as the Claude Code workflow trigger ([2138e13](https://github.com/rawback-app/cli/commit/2138e13bfed409614ee2c3b33314428e91c3f380))
+* **deps:** pin the SDK version release-please actually publishes ([fac630a](https://github.com/rawback-app/cli/commit/fac630acf7f1613ea8621d7db6c0a0a8b90232c3))
+* **videos:** never upload zero-padded parts, and close the thumbnail handle ([3190938](https://github.com/rawback-app/cli/commit/319093820ca7bc70b1b9bbf85a522ec3e6229649))
+
+
+### Performance Improvements
+
+* **cli:** keep the SDK off the startup path ([ae94f82](https://github.com/rawback-app/cli/commit/ae94f822411823370905619f67d73d1e6867b9d2))
+
+
+### Miscellaneous
+
+* **deps:** install @rawback/sdk 0.2.5 ([8d530bf](https://github.com/rawback-app/cli/commit/8d530bfc2c8966e1a1a77ec5416913c6ad3bbdec))
+* **deps:** update @rawback/sdk to 0.2.6 ([c752b9e](https://github.com/rawback-app/cli/commit/c752b9e80b4a99afeb43b2b20e13c5b66f6c9818))
+* **deps:** update @rawback/sdk to 0.2.6 ([2f27a06](https://github.com/rawback-app/cli/commit/2f27a06713ee444466ac6e7222ad0488ef69acd0))
+
 ## [1.0.7](https://github.com/rawback-app/cli/compare/v1.0.6...v1.0.7) (2026-08-01)
 
 
