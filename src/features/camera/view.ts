@@ -367,6 +367,108 @@ function summarizeEventValue(value: unknown) {
   return String(value)
 }
 
+export interface ApiCatalogRow {
+  id: string
+  namespace: string
+  method: string
+  doc: string
+  params: string
+  mutates: boolean
+  unreliable: boolean
+}
+
+export function apiCatalogDocument(entries: ApiCatalogRow[]): UiDocument {
+  return {
+    title: `CCAPI endpoints (${entries.length})`,
+    blocks: [
+      {
+        type: 'table',
+        emptyMessage: 'No endpoints match that filter.',
+        columns: [
+          { key: 'id', label: 'ID', required: true, priority: 1 },
+          { key: 'method', label: 'Method', priority: 3 },
+          { key: 'doc', label: 'Doc', priority: 5 },
+          { key: 'params', label: 'Arguments', priority: 2, maxWidth: 44 },
+          { key: 'state', label: 'State', priority: 4 },
+        ],
+        rows: entries.map((entry) => ({
+          id: entry.id,
+          method: entry.method,
+          doc: entry.doc,
+          params: entry.params === '—' ? DASH : cell(entry.params, { dim: true }),
+          state: entry.unreliable
+            ? cell('unreliable', { tone: 'warning' })
+            : entry.mutates
+              ? cell('mutates', { tone: 'warning' })
+              : cell('read-only', { dim: true }),
+        })),
+      },
+      {
+        type: 'text',
+        text:
+          'Run one with rawback camera api <id> --arg key=value. Binary endpoints ' +
+          '(image data, live-view frames, certificates) are served by camera contents get, ' +
+          'camera liveview frame, and camera liveview stream instead.',
+        dim: true,
+      },
+    ],
+  }
+}
+
+export function apiResultDocument(
+  entry: {
+    id: string
+    doc: string
+    method: string
+    mutates: boolean
+    unreliable?: boolean
+    params: readonly { name: string; kind: string; required: boolean }[]
+  },
+  outcome: { result: unknown; ms: number } | undefined,
+): UiDocument {
+  const fields: UiField[] = [
+    { label: 'Endpoint', value: entry.id },
+    { label: 'Doc', value: entry.doc },
+    { label: 'Method', value: entry.method },
+    {
+      label: 'Changes camera',
+      value: entry.mutates ? cell('yes', { tone: 'warning' }) : cell('no', { dim: true }),
+    },
+  ]
+  if (entry.unreliable === true) {
+    fields.push({
+      label: 'Note',
+      value: cell('documented to misbehave on real hardware', { tone: 'warning' }),
+    })
+  }
+  if (entry.params.length > 0) {
+    fields.push({
+      label: 'Arguments',
+      value: entry.params
+        .map((param) => (param.required ? `${param.name}:${param.kind}` : `[${param.name}]`))
+        .join(' '),
+    })
+  }
+  if (outcome !== undefined) fields.push({ label: 'Took', value: `${outcome.ms}ms` })
+
+  return {
+    blocks: [
+      { type: 'fields', fields },
+      ...(outcome !== undefined
+        ? [
+            {
+              type: 'text' as const,
+              text:
+                outcome.result === undefined || outcome.result === null
+                  ? 'The camera returned no body (the call succeeded).'
+                  : JSON.stringify(outcome.result, null, 2),
+            },
+          ]
+        : []),
+    ],
+  }
+}
+
 export function pathListDocument(
   title: string,
   label: string,

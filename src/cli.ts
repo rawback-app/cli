@@ -2315,9 +2315,82 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               }
             },
           )
+          .command(
+            'api [id]',
+            'run any CCAPI endpoint by ID',
+            (endpoint) =>
+              cameraTargetOptions(endpoint)
+                .positional('id', {
+                  describe: 'endpoint ID, e.g. status.getBattery',
+                  type: 'string',
+                })
+                .option('list', {
+                  default: false,
+                  describe: 'list every endpoint instead of running one',
+                  type: 'boolean',
+                })
+                .option('namespace', { describe: 'filter --list by namespace', type: 'string' })
+                .option('mutating', {
+                  describe: 'filter --list to endpoints that do (or do not) change the camera',
+                  type: 'boolean',
+                })
+                .option('describe', {
+                  default: false,
+                  describe: 'show an endpoint without calling the camera',
+                  type: 'boolean',
+                })
+                .option('arg', {
+                  array: true,
+                  describe: 'endpoint argument as key=value (repeat for more)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'run a state-changing endpoint without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.list && args.id !== undefined) {
+                    throw new Error('rawback camera api takes an endpoint ID or --list, not both')
+                  }
+                  if (!args.list && args.id === undefined) {
+                    throw new Error('rawback camera api needs an endpoint ID, or --list')
+                  }
+                  for (const pair of args.arg ?? []) {
+                    if (!pair.includes('=')) {
+                      throw new Error(`--arg must be key=value; got ${JSON.stringify(pair)}`)
+                    }
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraApi } = await import('./camera-api.ts')
+              await runCommand(
+                () =>
+                  runCameraApi({
+                    ...cameraTargetArgs(args),
+                    list: args.list,
+                    describe: args.describe,
+                    force: args.force,
+                    ...(args.id !== undefined ? { id: args.id } : {}),
+                    ...(args.namespace !== undefined ? { namespace: args.namespace } : {}),
+                    ...(args.mutating !== undefined ? { mutating: args.mutating } : {}),
+                    ...(args.arg !== undefined ? { arg: args.arg } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
           .demandCommand(
             1,
-            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, or events',
+            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, events, or api',
           )
           .strict(),
       () => {},
