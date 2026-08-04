@@ -2135,9 +2135,189 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               }
             },
           )
+          .command(
+            'liveview <action> [output]',
+            'start, capture, stream, and stop live view',
+            (liveview) =>
+              cameraTargetOptions(liveview)
+                .positional('action', {
+                  choices: ['start', 'stop', 'frame', 'stream'] as const,
+                  describe: 'live view action',
+                  type: 'string',
+                })
+                .positional('output', {
+                  describe: 'destination file, for frame',
+                  type: 'string',
+                })
+                .option('size', {
+                  choices: ['off', 'small', 'medium'] as const,
+                  default: 'small',
+                  describe: 'live view image size',
+                  type: 'string',
+                })
+                .option('display', {
+                  choices: ['on', 'keep', 'off'] as const,
+                  default: 'keep',
+                  describe: "what the camera's own screen does",
+                  type: 'string',
+                })
+                .option('output-dir', {
+                  describe: 'directory for streamed frames, or - for stdout',
+                  type: 'string',
+                })
+                .option('frames', { describe: 'stop after this many frames', type: 'number' })
+                .option('duration', { describe: 'stop after this many seconds', type: 'number' })
+                .option('force', {
+                  default: false,
+                  describe: 'start without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'frame' && args.output === undefined) {
+                    throw new Error('rawback camera liveview frame requires an output file')
+                  }
+                  if (args.action === 'stream') {
+                    if (args.outputDir === undefined) {
+                      throw new Error(
+                        'rawback camera liveview stream requires --output-dir <dir> (or --output-dir - for stdout)',
+                      )
+                    }
+                    if (args.outputDir === '-' && args.json) {
+                      throw new Error(
+                        'rawback camera liveview stream --output-dir - writes raw JPEG to stdout and cannot also emit --json',
+                      )
+                    }
+                  }
+                  if (args.action === 'start') {
+                    return checkMutatingIsNonInteractive(args, 'rawback camera liveview start')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const liveview = await import('./camera-liveview.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'stop':
+                  await runCommand(() => liveview.runCameraLiveviewStop(target))
+                  return
+                case 'frame':
+                  await runCommand(() =>
+                    liveview.runCameraLiveviewFrame({
+                      ...target,
+                      output: args.output as string,
+                    }),
+                  )
+                  return
+                case 'stream':
+                  await runCommand(
+                    () =>
+                      liveview.runCameraLiveviewStream({
+                        ...target,
+                        size: args.size,
+                        display: args.display,
+                        outputDir: args.outputDir as string,
+                        ...(args.frames !== undefined ? { frames: args.frames } : {}),
+                        ...(args.duration !== undefined ? { duration: args.duration } : {}),
+                      }),
+                    'Live view stopped.',
+                  )
+                  return
+                default:
+                  await runCommand(
+                    () =>
+                      liveview.runCameraLiveviewStart({
+                        ...target,
+                        size: args.size,
+                        display: args.display,
+                        force: args.force,
+                      }),
+                    'Live view cancelled.',
+                  )
+              }
+            },
+          )
+          .command(
+            'events <action>',
+            'poll, watch, and clear camera events',
+            (events) =>
+              cameraTargetOptions(events)
+                .positional('action', {
+                  choices: ['poll', 'watch', 'clear'] as const,
+                  describe: 'event action',
+                  type: 'string',
+                })
+                .option('wait', {
+                  default: false,
+                  describe: 'hold the connection until something changes',
+                  type: 'boolean',
+                })
+                .option('timeout-kind', {
+                  choices: ['short', 'long'] as const,
+                  describe: 'how long the camera holds a waiting poll',
+                  type: 'string',
+                })
+                .option('count', { describe: 'stop after this many events', type: 'number' })
+                .option('duration', { describe: 'stop after this many seconds', type: 'number' })
+                .option('force', {
+                  default: false,
+                  describe: 'clear without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON (NDJSON for watch)',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'clear') {
+                    return checkMutatingIsNonInteractive(args, 'rawback camera events clear')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const events = await import('./camera-events.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'watch':
+                  await runCommand(
+                    () =>
+                      events.runCameraEventsWatch({
+                        ...target,
+                        ...(args.count !== undefined ? { count: args.count } : {}),
+                        ...(args.duration !== undefined ? { duration: args.duration } : {}),
+                      }),
+                    'Stopped watching.',
+                  )
+                  return
+                case 'clear':
+                  await runCommand(
+                    () => events.runCameraEventsClear({ ...target, force: args.force }),
+                    'Camera command cancelled.',
+                  )
+                  return
+                default:
+                  await runCommand(() =>
+                    events.runCameraEventsPoll({
+                      ...target,
+                      wait: args.wait,
+                      ...(args.timeoutKind !== undefined ? { timeoutKind: args.timeoutKind } : {}),
+                    }),
+                  )
+              }
+            },
+          )
           .demandCommand(
             1,
-            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, or contents',
+            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, or events',
           )
           .strict(),
       () => {},

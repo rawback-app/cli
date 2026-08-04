@@ -318,6 +318,55 @@ export function contentsListDocument(
   }
 }
 
+/**
+ * Renders whatever the camera reported changed. `changedKeys` is authoritative
+ * — it lists every raw key, including ones the typed decoder does not model —
+ * so it drives the table rather than the typed members.
+ */
+export interface EventView {
+  changedKeys: string[]
+  [key: string]: unknown
+}
+
+export function eventDocument(event: EventView): UiDocument {
+  if (event.changedKeys.length === 0) {
+    return { blocks: [{ type: 'notice', message: 'No change reported.', tone: 'neutral' }] }
+  }
+  return {
+    title: 'Camera event',
+    blocks: [
+      {
+        type: 'table',
+        emptyMessage: 'No change reported.',
+        columns: [
+          { key: 'key', label: 'Changed', required: true, priority: 1 },
+          { key: 'value', label: 'Value', required: true, priority: 2, maxWidth: 60 },
+        ],
+        rows: event.changedKeys.map((key) => ({
+          key,
+          value: summarizeEventValue(event[key] ?? event[toCamelCase(key)]),
+        })),
+      },
+    ],
+  }
+}
+
+function toCamelCase(key: string): string {
+  return key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase())
+}
+
+function summarizeEventValue(value: unknown) {
+  if (value === undefined || value === null) return DASH
+  if (typeof value === 'object' && 'value' in value) {
+    return String((value as { value: unknown }).value)
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? DASH : cell(value.map(String).join(', '), { dim: true })
+  }
+  if (typeof value === 'object') return cell(JSON.stringify(value), { dim: true })
+  return String(value)
+}
+
 export function pathListDocument(
   title: string,
   label: string,
