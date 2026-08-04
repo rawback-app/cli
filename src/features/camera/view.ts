@@ -210,6 +210,133 @@ function temperatureCell(temperature: string | undefined) {
   return cell(temperature, { tone: temperature === 'normal' ? 'success' : 'warning' })
 }
 
+export interface SettingRow {
+  name: string
+  value: string | null
+  ability: string[] | null
+}
+
+export function settingsListDocument(settings: SettingRow[]): UiDocument {
+  return {
+    title: 'Shooting settings',
+    blocks: [
+      {
+        type: 'table',
+        emptyMessage: 'The camera reported no shooting settings.',
+        columns: [
+          { key: 'name', label: 'Setting', required: true, priority: 1 },
+          { key: 'value', label: 'Value', required: true, priority: 1 },
+          { key: 'choices', label: 'Choices', priority: 4, maxWidth: 48 },
+        ],
+        rows: settings.map((setting) => ({
+          name: setting.name,
+          value: setting.value ?? DASH,
+          choices:
+            setting.ability && setting.ability.length > 0
+              ? cell(setting.ability.join(', '), { dim: true })
+              : DASH,
+        })),
+      },
+      {
+        type: 'text',
+        text: 'Change one with rawback camera settings set <name> <value>.',
+        dim: true,
+      },
+    ],
+  }
+}
+
+export interface SettingView {
+  name: string
+  value: string | number | null
+  ability: string[] | null
+  range: { min: number | null; max: number | null; step: number | null } | null
+}
+
+export function settingDocument(setting: SettingView): UiDocument {
+  const fields: UiField[] = [
+    { label: 'Setting', value: setting.name },
+    {
+      label: 'Value',
+      value: setting.value === null ? cell('locked', { tone: 'warning' }) : String(setting.value),
+    },
+  ]
+  if (setting.range) {
+    fields.push({
+      label: 'Range',
+      value:
+        setting.range.min === null
+          ? cell('locked', { tone: 'warning' })
+          : `${setting.range.min}–${setting.range.max} step ${setting.range.step}`,
+    })
+  }
+  if (setting.ability && setting.ability.length > 0) {
+    fields.push({ label: 'Choices', value: cell(setting.ability.join(', '), { dim: true }) })
+  }
+  return { blocks: [{ type: 'fields', fields }] }
+}
+
+export interface ContentsListRow {
+  locator: string
+  name: string
+}
+
+export function contentsListDocument(
+  rows: ContentsListRow[],
+  pagination?: { page: number; pageSize: number; totalCount?: number; totalPages?: number },
+): UiDocument {
+  return {
+    title: 'Contents',
+    blocks: [
+      {
+        type: 'table',
+        emptyMessage: 'No contents in that directory.',
+        columns: [
+          { key: 'name', label: 'File', required: true, priority: 1 },
+          { key: 'locator', label: 'Locator', required: true, priority: 2 },
+        ],
+        rows: rows.map((row) => ({ name: row.name, locator: cell(row.locator, { dim: true }) })),
+      },
+      ...(pagination
+        ? [
+            {
+              type: 'pagination' as const,
+              page: pagination.page,
+              pageSize: pagination.pageSize,
+              count: rows.length,
+              ...(pagination.totalCount !== undefined ? { totalCount: pagination.totalCount } : {}),
+              ...(pagination.totalPages !== undefined ? { totalPages: pagination.totalPages } : {}),
+            },
+          ]
+        : []),
+      {
+        type: 'text',
+        text: 'Download one with rawback camera contents get <locator> --output <file>.',
+        dim: true,
+      },
+    ],
+  }
+}
+
+export function pathListDocument(
+  title: string,
+  label: string,
+  paths: string[],
+  emptyMessage: string,
+): UiDocument {
+  return {
+    title,
+    blocks: [
+      {
+        type: 'table',
+        emptyMessage,
+        columns: [{ key: 'path', label, required: true, priority: 1 }],
+        rows: paths.map((path) => ({ path })),
+      },
+    ],
+  }
+}
+
 function formatSeconds(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60

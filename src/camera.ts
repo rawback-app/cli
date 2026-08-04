@@ -364,6 +364,68 @@ export async function runCameraStatus(
   })
 }
 
+export interface CameraShootOptions extends CameraTargetOptions {
+  af?: boolean
+  manual?: 'half_press' | 'full_press' | 'release'
+  force?: boolean
+}
+
+export async function runCameraShoot(
+  options: CameraShootOptions = {},
+  dependencies: CameraCommandDependencies = {},
+): Promise<void> {
+  const ui = commandOutput(dependencies)
+  const af = options.af !== false
+
+  if (options.force !== true) {
+    const confirmed = await cameraPrompts(dependencies).confirm(
+      options.manual !== undefined
+        ? `Drive the shutter button (${options.manual}) on the camera?`
+        : 'Release the shutter on the camera?',
+    )
+    if (!confirmed) {
+      if (options.json === true) ui.json({ released: false })
+      else ui.info('Did not touch the shutter.')
+      return
+    }
+  }
+
+  await withCameraSession(options, dependencies, async (session) => {
+    // Clear accumulated events first so addedContents reflects this shot only.
+    const canPoll = session.supports('event/polling')
+    if (canPoll) await session.client.event.clearPolling().catch(() => undefined)
+
+    if (options.manual !== undefined) {
+      await session.client.shooting.pressShutterButtonManual(options.manual, af)
+    } else {
+      await session.client.shooting.pressShutterButton(af)
+    }
+
+    const addedContents = canPoll
+      ? await session.client.event
+          .getPolling()
+          .then((event) => event.addedContents ?? [])
+          .catch(() => undefined)
+      : undefined
+
+    if (options.json === true) {
+      ui.json({
+        released: true,
+        af,
+        mode: options.manual ?? 'auto',
+        addedContents: addedContents ?? null,
+      })
+      return
+    }
+
+    ui.success(
+      addedContents && addedContents.length > 0
+        ? `Shutter released. New: ${addedContents.join(', ')}`
+        : 'Shutter released.',
+    )
+  })
+}
+
 /**
  * Reads an endpoint only when the camera advertises it, recording the ones it
  * does not. A camera that advertises an endpoint can still fail the call, so a

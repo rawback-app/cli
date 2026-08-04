@@ -6,6 +6,7 @@ import {
   runCameraForget,
   runCameraInfo,
   runCameraList,
+  runCameraShoot,
   runCameraStatus,
   runCameraUse,
 } from '../src/camera.ts'
@@ -367,5 +368,78 @@ describe('camera status', () => {
 
     expect(output.stdout.join('\n')).toContain('full')
     expect(output.stderr).toEqual([])
+  })
+})
+
+describe('camera shoot', () => {
+  test('clears events, releases, and reports the new file', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      routes: {
+        'event/polling': {
+          addedcontents: ['/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG'],
+        },
+      },
+    })
+    const output = capture()
+
+    await runCameraShoot(
+      { json: true, force: true },
+      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    expect(output.json()).toEqual({
+      released: true,
+      af: true,
+      mode: 'auto',
+      addedContents: ['/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG'],
+    })
+    // Events are cleared first so addedContents reflects only this shot.
+    const shutter = camera.requests.filter((request) =>
+      request.path.includes('shooting/control/shutterbutton'),
+    )
+    expect(shutter).toHaveLength(1)
+    expect(shutter[0]?.method).toBe('POST')
+    expect(
+      camera.requests.some((r) => r.method === 'DELETE' && r.path.includes('event/polling')),
+    ).toBe(true)
+  })
+
+  test('a declined confirmation never touches the camera', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera()
+    const output = capture()
+
+    await runCameraShoot(
+      { json: true },
+      {
+        store,
+        env: {},
+        fetch: camera.fetch,
+        prompts: { confirm: async () => false, password: async () => '' },
+        ...output.dependencies,
+      },
+    )
+
+    expect(output.json()).toEqual({ released: false })
+    expect(camera.requests).toEqual([])
+  })
+
+  test('--manual drives the shutter by phase', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera()
+    const output = capture()
+
+    await runCameraShoot(
+      { json: true, force: true, manual: 'half_press', af: false },
+      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    const manual = camera.requests.find((request) => request.path.includes('/manual'))
+    expect(manual?.body).toContain('half_press')
+    expect(output.json()).toMatchObject({ mode: 'half_press', af: false })
   })
 })

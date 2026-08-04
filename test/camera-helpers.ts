@@ -44,6 +44,7 @@ const DEFAULT_SUFFIXES = [
   'shooting/information/recordable',
   'shooting/settings',
   'shooting/control/shutterbutton',
+  'shooting/control/shutterbutton/manual',
   'contents',
   'event/polling',
   'event/monitoring',
