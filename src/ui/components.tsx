@@ -180,7 +180,9 @@ function Help({ block }: { block: UiHelpBlock }) {
             <Text bold>{section.title}</Text>
             {section.entries.map((entry) => (
               <Box key={entry.term} paddingLeft={2}>
-                <Box width={termWidth + 2}>
+                {/* Without flexShrink={0} a long description squeezes this
+                    column and splits the option name mid-word. */}
+                <Box width={termWidth + 2} flexShrink={0}>
                   <Text color="cyan">{entry.term}</Text>
                 </Box>
                 <Text>{entry.description}</Text>

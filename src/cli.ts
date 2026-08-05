@@ -34,6 +34,97 @@ async function runCommand(
   }
 }
 
+/**
+ * Options every camera subcommand accepts. Declared once so the target can be
+ * named the same way everywhere.
+ */
+function cameraTargetOptions<T>(command: Argv<T>) {
+  return command
+    .option('camera', {
+      describe: 'camera URL, e.g. http://user:password@192.168.0.1:8080',
+      type: 'string',
+    })
+    .option('insecure', {
+      default: false,
+      describe: "accept the camera's self-signed TLS certificate",
+      type: 'boolean',
+    })
+    .option('timeout', {
+      default: 12000,
+      describe: 'per-request timeout in milliseconds (0 disables it)',
+      type: 'number',
+    })
+    .option('refresh', {
+      default: false,
+      describe: 're-read the camera capability map instead of using the cached one',
+      type: 'boolean',
+    })
+}
+
+/**
+ * Validates the shared camera options before any network or filesystem access,
+ * so a malformed target fails fast rather than after a connection attempt.
+ */
+function checkCameraTarget(args: {
+  camera?: string | undefined
+  insecure?: boolean | undefined
+  timeout?: number | undefined
+}): true {
+  if (args.camera !== undefined) {
+    let url: URL
+    try {
+      url = new URL(args.camera)
+    } catch {
+      throw new Error('--camera must be a URL like http://user:password@192.168.0.1:8080')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('--camera must use http:// or https://')
+    }
+    if (args.insecure === true && url.protocol === 'http:') {
+      throw new Error('--insecure only applies to an https:// camera')
+    }
+  }
+  if (args.timeout !== undefined && (!Number.isSafeInteger(args.timeout) || args.timeout < 0)) {
+    throw new Error('--timeout must be a non-negative whole number of milliseconds')
+  }
+  return true
+}
+
+/** The shared camera options, shaped for the run functions. */
+function cameraTargetArgs(args: {
+  camera?: string | undefined
+  insecure?: boolean | undefined
+  timeout?: number | undefined
+  refresh?: boolean | undefined
+  json?: boolean | undefined
+}) {
+  return {
+    insecure: args.insecure ?? false,
+    timeout: args.timeout ?? 12000,
+    refresh: args.refresh ?? false,
+    json: args.json ?? false,
+    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+  }
+}
+
+/**
+ * A command that changes the camera confirms first. `--json` means a script is
+ * driving, where a prompt would hang, so it has to carry `--force` too.
+ */
+function checkMutatingIsNonInteractive(
+  args: { force?: boolean | undefined; json?: boolean | undefined },
+  command: string,
+): true {
+  if (args.force === true) return true
+  if (args.json === true) {
+    throw new Error(`${command} --json also needs --force, because it cannot prompt`)
+  }
+  if (!process.stdin.isTTY) {
+    throw new Error(`${command} needs an interactive terminal unless --force is provided`)
+  }
+  return true
+}
+
 function albumMetadataOptions<T>(command: Argv<T>) {
   return command
     .option('description', {
@@ -1586,6 +1677,745 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
         const { runPricing } = await import('./pricing.ts')
         await runCommand(() => runPricing({ interval: args.interval, json: args.json }))
       },
+    )
+    .command(
+      'camera',
+      'control a Canon camera over CCAPI',
+      (command) =>
+        command
+          .command(
+            'connect [url]',
+            'connect to a camera and save it',
+            (connect) =>
+              cameraTargetOptions(connect)
+                .positional('url', {
+                  describe: 'camera URL, e.g. http://user:password@192.168.0.1:8080',
+                  type: 'string',
+                })
+                .option('name', {
+                  describe: 'label for the saved camera (defaults to the model name)',
+                  type: 'string',
+                })
+                .option('save-password', {
+                  default: false,
+                  describe: 'store the CCAPI password in ~/.rawback/cameras.json',
+                  type: 'boolean',
+                })
+                .option('default', {
+                  default: true,
+                  describe: 'target this camera when no --camera is given',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.url !== undefined && args.camera !== undefined) {
+                    throw new Error('rawback camera connect takes a URL or --camera, not both')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraConnect } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraConnect({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    savePassword: args.savePassword,
+                    makeDefault: args.default,
+                    ...(args.url !== undefined ? { url: args.url } : {}),
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                    ...(args.name !== undefined ? { name: args.name } : {}),
+                  }),
+                'Camera connection cancelled.',
+              )
+            },
+          )
+          .command(
+            'list',
+            'list saved cameras',
+            (list) =>
+              list.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraList } = await import('./camera.ts')
+              await runCommand(
+                () => runCameraList({ json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'use <id>',
+            'target a saved camera by default',
+            (use) =>
+              use
+                .positional('id', { describe: 'saved camera ID (host:port)', type: 'string' })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraUse } = await import('./camera.ts')
+              await runCommand(
+                () => runCameraUse({ id: args.id as string, json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'forget <id>',
+            'remove a saved camera',
+            (forget) =>
+              forget
+                .positional('id', { describe: 'saved camera ID (host:port)', type: 'string' })
+                .option('force', {
+                  default: false,
+                  describe: 'remove without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  if (!args.force && !process.stdin.isTTY) {
+                    throw new Error(
+                      'rawback camera forget needs an interactive terminal unless --force is provided',
+                    )
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraForget } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraForget({ id: args.id as string, force: args.force, json: args.json }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'info',
+            'show camera model, firmware, lens, and storage',
+            (info) =>
+              cameraTargetOptions(info)
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraInfo } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraInfo({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'status',
+            'show battery, temperature, storage, and remaining capacity',
+            (status) =>
+              cameraTargetOptions(status)
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraStatus } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraStatus({
+                    insecure: args.insecure,
+                    timeout: args.timeout,
+                    refresh: args.refresh,
+                    json: args.json,
+                    ...(args.camera !== undefined ? { camera: args.camera } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'shoot',
+            'release the shutter',
+            (shoot) =>
+              cameraTargetOptions(shoot)
+                .option('af', {
+                  default: true,
+                  describe: 'autofocus before releasing',
+                  type: 'boolean',
+                })
+                .option('manual', {
+                  choices: ['half_press', 'full_press', 'release'] as const,
+                  describe: 'drive the shutter button by phase instead of a single release',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'shoot without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  return checkMutatingIsNonInteractive(args, 'rawback camera shoot')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraShoot } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraShoot({
+                    ...cameraTargetArgs(args),
+                    af: args.af,
+                    force: args.force,
+                    ...(args.manual !== undefined ? { manual: args.manual } : {}),
+                  }),
+                'Shot cancelled.',
+              )
+            },
+          )
+          .command(
+            'settings <action> [name] [value]',
+            'read and change shooting settings',
+            (settings) =>
+              cameraTargetOptions(settings)
+                .positional('action', {
+                  choices: ['list', 'get', 'set'] as const,
+                  describe: 'settings action',
+                  type: 'string',
+                })
+                .positional('name', { describe: 'setting name, e.g. av', type: 'string' })
+                .positional('value', { describe: 'new value', type: 'string' })
+                .option('int', {
+                  default: false,
+                  describe: 'treat the value as an integer',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'change the setting without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'list' && args.name !== undefined) {
+                    throw new Error('rawback camera settings list does not take a setting name')
+                  }
+                  if (args.action !== 'list' && args.name === undefined) {
+                    throw new Error(
+                      `rawback camera settings ${args.action} requires a setting name`,
+                    )
+                  }
+                  if (args.action === 'set') {
+                    if (args.value === undefined) {
+                      throw new Error('rawback camera settings set requires a value')
+                    }
+                    return checkMutatingIsNonInteractive(args, 'rawback camera settings set')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const settings = await import('./camera-settings.ts')
+              const target = cameraTargetArgs(args)
+              if (args.action === 'list') {
+                await runCommand(
+                  () => settings.runCameraSettingsList(target),
+                  'Camera command cancelled.',
+                )
+                return
+              }
+              if (args.action === 'get') {
+                await runCommand(
+                  () => settings.runCameraSettingsGet({ ...target, name: args.name as string }),
+                  'Camera command cancelled.',
+                )
+                return
+              }
+              await runCommand(
+                () =>
+                  settings.runCameraSettingsSet({
+                    ...target,
+                    name: args.name as string,
+                    value: args.value as string,
+                    int: args.int,
+                    force: args.force,
+                  }),
+                'Setting change cancelled.',
+              )
+            },
+          )
+          .command(
+            'contents <action> [a] [b]',
+            'browse and download photos on the card',
+            (contents) =>
+              cameraTargetOptions(contents)
+                .positional('action', {
+                  choices: ['storages', 'dirs', 'list', 'info', 'get', 'delete'] as const,
+                  describe: 'contents action',
+                  type: 'string',
+                })
+                .positional('a', {
+                  describe: 'storage name (dirs, list) or content locator (info, get, delete)',
+                  type: 'string',
+                })
+                .positional('b', { describe: 'directory name, for list', type: 'string' })
+                .option('type', {
+                  choices: [
+                    'all',
+                    'jpeg',
+                    'hif',
+                    'cr2',
+                    'cr3',
+                    'wav',
+                    'mp4',
+                    'mov',
+                    'crm',
+                  ] as const,
+                  describe: 'filter the listing by file type',
+                  type: 'string',
+                })
+                .option('order', {
+                  choices: ['asc', 'desc'] as const,
+                  describe: 'listing order, with --all',
+                  type: 'string',
+                })
+                .option('page', {
+                  default: 1,
+                  describe: 'listing page (100 per page)',
+                  type: 'number',
+                })
+                .option('all', {
+                  default: false,
+                  describe: 'stream every page instead of one',
+                  type: 'boolean',
+                })
+                .option('output', {
+                  alias: 'o',
+                  describe: 'destination file or directory, for get',
+                  type: 'string',
+                })
+                .option('kind', {
+                  choices: ['main', 'thumbnail', 'display', 'embedded'] as const,
+                  describe: 'which rendition to download',
+                  type: 'string',
+                })
+                .option('overwrite', {
+                  default: false,
+                  describe: 'replace an existing destination file',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'delete without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (['dirs', 'list', 'info', 'get', 'delete'].includes(String(args.action))) {
+                    if (args.a === undefined) {
+                      throw new Error(
+                        args.action === 'dirs' || args.action === 'list'
+                          ? `rawback camera contents ${args.action} requires a storage name`
+                          : `rawback camera contents ${args.action} requires a content locator`,
+                      )
+                    }
+                  }
+                  if (args.action === 'list' && args.b === undefined) {
+                    throw new Error('rawback camera contents list requires a directory name')
+                  }
+                  if (args.action === 'get' && args.output === undefined) {
+                    throw new Error('rawback camera contents get requires --output')
+                  }
+                  if (!Number.isSafeInteger(args.page) || args.page < 1) {
+                    throw new Error('--page must be a positive whole number')
+                  }
+                  if (args.action === 'delete') {
+                    return checkMutatingIsNonInteractive(args, 'rawback camera contents delete')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const contents = await import('./camera-contents.ts')
+              const target = cameraTargetArgs(args)
+              const first = args.a as string
+              switch (args.action) {
+                case 'storages':
+                  await runCommand(() => contents.runCameraContentsStorages(target))
+                  return
+                case 'dirs':
+                  await runCommand(() =>
+                    contents.runCameraContentsDirs({ ...target, storage: first }),
+                  )
+                  return
+                case 'info':
+                  await runCommand(() =>
+                    contents.runCameraContentsInfo({ ...target, locator: first }),
+                  )
+                  return
+                case 'get':
+                  await runCommand(() =>
+                    contents.runCameraContentsGet({
+                      ...target,
+                      locator: first,
+                      output: args.output as string,
+                      overwrite: args.overwrite,
+                      ...(args.kind !== undefined ? { kind: args.kind } : {}),
+                    }),
+                  )
+                  return
+                case 'delete':
+                  await runCommand(
+                    () =>
+                      contents.runCameraContentsDelete({
+                        ...target,
+                        locator: first,
+                        force: args.force,
+                      }),
+                    'Deletion cancelled.',
+                  )
+                  return
+                default:
+                  await runCommand(() =>
+                    contents.runCameraContentsList({
+                      ...target,
+                      storage: first,
+                      directory: args.b as string,
+                      page: args.page,
+                      all: args.all,
+                      ...(args.type !== undefined ? { type: args.type } : {}),
+                      ...(args.order !== undefined ? { order: args.order } : {}),
+                    }),
+                  )
+              }
+            },
+          )
+          .command(
+            'liveview <action> [output]',
+            'start, capture, stream, and stop live view',
+            (liveview) =>
+              cameraTargetOptions(liveview)
+                .positional('action', {
+                  choices: ['start', 'stop', 'frame', 'stream'] as const,
+                  describe: 'live view action',
+                  type: 'string',
+                })
+                .positional('output', {
+                  describe: 'destination file, for frame',
+                  type: 'string',
+                })
+                .option('size', {
+                  choices: ['off', 'small', 'medium'] as const,
+                  default: 'small',
+                  describe: 'live view image size',
+                  type: 'string',
+                })
+                .option('display', {
+                  choices: ['on', 'keep', 'off'] as const,
+                  default: 'keep',
+                  describe: "what the camera's own screen does",
+                  type: 'string',
+                })
+                .option('output-dir', {
+                  describe: 'directory for streamed frames, or - for stdout',
+                  type: 'string',
+                })
+                .option('frames', { describe: 'stop after this many frames', type: 'number' })
+                .option('duration', { describe: 'stop after this many seconds', type: 'number' })
+                .option('force', {
+                  default: false,
+                  describe: 'start without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'frame' && args.output === undefined) {
+                    throw new Error('rawback camera liveview frame requires an output file')
+                  }
+                  if (args.action === 'stream') {
+                    if (args.outputDir === undefined) {
+                      throw new Error(
+                        'rawback camera liveview stream requires --output-dir <dir> (or --output-dir - for stdout)',
+                      )
+                    }
+                    if (args.outputDir === '-' && args.json) {
+                      throw new Error(
+                        'rawback camera liveview stream --output-dir - writes raw JPEG to stdout and cannot also emit --json',
+                      )
+                    }
+                  }
+                  if (args.action === 'start') {
+                    return checkMutatingIsNonInteractive(args, 'rawback camera liveview start')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const liveview = await import('./camera-liveview.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'stop':
+                  await runCommand(() => liveview.runCameraLiveviewStop(target))
+                  return
+                case 'frame':
+                  await runCommand(() =>
+                    liveview.runCameraLiveviewFrame({
+                      ...target,
+                      output: args.output as string,
+                    }),
+                  )
+                  return
+                case 'stream':
+                  await runCommand(
+                    () =>
+                      liveview.runCameraLiveviewStream({
+                        ...target,
+                        size: args.size,
+                        display: args.display,
+                        outputDir: args.outputDir as string,
+                        ...(args.frames !== undefined ? { frames: args.frames } : {}),
+                        ...(args.duration !== undefined ? { duration: args.duration } : {}),
+                      }),
+                    'Live view stopped.',
+                  )
+                  return
+                default:
+                  await runCommand(
+                    () =>
+                      liveview.runCameraLiveviewStart({
+                        ...target,
+                        size: args.size,
+                        display: args.display,
+                        force: args.force,
+                      }),
+                    'Live view cancelled.',
+                  )
+              }
+            },
+          )
+          .command(
+            'events <action>',
+            'poll, watch, and clear camera events',
+            (events) =>
+              cameraTargetOptions(events)
+                .positional('action', {
+                  choices: ['poll', 'watch', 'clear'] as const,
+                  describe: 'event action',
+                  type: 'string',
+                })
+                .option('wait', {
+                  default: false,
+                  describe: 'hold the connection until something changes',
+                  type: 'boolean',
+                })
+                .option('timeout-kind', {
+                  choices: ['short', 'long'] as const,
+                  describe: 'how long the camera holds a waiting poll',
+                  type: 'string',
+                })
+                .option('count', { describe: 'stop after this many events', type: 'number' })
+                .option('duration', { describe: 'stop after this many seconds', type: 'number' })
+                .option('force', {
+                  default: false,
+                  describe: 'clear without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON (NDJSON for watch)',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'clear') {
+                    return checkMutatingIsNonInteractive(args, 'rawback camera events clear')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const events = await import('./camera-events.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'watch':
+                  await runCommand(
+                    () =>
+                      events.runCameraEventsWatch({
+                        ...target,
+                        ...(args.count !== undefined ? { count: args.count } : {}),
+                        ...(args.duration !== undefined ? { duration: args.duration } : {}),
+                      }),
+                    'Stopped watching.',
+                  )
+                  return
+                case 'clear':
+                  await runCommand(
+                    () => events.runCameraEventsClear({ ...target, force: args.force }),
+                    'Camera command cancelled.',
+                  )
+                  return
+                default:
+                  await runCommand(() =>
+                    events.runCameraEventsPoll({
+                      ...target,
+                      wait: args.wait,
+                      ...(args.timeoutKind !== undefined ? { timeoutKind: args.timeoutKind } : {}),
+                    }),
+                  )
+              }
+            },
+          )
+          .command(
+            'api [id]',
+            'run any CCAPI endpoint by ID',
+            (endpoint) =>
+              cameraTargetOptions(endpoint)
+                .positional('id', {
+                  describe: 'endpoint ID, e.g. status.getBattery',
+                  type: 'string',
+                })
+                .option('list', {
+                  default: false,
+                  describe: 'list every endpoint instead of running one',
+                  type: 'boolean',
+                })
+                .option('namespace', { describe: 'filter --list by namespace', type: 'string' })
+                .option('mutating', {
+                  describe: 'filter --list to endpoints that do (or do not) change the camera',
+                  type: 'boolean',
+                })
+                .option('describe', {
+                  default: false,
+                  describe: 'show an endpoint without calling the camera',
+                  type: 'boolean',
+                })
+                .option('arg', {
+                  array: true,
+                  describe: 'endpoint argument as key=value (repeat for more)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'run a state-changing endpoint without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.list && args.id !== undefined) {
+                    throw new Error('rawback camera api takes an endpoint ID or --list, not both')
+                  }
+                  if (!args.list && args.id === undefined) {
+                    throw new Error('rawback camera api needs an endpoint ID, or --list')
+                  }
+                  for (const pair of args.arg ?? []) {
+                    if (!pair.includes('=')) {
+                      throw new Error(`--arg must be key=value; got ${JSON.stringify(pair)}`)
+                    }
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraApi } = await import('./camera-api.ts')
+              await runCommand(
+                () =>
+                  runCameraApi({
+                    ...cameraTargetArgs(args),
+                    list: args.list,
+                    describe: args.describe,
+                    force: args.force,
+                    ...(args.id !== undefined ? { id: args.id } : {}),
+                    ...(args.namespace !== undefined ? { namespace: args.namespace } : {}),
+                    ...(args.mutating !== undefined ? { mutating: args.mutating } : {}),
+                    ...(args.arg !== undefined ? { arg: args.arg } : {}),
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            ['interactive', 'tui'],
+            'browse and run endpoints in a full-screen explorer',
+            (interactive) =>
+              cameraTargetOptions(interactive).check((args) => {
+                checkCameraTarget(args)
+                if (!process.stdin.isTTY || !process.stdout.isTTY) {
+                  throw new Error(
+                    'rawback camera interactive needs an interactive terminal; use rawback camera api in a script',
+                  )
+                }
+                return true
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraInteractive } = await import('./camera-interactive.ts')
+              await runCommand(
+                () => runCameraInteractive(cameraTargetArgs(args)),
+                'Explorer closed.',
+              )
+            },
+          )
+          .demandCommand(
+            1,
+            'Choose a camera command: connect, list, use, forget, info, status, shoot, settings, contents, liveview, events, api, or interactive',
+          )
+          .strict(),
+      () => {},
     )
     .command(
       'config',

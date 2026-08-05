@@ -14,6 +14,7 @@ in a browser.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Browse content shared with you and manage your outgoing share links.
+- Control a Canon camera over CCAPI: shoot, change settings, browse and download the card, and stream live view.
 - Manage the SFTP credentials associated with your account.
 - Inspect the shared local configuration without exposing its SFTP password.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
@@ -239,6 +240,40 @@ to 100 GB. The file is sent in parts to presigned URLs and read from disk on
 demand, so memory use stays flat regardless of file size. Pass `--thumbnail` to
 attach a poster frame; otherwise set one later from the web app.
 
+## Camera control
+
+Rawback can drive a Canon camera directly over CCAPI, where the camera itself is
+the HTTP server. Enable CCAPI in the camera's Wi-Fi menu first, note the address
+and port it shows, and set a user name and password there if you want one.
+
+```bash
+# Pair once; the camera becomes the default target
+rawback camera connect 'http://user:password@192.168.0.1:8080'
+
+rawback camera info
+rawback camera status --json
+rawback camera shoot --force
+
+# Browse and pull files off the card
+rawback camera contents storages
+rawback camera contents list card1 100CANON --json
+rawback camera contents get '<locator>' --output ./shot.jpg
+```
+
+Every endpoint the camera advertises is reachable, whether or not it has a
+dedicated command:
+
+```bash
+rawback camera api --list
+rawback camera api shooting.getSetting --arg name=av --json
+rawback camera interactive          # full-screen explorer
+```
+
+A camera serves **one client at a time**, so close the Canon app or Rawback
+Desktop before connecting. Cameras also serve HTTPS with a self-signed
+certificate; `rawback` verifies certificates by default and tells you to pass
+`--insecure` when that is what you want.
+
 ## Common examples
 
 ```bash
@@ -311,8 +346,15 @@ Rawback stores local state under `~/.rawback/`:
 | `credentials.json`  | Access and refresh tokens created by `rawback auth` |
 | `config.yml`        | Optional hosts, metadata workers, and SFTP settings |
 | `upload-state.json` | Shared upload queue, history, and trusted host keys |
+| `cameras.json`      | Saved Canon cameras, shared with Rawback Desktop    |
 
-The CLI creates credential and upload-state files with restrictive permissions
+`cameras.json` is shared with the Rawback desktop app, so both can reach the same
+camera without pairing twice. It holds a camera password only when you pass
+`rawback camera connect --save-password`, and then in plain text at mode `0600` —
+the same trade `config.yml` already makes for the SFTP password. Commands that
+read it refuse a file that group or others can read.
+
+The CLI creates credential, camera, and upload-state files with restrictive permissions
 on Unix. You create `config.yml` yourself, so upload commands require it to have
 mode `0600` on Unix. Never commit files from `~/.rawback/` or paste their secrets
 into issues and logs. `rawback config view` masks `sftp.password` in both terminal

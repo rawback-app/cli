@@ -6,6 +6,7 @@
       "name": "@rawback/cli",
       "dependencies": {
         "@inquirer/prompts": "^8.5.2",
+        "@rawback/ccapi-js": "1.1.0",
         "@rawback/sdk": "0.2.6",
         "ink": "^7.1.0",
         "react": "^19.2.0",
@@ -155,6 +156,8 @@
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.73.0", "", { "os": "win32", "cpu": "x64" }, "sha512-WaNRvh4f6zY9CvUQk2YoA1O90ieWrIklI84+HXFr9Isjz9CSESrdqo/RtIYt4Dll/cAchqGDMehfaZd0vqEFZw=="],
 
     "@photostructure/tz-lookup": ["@photostructure/tz-lookup@11.6.0", "", {}, "sha512-AHXaBp/bY9nd2pyGi7ldtzXYEZ3ARf7p4EG0XsizmmCxLYMbq+yITj7Z1etO29BiA3YW7aqrcrfToDcBD0grbA=="],
+
+    "@rawback/ccapi-js": ["@rawback/ccapi-js@1.1.0", "", {}, "sha512-d3TO23EyXCwgWKV/2R6AQqrQD/gIqw8uc/89/tZS7HiJoXTpflH3OqHdsQJjqV2ptXbeiOj0BVk+VZkKCC0j8w=="],
 
     "@rawback/sdk": ["@rawback/sdk@0.2.6", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "exiftool-vendored": "37.0.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-+92tzQ9aAsiuAYnftYQPCyX4dHIni8F9zubVZ8jzru4BGFnT05foR4GOa6zjqZdB4fjLq1675+OgM5jb3F6icA=="],
 

@@ -24,20 +24,22 @@ The extra `--` separates arguments for the package script from CLI arguments.
 
 ## Repository layout
 
-| Path                  | Purpose                                              |
-| --------------------- | ---------------------------------------------------- |
-| `src/index.ts`        | Minimal executable entry point                       |
-| `src/cli.ts`          | Yargs command hierarchy, options, and dispatch       |
-| `src/features/*`      | Feature-specific presenters and UI controllers       |
-| `src/ui/*`            | Shared Ink components, output ports, and formatters  |
-| `src/api.ts`          | Public re-exports for API and credential clients     |
-| `src/client.ts`       | CLI identity adapter for `@rawback/sdk`              |
-| `src/session.ts`      | SDK token-session compatibility adapter              |
-| `src/config.ts`       | SDK config re-exports                                |
-| `src/upload.ts`       | Upload preflight, scanning, retry, and orchestration |
-| `src/sftp-client.ts`  | SDK SFTP compatibility adapter                       |
-| `src/upload-state.ts` | Portable JSON state and legacy SQLite migration      |
-| `test/*.test.ts`      | Bun unit and CLI integration tests                   |
+| Path                    | Purpose                                              |
+| ----------------------- | ---------------------------------------------------- |
+| `src/index.ts`          | Minimal executable entry point                       |
+| `src/cli.ts`            | Yargs command hierarchy, options, and dispatch       |
+| `src/features/*`        | Feature-specific presenters and UI controllers       |
+| `src/ui/*`              | Shared Ink components, output ports, and formatters  |
+| `src/api.ts`            | Public re-exports for API and credential clients     |
+| `src/client.ts`         | CLI identity adapter for `@rawback/sdk`              |
+| `src/session.ts`        | SDK token-session compatibility adapter              |
+| `src/config.ts`         | SDK config re-exports                                |
+| `src/camera*.ts`        | Canon CCAPI store, session, registry, and commands   |
+| `src/features/camera/*` | Camera presenters and the interactive explorer       |
+| `src/upload.ts`         | Upload preflight, scanning, retry, and orchestration |
+| `src/sftp-client.ts`    | SDK SFTP compatibility adapter                       |
+| `src/upload-state.ts`   | Portable JSON state and legacy SQLite migration      |
+| `test/*.test.ts`        | Bun unit and CLI integration tests                   |
 
 Command modules keep behavior separate from the CLI declaration and build
 feature-specific UI documents for human output. Shared Ink components render
@@ -48,6 +50,31 @@ injected or redirected output.
 
 Injectable dependency objects let tests replace network clients, prompts,
 output, filesystem paths, and SFTP transports.
+
+## Camera client
+
+Camera support is built on `@rawback/ccapi-js`, pinned exactly like the SDK. Two
+import rules keep it out of the way of everything else:
+
+- Camera modules must never import `@rawback/sdk`. Nothing about talking to a
+  camera needs the Rawback API, and pulling the SDK barrel in would cost startup
+  time.
+- `src/cli.ts` must never import `@rawback/ccapi-js`. The camera group is
+  declarations plus a lazy `await import('./camera*.ts')`, so `rawback --help`
+  never loads the camera client — the same discipline `src/trace.ts` documents.
+
+`src/camera-registry.ts` is the catalogue of CCAPI endpoints. It is a source file
+rather than data on purpose: the compiler checks every call against the library,
+so a version bump that renames a method fails `bun run typecheck`. Adding an
+entry there surfaces it in both `rawback camera api` and the interactive
+explorer at once. `test/camera-registry.test.ts` also invokes every entry against
+a throwing fetch, which catches a removed method that still typechecks through an
+`any`.
+
+`~/.rawback/cameras.json` is shared with the Rawback desktop app. The file format
+is the contract between the two, and it is implemented once in each repository —
+so a change to its shape needs a matching change there. The natural long-term
+home for it is `@rawback/sdk`, which both already depend on.
 
 ## Validation
 
