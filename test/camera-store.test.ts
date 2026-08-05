@@ -206,3 +206,63 @@ describe('camera store', () => {
     },
   )
 })
+
+/**
+ * `~/.rawback/cameras.json` is shared with the Rawback desktop app, so the file
+ * format is a contract between two codebases. These use a byte-for-byte copy of
+ * what the desktop's CameraConnectionStore writes.
+ */
+describe('cross-app compatibility with Rawback Desktop', () => {
+  test('reads a file the desktop wrote', async () => {
+    const path = await storePath()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(path, '..'), { recursive: true, mode: 0o700 })
+    await writeFile(
+      path,
+      JSON.stringify(
+        {
+          version: 1,
+          cameras: [
+            {
+              id: '192.168.1.2:8080',
+              host: '192.168.1.2',
+              port: 8080,
+              useTLS: false,
+              username: 'ccapi',
+              model: 'EOS R6',
+              lastUsedAt: '2026-08-04T17:26:36.393Z',
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    )
+
+    const cameras = await new CameraStore(path).list()
+    expect(cameras).toHaveLength(1)
+    expect(cameras[0]).toMatchObject({
+      id: '192.168.1.2:8080',
+      host: '192.168.1.2',
+      port: 8080,
+      useTLS: false,
+      username: 'ccapi',
+      model: 'EOS R6',
+    })
+  })
+
+  test('writes the fields the desktop validator requires', async () => {
+    const path = await storePath()
+    await new CameraStore(path).upsert(camera({ model: 'Canon EOS R6m2' }), { makeDefault: true })
+
+    const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+    expect(written.version).toBe(1)
+    const entry = (written.cameras as Array<Record<string, unknown>>)[0]
+    // The desktop's isStoredConnection() checks exactly these four.
+    expect(typeof entry?.id).toBe('string')
+    expect(typeof entry?.host).toBe('string')
+    expect(typeof entry?.port).toBe('number')
+    expect(typeof entry?.useTLS).toBe('boolean')
+  })
+})
