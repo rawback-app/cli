@@ -1657,6 +1657,21 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       },
     )
     .command(
+      'memory',
+      'show the photography profile Rawback maintains for you',
+      (command) =>
+        command.option('json', {
+          default: false,
+          describe: 'output machine-readable JSON',
+          type: 'boolean',
+        }),
+      async (args) => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return
+        const { runMemory } = await import('./memory.ts')
+        await runCommand(() => runMemory({ json: args.json }))
+      },
+    )
+    .command(
       'pricing',
       'show Rawback plans and add-ons',
       (command) =>
