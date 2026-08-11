@@ -20,7 +20,7 @@
   "dependencies": {
     "@inquirer/prompts": "^8.5.2",
     "@rawback/ccapi-js": "1.1.0",
-    "@rawback/sdk": "0.2.6",
+    "@rawback/sdk": "0.2.7",
     "ink": "^7.1.0",
     "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { writeCredentials } from '../src/credentials.ts'
+import { runMemory } from '../src/memory.ts'
 import { runPricing } from '../src/pricing.ts'
 import { runUploadSessionList } from '../src/uploads.ts'
 import { runUsage } from '../src/usage.ts'
@@ -188,6 +189,53 @@ describe('usage', () => {
         faceRecognition: { topFaces: [{ name: 'Ada' }] },
       },
     })
+  })
+})
+
+describe('memory', () => {
+  test('renders the profile and its provenance, and emits JSON', async () => {
+    const paths = await authenticatedPaths()
+    const fetch = graphqlFetch((body) => {
+      expect(body.operationName).toBe('UserMemory')
+      return Response.json({
+        data: {
+          me: {
+            id: 2,
+            memory: {
+              id: 7,
+              content: 'Shoots wading birds at dawn around Kushiro.',
+              generatedAt: 1_760_000_000,
+              sourceImageCount: 100,
+            },
+          },
+        },
+      })
+    })
+
+    const human: string[] = []
+    await runMemory({}, { ...paths, fetch, stdout: (message) => human.push(message) })
+    expect(human[0]).toContain('Shoots wading birds at dawn around Kushiro.')
+    expect(human[0]).toContain('Photos used')
+
+    const json: string[] = []
+    await runMemory({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) })
+    expect(JSON.parse(json.join('\n'))).toMatchObject({
+      memory: { id: 7, sourceImageCount: 100 },
+    })
+  })
+
+  test('explains the empty state instead of printing nothing', async () => {
+    const paths = await authenticatedPaths()
+    const fetch = graphqlFetch(() => Response.json({ data: { me: { id: 2, memory: null } } }))
+
+    const human: string[] = []
+    await runMemory({}, { ...paths, fetch, stdout: (message) => human.push(message) })
+    expect(human[0]).toContain('No memory yet')
+
+    // `null` rather than an omitted key, so a script can branch on it.
+    const json: string[] = []
+    await runMemory({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) })
+    expect(JSON.parse(json.join('\n'))).toEqual({ memory: null })
   })
 })
 
