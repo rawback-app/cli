@@ -15,6 +15,7 @@ import {
   CliRemoveImageFromAlbumDocument,
   CliAddTagsToAlbumDocument,
   CliRemoveTagsFromAlbumDocument,
+  CliRefreshAlbumDocument,
   type CreateAlbumInput,
   type UpdateAlbumInput,
 } from '@rawback/sdk'
@@ -94,6 +95,11 @@ export interface AlbumEditOptions extends AlbumMetadataOptions {
 
 export interface AlbumDeleteOptions {
   force?: boolean
+  id: number
+  json?: boolean
+}
+
+export interface AlbumRefreshOptions {
   id: number
   json?: boolean
 }
@@ -531,6 +537,28 @@ export async function runAlbumDelete(
   } else {
     ui.success(`Deleted album ${id}.`)
   }
+}
+
+export async function runAlbumRefresh(
+  options: AlbumRefreshOptions,
+  dependencies: AlbumCommandDependencies = {},
+): Promise<void> {
+  const albumId = validatePositiveId(options.id, 'Album ID')
+  const client = await createCommandClient(dependencies)
+  const result = await client.graphql.mutate({
+    mutation: CliRefreshAlbumDocument,
+    variables: { albumId },
+  })
+  if (result.error) throw result.error
+  const value = result.data?.refreshAlbum
+  if (!value) throw new Error('The refresh album response did not include the album')
+  const album = fragmentAlbum(value)
+  mutationOutput(
+    album,
+    options,
+    dependencies,
+    `Refreshing album ${album.id} (${album.name}); photo collection runs in the background.`,
+  )
 }
 
 export async function runAlbumImageAdd(

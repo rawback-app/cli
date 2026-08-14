@@ -190,7 +190,17 @@ describe('new command hierarchy', () => {
 
   test('documents the album command hierarchy', () => {
     const album = runCli('album', '--help')
-    for (const command of ['list', 'view', 'create', 'edit', 'delete', 'image', 'tag', 'article']) {
+    for (const command of [
+      'list',
+      'view',
+      'create',
+      'edit',
+      'delete',
+      'refresh',
+      'image',
+      'tag',
+      'article',
+    ]) {
       expect(album.stdout).toContain(command)
     }
 
@@ -208,6 +218,10 @@ describe('new command hierarchy', () => {
       expect(create.stdout).toContain(flag)
     }
 
+    const refresh = runCli('album', 'refresh', '7', '--help')
+    expect(refresh.stdout).toContain('--json')
+    expect(refresh.stdout).not.toContain('--force')
+
     const article = runCli('album', 'article', '--help')
     for (const command of ['list', 'view', 'edit', 'publish', 'unpublish', 'delete']) {
       expect(article.stdout).toContain(command)
@@ -221,6 +235,7 @@ describe('new command hierarchy', () => {
     const album = runCli('album')
     expect(album.exitCode).toBe(1)
     expect(album.stderr).toContain('Choose an album command')
+    expect(album.stderr).toContain('delete, refresh, image')
 
     const image = runCli('album', 'image')
     expect(image.exitCode).toBe(1)

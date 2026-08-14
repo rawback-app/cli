@@ -595,6 +595,19 @@ rawback album delete <album-id> [--force] [--json]
 `--force` skips confirmation and is required in non-interactive use. JSON output
 reports `{ "deleted": <boolean>, "id": <album-id> }`.
 
+### `album refresh`
+
+Re-runs an album's smart filter and recollects its matching photos:
+
+```bash
+rawback album refresh <album-id> [--json]
+```
+
+Recollection is not destructive, so no confirmation is required. The command
+returns as soon as the server accepts the request; the album reports the
+`collecting` status while its photo membership is recalculated. JSON output is
+the same album object printed by `album create` and `album edit`.
+
 ### `album image`
 
 Adds or removes one photo from an album:
