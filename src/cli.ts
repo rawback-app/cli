@@ -967,6 +967,29 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             },
           )
           .command(
+            'refresh <id>',
+            'recollect the photos matching an album smart filter',
+            (refresh) =>
+              refresh
+                .positional('id', {
+                  describe: 'album ID',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runAlbumRefresh } = await import('./albums.ts')
+              await runCommand(
+                () => runAlbumRefresh({ id: args.id!, json: args.json }),
+                'Album operation cancelled.',
+              )
+            },
+          )
+          .command(
             'image',
             'manage album photo membership',
             (image) =>
@@ -1314,7 +1337,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
           )
           .demandCommand(
             1,
-            'Choose an album command: list, view, create, edit, delete, image, tag, or article',
+            'Choose an album command: list, view, create, edit, delete, refresh, image, tag, or article',
           )
           .strict(),
       () => {},

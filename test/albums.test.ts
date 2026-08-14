@@ -14,6 +14,7 @@ import {
   runAlbumImageAdd,
   runAlbumImageRemove,
   runAlbumList,
+  runAlbumRefresh,
   runAlbumTagAdd,
   runAlbumTagRemove,
   runAlbumView,
@@ -315,6 +316,34 @@ describe('album commands', () => {
     await runAlbumDelete({ id: 7, force: true, json: true }, dependencies)
     expect(JSON.parse(output[1] ?? '')).toEqual({ deleted: true, id: 7 })
     expect(requests).toBe(2)
+  })
+
+  test('refreshes album collection without confirmation', async () => {
+    const output: string[] = []
+    const operations: string[] = []
+    const dependencies = await temporaryDependencies(
+      (body) => {
+        operations.push(String(body.operationName))
+        expect(body.operationName).toBe('CliRefreshAlbum')
+        expect(body.variables).toEqual({ albumId: 7 })
+        return Response.json({ data: { refreshAlbum: { ...album, status: 'collecting' } } })
+      },
+      { stdout: (message) => output.push(message) },
+    )
+
+    await runAlbumRefresh({ id: 7, json: true }, dependencies)
+    await runAlbumRefresh({ id: 7 }, dependencies)
+
+    expect(operations).toEqual(['CliRefreshAlbum', 'CliRefreshAlbum'])
+    expect(JSON.parse(output[0] ?? '')).toMatchObject({
+      id: 7,
+      name: 'Iceland',
+      status: 'collecting',
+    })
+    expect(output[1]).toContain('Refreshing album 7 (Iceland)')
+    await expect(runAlbumRefresh({ id: 0 }, dependencies)).rejects.toThrow(
+      'Album ID must be a positive integer',
+    )
   })
 })
 
