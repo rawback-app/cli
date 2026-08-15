@@ -3,7 +3,10 @@ import { basename, extname } from 'node:path'
 
 import {
   DeleteVideoDocument,
+  type FfmpegPaths,
+  prepareVideoUpload,
   UpdateVideoDocument,
+  VIDEO_MIME_TYPES,
   VideoService,
   VideosDocument,
   type VideosQuery,
@@ -16,25 +19,32 @@ import {
   validatePagination,
 } from './command.ts'
 import { videoListDocument } from './features/videos/view.ts'
+import { findBundledFfmpegPath, findBundledFfprobePath } from './upload-identity.ts'
 
-export type VideoCommandDependencies = ReadCommandDependencies
+export interface VideoCommandDependencies extends ReadCommandDependencies {
+  /**
+   * Overrides the local ffmpeg pass. Injected by tests so they neither need
+   * ffmpeg installed nor a real encoded video to exercise the upload flow.
+   */
+  prepareVideo?: typeof prepareVideoUpload
+}
+
 type Video = VideosQuery['videos']['edges'][number]
 
 /**
- * Extension → MIME map matching the server's video allowlist. The server signs
- * the content type into the upload, so it has to be declared up front.
+ * Prefers the binaries staged beside the compiled executable, falling back to
+ * whatever is on PATH — which is what a developer machine with a system ffmpeg
+ * wants.
  */
-const VIDEO_MIME_TYPES: Record<string, string> = {
-  '.mp4': 'video/mp4',
-  '.m4v': 'video/x-m4v',
-  '.mov': 'video/quicktime',
-  '.webm': 'video/webm',
-  '.mkv': 'video/x-matroska',
-  '.avi': 'video/x-msvideo',
-  '.mpeg': 'video/mpeg',
-  '.mpg': 'video/mpeg',
-  '.3gp': 'video/3gpp',
-  '.ts': 'video/mp2t',
+async function resolveFfmpegPaths(): Promise<FfmpegPaths> {
+  const [ffmpegPath, ffprobePath] = await Promise.all([
+    findBundledFfmpegPath(),
+    findBundledFfprobePath(),
+  ])
+  return {
+    ...(ffmpegPath ? { ffmpegPath } : {}),
+    ...(ffprobePath ? { ffprobePath } : {}),
+  }
 }
 
 /** The server signs the content type into the presign, so it must be right. */
@@ -132,6 +142,7 @@ export interface VideoUploadOptions {
   file: string
   json?: boolean
   thumbnail?: string
+  transcript?: boolean
 }
 
 export async function runVideoUpload(
@@ -142,12 +153,40 @@ export async function runVideoUpload(
   const stats = await stat(options.file)
   if (!stats.isFile()) throw new Error(`${options.file} is not a file`)
 
-  const mimeType = resolveVideoMimeType(options.file)
+  // Rejects the extension early, before any network work, with the same list
+  // the preparation step would use.
+  resolveVideoMimeType(options.file)
   const client = await createCommandClient(dependencies)
   // Storage PUTs must carry no Rawback headers, so hand the service a bare
   // fetch rather than relying on the session client happening not to inject
   // any. Honour an injected fetch so tests can still intercept.
   const videos = new VideoService(client.http, dependencies.fetch ?? globalThis.fetch)
+
+  // The server never opens the uploaded file: it has no ffmpeg, so the
+  // container metadata, the poster frame and the split-out audio all have to be
+  // produced here. An init without the metadata is rejected outright, which is
+  // why this is not wrapped in a try/catch the way the poster frame is.
+  const prepare = dependencies.prepareVideo ?? prepareVideoUpload
+  const prepared = await ui.withActivity(
+    `Reading ${basename(options.file)}…`,
+    async () =>
+      prepare(options.file, {
+        ...(await resolveFfmpegPaths()),
+        // --thumbnail wins over a frame cut from the video.
+        ...(options.thumbnail
+          ? {
+              thumbnail: {
+                // readFile rather than open(): the handle from open() was never
+                // closed and leaked a descriptor.
+                body: new Uint8Array(await readFile(options.thumbnail)),
+                mimeType: resolveThumbnailMimeType(options.thumbnail),
+              },
+            }
+          : {}),
+        ...(options.transcript === false ? { skipAudio: true } : {}),
+      }),
+    !options.json,
+  )
 
   const handle = await open(options.file, 'r')
   try {
@@ -176,24 +215,10 @@ export async function runVideoUpload(
           return buffer
         }
 
-        const thumbnail = options.thumbnail
-          ? {
-              // readFile rather than open(): the handle from open() was never
-              // closed and leaked a descriptor.
-              body: new Uint8Array(await readFile(options.thumbnail)),
-              mimeType: resolveThumbnailMimeType(options.thumbnail),
-            }
-          : undefined
-
-        return videos.uploadVideo(
-          {
-            filename: basename(options.file),
-            sizeBytes: stats.size,
-            mimeType,
-          },
-          readPart,
-          thumbnail ? { thumbnail } : {},
-        )
+        return videos.uploadVideo(prepared.init, readPart, {
+          ...(prepared.audio ? { audio: prepared.audio } : {}),
+          ...(prepared.thumbnail ? { thumbnail: prepared.thumbnail } : {}),
+        })
       },
       !options.json,
     )
@@ -205,6 +230,8 @@ export async function runVideoUpload(
     ui.success(`Uploaded ${video.filename} (id ${String(video.id)})`)
   } finally {
     await handle.close()
+    // Releases the temp directory holding the extracted audio chunks.
+    await prepared.cleanup()
   }
 }
 

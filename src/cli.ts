@@ -545,8 +545,14 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'string',
                 })
                 .option('thumbnail', {
-                  describe: 'JPEG or PNG to use as the poster frame',
+                  describe: 'JPEG or PNG to use as the poster frame instead of the first frame',
                   type: 'string',
+                })
+                .option('transcript', {
+                  default: true,
+                  describe:
+                    'extract and upload the audio track so the video can be transcribed. --no-transcript skips it; the audio cannot be added later',
+                  type: 'boolean',
                 })
                 .option('json', {
                   default: false,
@@ -560,6 +566,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 runVideoUpload({
                   file: args.file,
                   json: args.json,
+                  transcript: args.transcript,
                   ...(args.thumbnail !== undefined ? { thumbnail: args.thumbnail } : {}),
                 }),
               )

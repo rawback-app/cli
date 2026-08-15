@@ -39,6 +39,36 @@ async function scratchDirectory(): Promise<string> {
   return directory
 }
 
+/**
+ * Stands in for the local ffmpeg pass so these tests exercise the upload flow
+ * without needing ffmpeg installed or a real encoded video on disk. The real
+ * probe is covered by the SDK's own tests.
+ */
+function stubPrepare(sizeBytes: number): NonNullable<VideoCommandDependencies['prepareVideo']> {
+  return async () => ({
+    cleanup: async () => {},
+    init: {
+      containerFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+      durationSeconds: 12,
+      filename: 'clip.mp4',
+      hasAudio: false,
+      height: 1080,
+      mimeType: 'video/mp4',
+      sizeBytes,
+      videoCodec: 'h264',
+      width: 1920,
+    },
+    probe: {
+      containerFormat: 'mov,mp4,m4a,3gp,3g2,mj2',
+      durationSeconds: 12,
+      hasAudio: false,
+      height: 1080,
+      videoCodec: 'h264',
+      width: 1920,
+    },
+  })
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -185,7 +215,7 @@ describe('videos upload', () => {
       throw new Error(`unexpected request to ${url}`)
     }, lines)
 
-    await runVideoUpload({ file, json: true }, deps)
+    await runVideoUpload({ file, json: true }, { ...deps, prepareVideo: stubPrepare(24) })
 
     expect(storageRequests).toHaveLength(3)
     // A presigned URL signs the request, so the bearer token must not be sent.
@@ -278,6 +308,8 @@ describe('videos upload short reads', () => {
       })
     }
 
-    await expect(runVideoUpload({ file, json: true }, deps)).rejects.toThrow(/ended early/)
+    await expect(
+      runVideoUpload({ file, json: true }, { ...deps, prepareVideo: stubPrepare(30) }),
+    ).rejects.toThrow(/ended early/)
   })
 })

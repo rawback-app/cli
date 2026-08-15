@@ -6,6 +6,7 @@ project_name: rawback
 before:
   hooks:
     - bun run scripts/stage-exiftool.ts
+    - bun run scripts/stage-ffmpeg.ts
     - bun run scripts/build-windows-arm64.ts
 
 builds:
@@ -47,6 +48,11 @@ archives:
         dst: exiftool
       - src: .release-artifacts/exiftool/{{ .Os }}/exiftool*
         dst: exiftool
+      # ffmpeg and ffprobe probe a video, cut its poster frame and split its
+      # audio before upload. Unlike exiftool these are per-architecture, so the
+      # staging directory nests arch under {{ .Os }}.
+      - src: .release-artifacts/ffmpeg/{{ .Os }}/{{ if eq .Arch "amd64" }}x64{{ else }}{{ .Arch }}{{ end }}/*
+        dst: ffmpeg
 
 checksum:
   name_template: checksums.txt
