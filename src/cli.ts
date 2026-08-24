@@ -299,14 +299,67 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
     )
     .command(
       'photos',
-      'list and upload photos',
+      'search, list and upload photos',
       (command) =>
         command
+          .command(
+            'search <prompt>',
+            'find photos by describing them in plain language',
+            (search) =>
+              search
+                .positional('prompt', {
+                  describe: 'what to look for, e.g. "from 2012, all images in NYC"',
+                  type: 'string',
+                })
+                .option('ai-search-id', {
+                  describe:
+                    "reuse a previous search's interpretation (from aiSearch.id) instead of spending another AI credit",
+                  type: 'string',
+                })
+                .option('page', {
+                  default: 1,
+                  describe: 'page number',
+                  type: 'number',
+                })
+                .option('page-size', {
+                  default: 24,
+                  describe: 'results per page',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runPhotoSearch } = await import('./photos.ts')
+              await runCommand(() =>
+                runPhotoSearch({
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  json: args.json,
+                  ...(args.prompt !== undefined ? { prompt: args.prompt } : {}),
+                  ...(args.aiSearchId !== undefined ? { aiSearchId: args.aiSearchId } : {}),
+                }),
+              )
+            },
+          )
           .command(
             'list',
             'list photos in the authenticated library',
             (list) =>
               list
+                .option('prompt', {
+                  describe:
+                    'describe what you want in plain language; combines with the filters below',
+                  type: 'string',
+                })
+                .option('ai-search-id', {
+                  describe:
+                    'reuse a previous --prompt interpretation (from aiSearch.id) instead of spending another AI credit',
+                  type: 'string',
+                })
                 .option('search', {
                   describe: 'search filenames and photo metadata',
                   type: 'string',
@@ -399,6 +452,8 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   pageSize: args.pageSize,
                   json: args.json,
                   hasGps: args.hasGps,
+                  ...(args.prompt !== undefined ? { prompt: args.prompt } : {}),
+                  ...(args.aiSearchId !== undefined ? { aiSearchId: args.aiSearchId } : {}),
                   ...(args.search !== undefined ? { search: args.search } : {}),
                   ...(args.status !== undefined ? { status: args.status } : {}),
                   ...(args.cameraMake !== undefined ? { cameraMake: args.cameraMake } : {}),
@@ -493,7 +548,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
-          .demandCommand(1, 'Choose a photos command: list, check, or upload')
+          .demandCommand(1, 'Choose a photos command: search, list, check, or upload')
           .strict(),
       () => {},
     )

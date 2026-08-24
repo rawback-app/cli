@@ -10,7 +10,8 @@ in a browser.
 - Upload a file or recursively upload a directory over SFTP.
 - Safely resume an interrupted upload and skip exact files already uploaded.
 - Check which local photo and RAW files are already in your Rawback library.
-- Search photos by metadata, capture date, rating, location, and GPS data.
+- Find photos by describing them — "from 2012, all images in NYC" — or by
+  metadata, capture date, rating, location, and GPS data.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Browse content shared with you and manage your outgoing share links.
@@ -277,7 +278,13 @@ certificate; `rawback` verifies certificates by default and tells you to pass
 ## Common examples
 
 ```bash
-# Search filenames and metadata
+# Describe what you want and let the server work out the filters
+rawback photos search "from 2012, all images in NYC"
+
+# Page through the same search without spending another AI credit
+rawback photos search "from 2012, all images in NYC" --ai-search-id abc123 --page 2
+
+# Search filenames and metadata literally
 rawback photos list --search "Iceland"
 
 # Combine filters; repeat or comma-separate multi-value filters
@@ -331,6 +338,7 @@ and automation note. You can also ask the binary for context-specific help:
 
 ```bash
 rawback --help
+rawback photos search --help
 rawback photos list --help
 rawback photos upload --help
 rawback dream --help

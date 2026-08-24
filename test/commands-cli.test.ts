@@ -16,10 +16,29 @@ function runCli(...args: string[]) {
 }
 
 describe('new command hierarchy', () => {
+  test('documents the plain-language photo search', () => {
+    const result = runCli('photos', 'search', '--help')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('rawback photos search <prompt>')
+    for (const flag of ['--ai-search-id', '--page', '--page-size', '--json']) {
+      expect(result.stdout).toContain(flag)
+    }
+  })
+
+  // The prompt is required, and that has to be caught before any credentials
+  // are read — same rule the other pre-flight validations follow.
+  test('requires a prompt for photos search', () => {
+    const result = runCli('photos', 'search')
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).not.toContain('Authentication credentials')
+  })
+
   test('documents rich photo list filters', () => {
     const result = runCli('photos', 'list', '--help')
     expect(result.exitCode).toBe(0)
     for (const flag of [
+      '--prompt',
+      '--ai-search-id',
       '--search',
       '--status',
       '--camera-make',

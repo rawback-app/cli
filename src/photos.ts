@@ -11,6 +11,11 @@ import { photoListDocument } from './features/photos/view.ts'
 const IMAGE_STATUSES = new Set<string>(Object.values(ImageStatus))
 
 export interface PhotoListOptions {
+  /**
+   * `images.aiSearch.id` from an earlier search. Replays that translation
+   * without spending an AI credit, which is how later pages stay free.
+   */
+  aiSearchId?: string
   apertureMax?: number
   apertureMin?: number
   cameraMake?: string[]
@@ -26,6 +31,8 @@ export interface PhotoListOptions {
   lensModel?: string[]
   page: number
   pageSize: number
+  /** A plain-language request the server translates into filters. */
+  prompt?: string
   rate?: string[]
   search?: string
   status?: string[]
@@ -77,9 +84,22 @@ export function createPhotoFilter(options: PhotoListOptions): ImageFilter {
   if (statuses?.some((status) => !IMAGE_STATUSES.has(status))) {
     throw new Error(`--status must contain only: ${[...IMAGE_STATUSES].join(', ')}`)
   }
+  const prompt = options.prompt?.trim()
+  const aiSearchId = options.aiSearchId?.trim()
+  if (aiSearchId && !prompt) {
+    throw new Error('--ai-search-id needs the --prompt it came from')
+  }
+
   const rawRates = listValues(options.rate)
-  const rates = rawRates?.map(Number) ?? [3, 4, 5]
-  if (rates.length === 0 || rates.some((rate) => !Number.isInteger(rate) || rate < 0 || rate > 5)) {
+  // The 3-star floor is a browsing default. Applying it to a plain-language
+  // request would silently drop photos the user explicitly asked for, so a
+  // prompt only gets a rating filter when one was passed explicitly.
+  const defaultRates = prompt ? undefined : [3, 4, 5]
+  const rates = rawRates?.map(Number) ?? defaultRates
+  if (
+    rates &&
+    (rates.length === 0 || rates.some((rate) => !Number.isInteger(rate) || rate < 0 || rate > 5))
+  ) {
     throw new Error('--rate must contain integers between 0 and 5')
   }
 
@@ -101,9 +121,14 @@ export function createPhotoFilter(options: PhotoListOptions): ImageFilter {
 
   const search = options.search?.trim()
   return {
-    rate: [...new Set(rates)],
+    ...(rates ? { rate: [...new Set(rates)] } : {}),
     ...(statuses ? { status: statuses as ImageStatus[] } : {}),
     ...(search ? { search } : {}),
+    ...(prompt ? { prompt } : {}),
+    // Sent alongside the prompt, never instead of it: the server prefers the
+    // id and re-resolves the prompt when the id has expired, so a stale id
+    // costs a credit rather than failing the command.
+    ...(prompt && aiSearchId ? { aiSearchId } : {}),
     ...(listValues(options.cameraMake) ? { cameraMake: listValues(options.cameraMake) } : {}),
     ...(listValues(options.cameraModel) ? { cameraModel: listValues(options.cameraModel) } : {}),
     ...(listValues(options.lensModel) ? { lensModel: listValues(options.lensModel) } : {}),
@@ -169,7 +194,7 @@ export async function runPhotoList(
   if (result.error) throw result.error
   if (!result.data) throw new Error('The photos response did not include photo data')
 
-  const { edges, pageInfo } = result.data.images
+  const { edges, pageInfo, aiSearch } = result.data.images
   const serializedPageInfo = {
     page: pageInfo.page,
     pageSize: pageInfo.pageSize,
@@ -179,8 +204,32 @@ export async function runPhotoList(
     hasPreviousPage: pageInfo.hasPreviousPage,
   }
   if (options.json) {
-    ui.json({ photos: edges.map(serializePhoto), pageInfo: serializedPageInfo })
+    ui.json({
+      photos: edges.map(serializePhoto),
+      pageInfo: serializedPageInfo,
+      // Carried verbatim so a script can page with `aiSearch.id` and not be
+      // charged again for the same request.
+      aiSearch: aiSearch ?? null,
+    })
     return
   }
-  ui.document(photoListDocument(edges, pageInfo))
+  ui.document(photoListDocument(edges, pageInfo, aiSearch))
+}
+
+/**
+ * `rawback photos search "<prompt>"` — the plain-language entry point.
+ *
+ * Shares the runner with `photos list`; the only difference is that the prompt
+ * arrives as a positional argument rather than a flag.
+ */
+export function runPhotoSearch(
+  options: PhotoListOptions,
+  dependencies: PhotoListDependencies = {},
+): Promise<void> {
+  if (!options.prompt?.trim()) {
+    throw new Error(
+      'Provide something to search for, e.g. rawback photos search "photos from 2012 in NYC"',
+    )
+  }
+  return runPhotoList(options, dependencies)
 }

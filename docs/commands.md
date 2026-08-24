@@ -281,6 +281,46 @@ the release, and names the command that will clear it.
 | `This camera does not advertise "<endpoint>"`        | The body or firmware does not support it. `rawback camera api --list` shows what it does.                         |
 | `The camera's TLS certificate could not be verified` | Expected for a Canon body over HTTPS. Re-run with `--insecure`.                                                   |
 
+## `rawback photos search`
+
+Finds photos by describing them, instead of assembling the filters by hand:
+
+```bash
+rawback photos search "from 2012, all images in NYC"
+```
+
+The server translates the request into the same structured filters
+`rawback photos list` takes, then prints how it read the request above the
+results — a summary line plus one field per filter it applied.
+
+| Option                 | Description                                                      | Default |
+| ---------------------- | ---------------------------------------------------------------- | ------- |
+| `<prompt>`             | What to look for, in plain language (required)                   | —       |
+| `--ai-search-id <id>`  | Reuse an earlier interpretation instead of spending an AI credit | —       |
+| `--page <number>`      | Positive result page                                             | `1`     |
+| `--page-size <number>` | Results per page, from 1 through 100                             | `24`    |
+| `--json`               | Print machine-readable JSON                                      | `false` |
+
+Translating a prompt costs one AI credit. The reply carries an `aiSearch.id`,
+and passing it back replays that interpretation for free — so paging through a
+result set is charged once, not once per page. The command prints the exact
+line to run next:
+
+```bash
+rawback photos search "from 2012, all images in NYC" --ai-search-id abc123 --page 2
+```
+
+Pass the id together with the prompt it came from, never on its own. The server
+prefers the id and quietly re-translates the prompt if the id has expired, so a
+stale id costs a credit rather than failing the command.
+
+With `--json` the same detail arrives as an `aiSearch` object beside `photos`
+and `pageInfo`, so a script can page without re-charging.
+
+Unlike `rawback photos list`, a search applies no default rating filter — a
+plain-language request should not be silently narrowed to 3 stars and up. Pass
+`--rate` on `photos list` if you want one.
+
 ## `rawback photos list`
 
 Lists the authenticated photo library as a table, or as a `photos` and
@@ -290,26 +330,28 @@ Lists the authenticated photo library as a table, or as a `photos` and
 rawback photos list [options]
 ```
 
-| Option                        | Description                                | Default |
-| ----------------------------- | ------------------------------------------ | ------- |
-| `--search <text>`             | Search filenames and photo metadata        | —       |
-| `--status <value>`            | Filter by photo status                     | —       |
-| `--camera-make <value>`       | Filter by camera make                      | —       |
-| `--camera-model <value>`      | Filter by camera model                     | —       |
-| `--lens-model <value>`        | Filter by lens model                       | —       |
-| `--captured-after <time>`     | ISO date/time or Unix timestamp in seconds | —       |
-| `--captured-before <time>`    | ISO date/time or Unix timestamp in seconds | —       |
-| `--aperture-min <number>`     | Minimum aperture                           | —       |
-| `--aperture-max <number>`     | Maximum aperture                           | —       |
-| `--focal-length-min <number>` | Minimum focal length in millimeters        | —       |
-| `--focal-length-max <number>` | Maximum focal length in millimeters        | —       |
-| `--rate <0-5>`                | Include one or more ratings                | `3,4,5` |
-| `--city <value>`              | Filter by city                             | —       |
-| `--country <value>`           | Filter by country                          | —       |
-| `--has-gps`                   | Include only photos with GPS coordinates   | `false` |
-| `--page <number>`             | Positive result page                       | `1`     |
-| `--page-size <number>`        | Results per page, from 1 through 100       | `24`    |
-| `--json`                      | Print machine-readable JSON                | `false` |
+| Option                        | Description                                                   | Default |
+| ----------------------------- | ------------------------------------------------------------- | ------- |
+| `--prompt <text>`             | Plain-language request, combined with the filters below       | —       |
+| `--ai-search-id <id>`         | Reuse a previous `--prompt` interpretation (needs `--prompt`) | —       |
+| `--search <text>`             | Search filenames and photo metadata                           | —       |
+| `--status <value>`            | Filter by photo status                                        | —       |
+| `--camera-make <value>`       | Filter by camera make                                         | —       |
+| `--camera-model <value>`      | Filter by camera model                                        | —       |
+| `--lens-model <value>`        | Filter by lens model                                          | —       |
+| `--captured-after <time>`     | ISO date/time or Unix timestamp in seconds                    | —       |
+| `--captured-before <time>`    | ISO date/time or Unix timestamp in seconds                    | —       |
+| `--aperture-min <number>`     | Minimum aperture                                              | —       |
+| `--aperture-max <number>`     | Maximum aperture                                              | —       |
+| `--focal-length-min <number>` | Minimum focal length in millimeters                           | —       |
+| `--focal-length-max <number>` | Maximum focal length in millimeters                           | —       |
+| `--rate <0-5>`                | Include one or more ratings                                   | `3,4,5` |
+| `--city <value>`              | Filter by city                                                | —       |
+| `--country <value>`           | Filter by country                                             | —       |
+| `--has-gps`                   | Include only photos with GPS coordinates                      | `false` |
+| `--page <number>`             | Positive result page                                          | `1`     |
+| `--page-size <number>`        | Results per page, from 1 through 100                          | `24`    |
+| `--json`                      | Print machine-readable JSON                                   | `false` |
 
 Multi-value options can be repeated or comma-separated:
 
@@ -322,6 +364,11 @@ Photo statuses are `pending`, `processing`, `completed`, and `failed`.
 
 Minimum values cannot exceed their corresponding maximum values. Capture dates
 must form a valid chronological range.
+
+`--prompt` composes with every filter above, and anything you set explicitly
+wins over the AI's reading of the prompt. Supplying `--prompt` also drops the
+`3,4,5` rating default, for the reason given under
+[`rawback photos search`](#rawback-photos-search).
 
 ## `rawback photos check`
 
