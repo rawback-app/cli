@@ -1,15 +1,57 @@
 import { type PhotosQuery } from '@rawback/sdk'
 
 import { formatTimestamp } from '../../ui/format.ts'
-import { cell, type UiDocument } from '../../ui/model.ts'
+import { type UiBlock, cell, type UiDocument } from '../../ui/model.ts'
 
 type Photo = PhotosQuery['images']['edges'][number]
 type PageInfo = PhotosQuery['images']['pageInfo']
+type AiSearch = PhotosQuery['images']['aiSearch']
 
-export function photoListDocument(photos: Photo[], pageInfo: PageInfo): UiDocument {
+/**
+ * How the server read a plain-language request, plus the command that pages
+ * through the results without paying for the translation again.
+ *
+ * Both halves matter: without the interpretation a wrong reading looks
+ * identical to an empty library, and without the resend line the obvious next
+ * step (`--page 2`) quietly costs another credit.
+ */
+function aiSearchBlocks(aiSearch: AiSearch, pageInfo: PageInfo): UiBlock[] {
+  if (!aiSearch) return []
+  const blocks: UiBlock[] = [{ type: 'text', text: aiSearch.summary, bold: true }]
+  if (aiSearch.criteria.length > 0) {
+    blocks.push({
+      type: 'fields',
+      fields: aiSearch.criteria.map((criterion) => ({
+        label: criterion.label,
+        value: criterion.value,
+      })),
+    })
+  }
+  if (pageInfo.hasNextPage) {
+    blocks.push({
+      type: 'text',
+      dim: true,
+      text:
+        'Next page (no AI credit): rawback photos search ' +
+        JSON.stringify(aiSearch.prompt) +
+        ' --ai-search-id ' +
+        aiSearch.id +
+        ' --page ' +
+        String(pageInfo.page + 1),
+    })
+  }
+  return blocks
+}
+
+export function photoListDocument(
+  photos: Photo[],
+  pageInfo: PageInfo,
+  aiSearch?: AiSearch,
+): UiDocument {
   return {
     title: 'Photos',
     blocks: [
+      ...aiSearchBlocks(aiSearch ?? null, pageInfo),
       {
         type: 'table',
         emptyMessage: 'No photos found.',
