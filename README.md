@@ -162,7 +162,7 @@ Create `~/.rawback/config.yml` with the account slug shown by
 
 ```yaml
 sftp:
-  endpoint: sftp://ftp.rawback.app:2222
+  endpoint: sftp://ftp.rawback.app:23168
   username: your-account-slug
   password: 'generated-password'
 ```
