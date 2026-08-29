@@ -23,7 +23,7 @@ metadata:
 
 # Required only by `rawback photos upload`
 sftp:
-  endpoint: sftp://ftp.rawback.app:2222
+  endpoint: sftp://ftp.rawback.app:23168
   username: your-account-slug
   password: 'generated SFTP credential password'
 
