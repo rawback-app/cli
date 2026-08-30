@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.0.9](https://github.com/rawback-app/cli/compare/v1.0.8...v1.0.9) (2026-08-30)
+
+
+### Features
+
+* **album:** add album refresh command ([ac60c1b](https://github.com/rawback-app/cli/commit/ac60c1bedd7b6ca42964b45486427a2bf3b98ffc))
+* **album:** add album refresh command ([e533a4d](https://github.com/rawback-app/cli/commit/e533a4d287fbe072425527dee66eb4cc3632bd23))
+* **app:** upgrade based packages to latest ([1c49fa5](https://github.com/rawback-app/cli/commit/1c49fa58fe06225383112c9caba3005894c55641))
+* **camera:** add connect, list, use, forget, info, and status ([1ba7b41](https://github.com/rawback-app/cli/commit/1ba7b418f3bb988d88743aa81c20cdae7b4e199f))
+* **camera:** add live view and event streaming ([f115b17](https://github.com/rawback-app/cli/commit/f115b17b4a73e9ec96c00f8195920de3d3054f69))
+* **camera:** add shoot, settings, and contents commands ([cb3a115](https://github.com/rawback-app/cli/commit/cb3a1158d8b36fbace1c3d6ed0c3d36fcd9fdc0f))
+* **camera:** add the CCAPI session layer ([e2a22c7](https://github.com/rawback-app/cli/commit/e2a22c70ae0a11a0173402a65831c3b1ba277767))
+* **camera:** add the endpoint registry and generic api runner ([451b14e](https://github.com/rawback-app/cli/commit/451b14e63adb625add6f61a6880091f62396e953))
+* **camera:** add the interactive endpoint explorer ([3364b5c](https://github.com/rawback-app/cli/commit/3364b5cbec43ea9a8c4a3d065b215ab22adf8560))
+* **camera:** control a Canon camera over CCAPI ([367f7e3](https://github.com/rawback-app/cli/commit/367f7e361091cb707edba0498715958fa11c3cb0))
+* **camera:** store saved cameras in ~/.rawback/cameras.json ([0a331c7](https://github.com/rawback-app/cli/commit/0a331c74e689974339dd288fe4953c4358d6420c))
+* **cli:** add a memory command ([a19aee4](https://github.com/rawback-app/cli/commit/a19aee4ddd5131640318ad19eb0eb95d33cef8a7))
+* **cli:** add a memory command ([f39a337](https://github.com/rawback-app/cli/commit/f39a33759af38c675501d5172ad88f303c59a797))
+* **photos:** add `rawback photos search` for plain-language search ([3393787](https://github.com/rawback-app/cli/commit/33937875e099eceb27863906a8f412613c5adb8f))
+* **photos:** add `rawback photos search` for plain-language search ([1cd211c](https://github.com/rawback-app/cli/commit/1cd211cb1e4fb0be45b5fefa45364fcad6587648))
+* **video:** probe, cut a poster frame and split audio before upload ([4b19807](https://github.com/rawback-app/cli/commit/4b19807d52ae3810d37c72b26b64c7bd43d2b826))
+* **video:** probe, cut a poster frame and split audio before upload ([aef4f30](https://github.com/rawback-app/cli/commit/aef4f3051bb1b7750bf1f2bd008f2fdcdc8473da))
+
+
+### Bug Fixes
+
+* **docs:** correct the SFTP endpoint port to 23168 ([f9cf8f9](https://github.com/rawback-app/cli/commit/f9cf8f9e03d0cbbd7454001e9ae7572993e46342))
+* **docs:** correct the SFTP endpoint port to 23168 ([aafeeb9](https://github.com/rawback-app/cli/commit/aafeeb9b10f2d8ed79fff7524ccd7a167a9e979d))
+
+
+### Documentation
+
+* **camera:** document camera control and the shared connection file ([042fb46](https://github.com/rawback-app/cli/commit/042fb4698b66cf67664058d0bac8d4b77c626530))
+
+
+### Tests
+
+* **camera:** assert the store round-trips with Rawback Desktop ([ec911cb](https://github.com/rawback-app/cli/commit/ec911cb4883dff8464da42fb90a3111afbab2e57))
+
+
+### Miscellaneous
+
+* **ci:** upgrade bun to 1.4.0 ([df3ad0f](https://github.com/rawback-app/cli/commit/df3ad0fbf7efb897c56ead62ab00192b01b56dbd))
+* **ci:** upgrade bun to 1.4.0 ([755c19e](https://github.com/rawback-app/cli/commit/755c19e1bc2bd7db83f55d882bdd49ece7965604))
+* **deps:** resolve @rawback/sdk 0.2.7 in the lockfile ([cc5992c](https://github.com/rawback-app/cli/commit/cc5992c0569336ad478ed0ab13ac2e5951bc154a))
+
 ## [1.0.8](https://github.com/rawback-app/cli/compare/v1.0.7...v1.0.8) (2026-08-04)
 
 
