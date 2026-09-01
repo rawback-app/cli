@@ -77,7 +77,7 @@ describe('camera connect', () => {
 
     await runCameraConnect(
       { url: 'http://192.168.0.1:8080', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toMatchObject({
@@ -105,7 +105,7 @@ describe('camera connect', () => {
 
     await runCameraConnect(
       { url: 'http://ccapi:secret@192.168.0.1:8080', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const entry = await store.find('192.168.0.1:8080')
@@ -121,7 +121,7 @@ describe('camera connect', () => {
 
     await runCameraConnect(
       { url: 'http://ccapi:secret@192.168.0.1:8080', savePassword: true, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect((await store.find('192.168.0.1:8080'))?.password).toBe('secret')
@@ -138,7 +138,7 @@ describe('camera connect', () => {
 
     await runCameraConnect(
       { url: 'http://192.168.0.1:8080', makeDefault: false, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect((await store.read()).default).toBe('other:8080')
@@ -152,7 +152,7 @@ describe('camera list', () => {
     await store.upsert(saved({ id: 'other:8080', host: 'other' }))
     const output = capture()
 
-    await runCameraList({ json: true }, { store, env: {}, ...output.dependencies })
+    await runCameraList({ json: true }, { store, processEnv: {}, ...output.dependencies })
 
     const body = output.stdout.join('\n')
     expect(body).not.toContain('secret')
@@ -168,7 +168,7 @@ describe('camera list', () => {
     const { store } = await temporaryStore()
     const output = capture()
 
-    await runCameraList({}, { store, env: {}, ...output.dependencies })
+    await runCameraList({}, { store, processEnv: {}, ...output.dependencies })
 
     expect(output.stdout.join('\n')).toContain('rawback camera connect')
   })
@@ -181,7 +181,10 @@ describe('camera use and forget', () => {
     await store.upsert(saved({ id: 'other:8080', host: 'other' }))
     const output = capture()
 
-    await runCameraUse({ id: 'other:8080', json: true }, { store, env: {}, ...output.dependencies })
+    await runCameraUse(
+      { id: 'other:8080', json: true },
+      { store, processEnv: {}, ...output.dependencies },
+    )
 
     expect(output.json()).toEqual({ default: 'other:8080' })
     expect((await store.defaultCamera())?.id).toBe('other:8080')
@@ -194,7 +197,7 @@ describe('camera use and forget', () => {
 
     await runCameraForget(
       { id: '192.168.0.1:8080', force: true, json: true },
-      { store, env: {}, prompts: unexpectedPrompts(), ...output.dependencies },
+      { store, processEnv: {}, prompts: unexpectedPrompts(), ...output.dependencies },
     )
 
     expect(output.json()).toEqual({ forgotten: true, id: '192.168.0.1:8080' })
@@ -210,7 +213,7 @@ describe('camera use and forget', () => {
       { id: '192.168.0.1:8080', json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,
       },
@@ -225,7 +228,10 @@ describe('camera use and forget', () => {
     const output = capture()
 
     await expect(
-      runCameraForget({ id: 'nope:8080', force: true }, { store, env: {}, ...output.dependencies }),
+      runCameraForget(
+        { id: 'nope:8080', force: true },
+        { store, processEnv: {}, ...output.dependencies },
+      ),
     ).rejects.toThrow(/No saved camera with ID nope:8080/)
   })
 })
@@ -254,7 +260,7 @@ describe('camera info', () => {
 
     await runCameraInfo(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toMatchObject({
@@ -293,7 +299,7 @@ describe('camera status', () => {
 
     await runCameraStatus(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -333,7 +339,7 @@ describe('camera status', () => {
 
     await runCameraStatus(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const parsed = output.json()
@@ -364,7 +370,10 @@ describe('camera status', () => {
     })
     const output = capture()
 
-    await runCameraStatus({}, { store, env: {}, fetch: camera.fetch, ...output.dependencies })
+    await runCameraStatus(
+      {},
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
 
     expect(output.stdout.join('\n')).toContain('full')
     expect(output.stderr).toEqual([])
@@ -386,7 +395,7 @@ describe('camera shoot', () => {
 
     await runCameraShoot(
       { json: true, force: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -416,7 +425,7 @@ describe('camera shoot', () => {
       { json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,
@@ -435,7 +444,7 @@ describe('camera shoot', () => {
 
     await runCameraShoot(
       { json: true, force: true, manual: 'half_press', af: false },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const manual = camera.requests.find((request) => request.path.includes('/manual'))

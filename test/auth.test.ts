@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -83,7 +83,7 @@ function deviceApproved() {
 }
 
 function deviceUnavailable(
-  headers?: ConstructorParameters<typeof Headers>[0],
+  headers?: Record<string, string>,
   message = 'device authorization is temporarily unavailable',
 ) {
   return Response.json(
@@ -96,6 +96,96 @@ function deviceUnavailable(
     { status: 503, ...(headers ? { headers } : {}) },
   )
 }
+
+describe('auth environments', () => {
+  const source = [
+    'current: production',
+    'environments:',
+    '  production:',
+    '    apiHost: https://api.rawback.app',
+    '    webHost: https://rawback.app',
+    '  local:',
+    '    apiHost: http://localhost:23164',
+    '    webHost: http://localhost:3407',
+    '',
+  ].join('\n')
+
+  test('signs into one environment without disturbing the other', async () => {
+    const paths = await temporaryPaths()
+    await writeFile(paths.configPath, source, { mode: 0o600 })
+    const production = { token: 'prod-access', refreshToken: 'prod-refresh' }
+    await writeCredentials(production, paths.credentialsPath, 'production')
+
+    const output: string[] = []
+    const opened: string[] = []
+    const hosts: string[] = []
+
+    await runAuth(
+      { force: true },
+      {
+        ...paths,
+        env: 'local',
+        prompts: unexpectedPrompts(),
+        platform: 'linux',
+        open: async (_command, args) => {
+          opened.push(args[0] as string)
+          return 0
+        },
+        sleep: async () => {},
+        stdout: (message) => output.push(message),
+        fetch: createFetch((url) => {
+          hosts.push(new URL(url).origin)
+          return url.endsWith('/sessions') ? deviceCreated() : deviceApproved()
+        }),
+      },
+    )
+
+    // The device page, the API it talks to, and the slot the tokens land in all
+    // belong to the requested environment.
+    expect(opened).toEqual(['http://localhost:3407/auth/device/session-123'])
+    expect(new Set(hosts)).toEqual(new Set(['http://localhost:23164']))
+    expect(output.at(-1)).toBe('✓ Authenticated as Raw Back (user@example.com) on local.')
+    expect(await readCredentials(paths.credentialsPath, 'local')).toEqual({
+      token: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+    expect(await readCredentials(paths.credentialsPath, 'production')).toEqual(production)
+  })
+
+  test('reports the environment a status check ran against', async () => {
+    const paths = await temporaryPaths()
+    await writeFile(paths.configPath, source, { mode: 0o600 })
+    await writeCredentials(
+      { token: 'local-access', refreshToken: 'r' },
+      paths.credentialsPath,
+      'local',
+    )
+
+    const output: string[] = []
+    await runAuthStatus({
+      ...paths,
+      env: 'local',
+      stdout: (message) => output.push(message),
+      fetch: createFetch((url) => {
+        expect(url).toStartWith('http://localhost:23164')
+        return Response.json({ data: { me: authUser } })
+      }),
+    })
+
+    const rendered = output.join('\n')
+    expect(rendered).toContain('local')
+    expect(rendered).toContain('http://localhost:23164')
+  })
+
+  test('refuses an environment the config does not define', async () => {
+    const paths = await temporaryPaths()
+    await writeFile(paths.configPath, source, { mode: 0o600 })
+
+    await expect(runAuthStatus({ ...paths, env: 'staging', stdout: () => {} })).rejects.toThrow(
+      'Unknown environment "staging"',
+    )
+  })
+})
 
 describe('auth commands', () => {
   test('creates a device session, opens its web page, polls, and saves credentials', async () => {

@@ -4,7 +4,12 @@ import { type UiDocument } from '../../ui/model.ts'
 
 type AuthUser = AuthStatusQuery['me']
 
-export function authStatusDocument(user: AuthUser): UiDocument {
+export interface AuthStatusEnvironment {
+  name: string
+  apiHost: string
+}
+
+export function authStatusDocument(user: AuthUser, environment: AuthStatusEnvironment): UiDocument {
   return {
     title: 'Authentication',
     blocks: [
@@ -12,6 +17,8 @@ export function authStatusDocument(user: AuthUser): UiDocument {
       {
         type: 'fields',
         fields: [
+          { label: 'Environment', value: environment.name },
+          { label: 'API host', value: environment.apiHost },
           { label: 'Name', value: user.name },
           { label: 'Email', value: user.email },
           { label: 'User ID', value: user.id },

@@ -76,6 +76,27 @@ describe('new command hierarchy', () => {
     expect(view.stdout).toContain('--json')
   })
 
+  test('documents the environment commands and the global --env flag', () => {
+    const config = runCli('config', '--help')
+    expect(config.stdout).toContain('env')
+    expect(config.stdout).toContain('use')
+
+    expect(runCli('--help').stdout).toContain('--env')
+    expect(runCli('config', 'env', '--help').stdout).toContain('--json')
+    expect(runCli('config', 'use', '--help').stdout).toContain('environment')
+  })
+
+  test('requires an environment name for config use', () => {
+    const result = runCli('config', 'use')
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('Missing required argument: environment')
+  })
+
+  test('rejects an unknown config env subcommand', () => {
+    const result = runCli('config', 'env', 'add')
+    expect(result.exitCode).toBe(1)
+  })
+
   test('documents the dream command hierarchy and view alias', () => {
     const dream = runCli('dream', '--help')
     for (const command of ['list', 'get', 'view', 'retry']) {

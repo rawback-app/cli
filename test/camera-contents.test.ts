@@ -103,7 +103,7 @@ describe('camera contents', () => {
 
     await runCameraContentsStorages(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({ storages: ['/ccapi/ver140/contents/card1'] })
@@ -117,7 +117,7 @@ describe('camera contents', () => {
 
     await runCameraContentsList(
       { storage: 'card1', directory: '100CANON', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     // ver140 inserts `folder` as a path segment: contents/<storage>/folder/<directory>
@@ -134,7 +134,7 @@ describe('camera contents', () => {
 
     await runCameraContentsList(
       { storage: 'card1', directory: '100CANON', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(
@@ -167,7 +167,7 @@ describe('camera contents', () => {
 
     await runCameraContentsList(
       { storage: 'card1', directory: '100CANON', all: true, json: true },
-      { store, env: {}, fetch: streaming, ...output.dependencies },
+      { store, processEnv: {}, fetch: streaming, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({ contents: ['a.JPG', 'b.JPG', 'c.JPG'], count: 3 })
@@ -202,7 +202,7 @@ describe('camera contents', () => {
         output: target,
         json: true,
       },
-      { store, env: {}, fetch: binary, ...output.dependencies },
+      { store, processEnv: {}, fetch: binary, ...output.dependencies },
     )
 
     expect(new Uint8Array(await readFile(target))).toEqual(payload)
@@ -225,7 +225,7 @@ describe('camera contents', () => {
           output: target,
           json: true,
         },
-        { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
       ),
     ).rejects.toThrow(/already exists; pass --overwrite/)
 
@@ -256,7 +256,7 @@ describe('camera contents', () => {
         output: directory,
         json: true,
       },
-      { store, env: {}, fetch: binary, ...output.dependencies },
+      { store, processEnv: {}, fetch: binary, ...output.dependencies },
     )
 
     expect(output.json().output).toBe(join(directory, 'IMG_0042.JPG'))
@@ -272,7 +272,7 @@ describe('camera contents', () => {
       { locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG', json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,
@@ -295,7 +295,7 @@ describe('camera contents', () => {
         force: true,
         json: true,
       },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json().deleted).toBe(true)

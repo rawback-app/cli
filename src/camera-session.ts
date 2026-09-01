@@ -34,8 +34,8 @@ export interface CameraPrompts {
 
 export interface CameraCommandDependencies extends ReadCommandDependencies {
   camerasPath?: string
-  /** Injected so precedence tests need not mutate the real environment. */
-  env?: Record<string, string | undefined>
+  /** Injected `process.env`, so precedence tests need not mutate the real one. */
+  processEnv?: Record<string, string | undefined>
   prompts?: CameraPrompts
   now?: () => Date
   store?: CameraStore
@@ -104,7 +104,7 @@ export async function resolveCameraTarget(
   const store = cameraStore(dependencies)
   // An exported-but-empty `RAWBACK_CAMERA_URL=` is a common shell-profile
   // shape and means "unset", not "connect to the empty string".
-  const fromEnv = (dependencies.env ?? process.env)[CAMERA_URL_ENV]?.trim()
+  const fromEnv = (dependencies.processEnv ?? process.env)[CAMERA_URL_ENV]?.trim()
   const named = options.url ?? options.camera ?? (fromEnv !== '' ? fromEnv : undefined)
 
   if (named === undefined) {

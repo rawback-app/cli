@@ -115,6 +115,29 @@ retried before the command reports an error with a support trace ID when
 available. Persistent device-authentication failures also include the raw server
 error for diagnosis.
 
+If you also run a local Rawback server, define it once in
+`~/.rawback/config.yml` and sign into both — they stay signed in side by side:
+
+```yaml
+current: production
+environments:
+  production:
+    apiHost: https://api.rawback.app
+    webHost: https://rawback.app
+  local:
+    apiHost: http://localhost:23164
+    webHost: http://localhost:3407
+```
+
+```bash
+rawback --env local auth        # sign in without touching production
+rawback config env list         # names, hosts, and which are signed in
+rawback config use local        # make it the default for later commands
+```
+
+See [docs/configuration.md](docs/configuration.md#environments) for the full
+format.
+
 ### 2. Browse your account
 
 These commands work immediately after sign-in:
@@ -352,12 +375,12 @@ rawback shares list --help
 
 Rawback stores local state under `~/.rawback/`:
 
-| File                | Purpose                                             |
-| ------------------- | --------------------------------------------------- |
-| `credentials.json`  | Access and refresh tokens created by `rawback auth` |
-| `config.yml`        | Optional hosts, metadata workers, and SFTP settings |
-| `upload-state.json` | Shared upload queue, history, and trusted host keys |
-| `cameras.json`      | Saved Canon cameras, shared with Rawback Desktop    |
+| File                | Purpose                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `credentials.json`  | Access and refresh tokens per environment, from `rawback auth` |
+| `config.yml`        | Environments, optional hosts, metadata workers, and SFTP       |
+| `upload-state.json` | Shared upload queue, history, and trusted host keys            |
+| `cameras.json`      | Saved Canon cameras, shared with Rawback Desktop               |
 
 `cameras.json` is shared with the Rawback desktop app, so both can reach the same
 camera without pairing twice. It holds a camera password only when you pass
@@ -368,8 +391,8 @@ read it refuse a file that group or others can read.
 The CLI creates credential, camera, and upload-state files with restrictive permissions
 on Unix. You create `config.yml` yourself, so upload commands require it to have
 mode `0600` on Unix. Never commit files from `~/.rawback/` or paste their secrets
-into issues and logs. `rawback config view` masks `sftp.password` in both terminal
-and JSON output.
+into issues and logs. `rawback config view` masks every `sftp.password` in both
+terminal and JSON output, including the ones inside `environments`.
 
 ## Development
 
