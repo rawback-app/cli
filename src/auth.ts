@@ -3,7 +3,15 @@ import { AuthStatusDocument, type AuthStatusQuery } from '@rawback/sdk'
 
 import { type RawbackClient, createRawbackClient } from './client.ts'
 import { commandOutput, type ReadCommandDependencies } from './command.ts'
-import { DEFAULT_WEB_HOST, type RawbackConfig, readConfig } from './config.ts'
+import {
+  DEFAULT_CONFIG_PATH,
+  DEFAULT_ENVIRONMENT,
+  DEFAULT_WEB_HOST,
+  environmentName,
+  readConfig,
+  resolveEnvironment,
+  type ResolvedEnvironment,
+} from './config.ts'
 import {
   type Credentials,
   CredentialsError,
@@ -12,7 +20,13 @@ import {
   writeCredentials,
 } from './credentials.ts'
 import { authStatusDocument } from './features/auth/view.ts'
-import { type ApiEnvelope, HttpError, JsonResponseError, traceIdOf } from './http.ts'
+import {
+  DEFAULT_API_HOST,
+  type ApiEnvelope,
+  HttpError,
+  JsonResponseError,
+  traceIdOf,
+} from './http.ts'
 import { browserCommand, defaultOpen } from './web.ts'
 
 interface LoginUser {
@@ -87,13 +101,29 @@ function defaultPrompts(): AuthPrompts {
   }
 }
 
+/**
+ * Every account-facing value here belongs to one environment: the device
+ * approval URL, the API the tokens are minted by, and the slot they are saved
+ * into. Resolve it once per command so the three cannot drift apart.
+ */
+async function resolveTarget(dependencies: AuthCommandDependencies): Promise<ResolvedEnvironment> {
+  const configPath = dependencies.configPath ?? DEFAULT_CONFIG_PATH
+  return resolveEnvironment(await readConfig(configPath), environmentName(dependencies), configPath)
+}
+
+/** Naming the environment is noise until more than the default one is in play. */
+function qualifier(environment: ResolvedEnvironment): string {
+  return environment.name === DEFAULT_ENVIRONMENT ? '' : ` on ${environment.name}`
+}
+
 function createClient(
-  config: RawbackConfig,
+  environment: ResolvedEnvironment,
   credentials: Credentials | null,
   dependencies: AuthCommandDependencies,
 ): Promise<RawbackClient> {
   return createRawbackClient({
-    config,
+    ...(environment.apiHost ? { apiHost: environment.apiHost } : {}),
+    config: {},
     credentials,
     credentialsPath: dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
     ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
@@ -109,7 +139,7 @@ function isUnauthorizedError(error: unknown): boolean {
 }
 
 async function queryStatus(
-  config: RawbackConfig,
+  environment: ResolvedEnvironment,
   credentials: Credentials | null,
   dependencies: AuthCommandDependencies,
 ): Promise<StatusResult> {
@@ -117,7 +147,7 @@ async function queryStatus(
     return { kind: 'missing' }
   }
 
-  const client = await createClient(config, credentials, dependencies)
+  const client = await createClient(environment, credentials, dependencies)
   const result = await client.graphql.query({ query: AuthStatusDocument })
 
   if (result.error) {
@@ -135,10 +165,14 @@ async function queryStatus(
 
 async function readStoredCredentials(
   dependencies: AuthCommandDependencies,
+  environment: ResolvedEnvironment,
   tolerateInvalid: boolean,
 ): Promise<Credentials | null> {
   try {
-    return await readCredentials(dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH)
+    return await readCredentials(
+      dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
+      environment.name,
+    )
   } catch (error) {
     if (tolerateInvalid && error instanceof CredentialsError) {
       commandOutput(dependencies).warning(error.message + '; continuing with authentication.')
@@ -377,14 +411,14 @@ export async function runAuth(
   options: AuthCommandOptions,
   dependencies: AuthCommandDependencies = {},
 ): Promise<void> {
-  const config = await readConfig(dependencies.configPath)
+  const environment = await resolveTarget(dependencies)
   const ui = commandOutput(dependencies)
   const prompts = dependencies.prompts ?? defaultPrompts()
 
   if (!options.force) {
-    const credentials = await readStoredCredentials(dependencies, true)
+    const credentials = await readStoredCredentials(dependencies, environment, true)
     const status = await ui.withActivity('Checking authentication…', () =>
-      queryStatus(config, credentials, dependencies),
+      queryStatus(environment, credentials, dependencies),
     )
 
     if (status.kind === 'authenticated') {
@@ -404,11 +438,11 @@ export async function runAuth(
     }
   }
 
-  const client = await createClient(config, null, dependencies)
+  const client = await createClient(environment, null, dependencies)
   const session = await ui.withActivity('Creating device session…', () =>
     createDeviceSession(client, dependencies),
   )
-  const webHost = (config.webHost ?? DEFAULT_WEB_HOST).replace(/\/$/, '')
+  const webHost = (environment.webHost ?? DEFAULT_WEB_HOST).replace(/\/$/, '')
   const url = `${webHost}/auth/device/${encodeURIComponent(session.sessionId)}`
   ui.info('Authorize this CLI session in your browser:')
   ui.raw(url)
@@ -436,16 +470,25 @@ export async function runAuth(
       refreshToken: response.refreshToken,
     },
     dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
+    environment.name,
   )
-  ui.success('Authenticated as ' + response.user.name + ' (' + response.user.email + ').')
+  ui.success(
+    'Authenticated as ' +
+      response.user.name +
+      ' (' +
+      response.user.email +
+      ')' +
+      qualifier(environment) +
+      '.',
+  )
 }
 
 export async function runAuthStatus(dependencies: AuthCommandDependencies = {}): Promise<void> {
-  const config = await readConfig(dependencies.configPath)
+  const environment = await resolveTarget(dependencies)
   const ui = commandOutput(dependencies)
   let credentials: Credentials | null
   try {
-    credentials = await readStoredCredentials(dependencies, false)
+    credentials = await readStoredCredentials(dependencies, environment, false)
   } catch (error) {
     if (error instanceof CredentialsError) {
       throw new Error(error.message + ". Run 'rawback auth --force' to sign in again.", {
@@ -455,15 +498,22 @@ export async function runAuthStatus(dependencies: AuthCommandDependencies = {}):
     throw error
   }
   const status = await ui.withActivity('Checking authentication…', () =>
-    queryStatus(config, credentials, dependencies),
+    queryStatus(environment, credentials, dependencies),
   )
 
   if (status.kind === 'missing') {
-    throw new Error("Not authenticated. Run 'rawback auth' to sign in.")
+    throw new Error(`Not authenticated${qualifier(environment)}. Run 'rawback auth' to sign in.`)
   }
   if (status.kind === 'invalid') {
-    throw new Error("Authentication has expired. Run 'rawback auth --force' to sign in again.")
+    throw new Error(
+      `Authentication${qualifier(environment)} has expired. Run 'rawback auth --force' to sign in again.`,
+    )
   }
 
-  ui.document(authStatusDocument(status.user))
+  ui.document(
+    authStatusDocument(status.user, {
+      name: environment.name,
+      apiHost: environment.apiHost ?? DEFAULT_API_HOST,
+    }),
+  )
 }

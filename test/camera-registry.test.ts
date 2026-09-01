@@ -185,7 +185,7 @@ describe('registry drift guard', () => {
 
     await withCameraSession(
       {},
-      { store, env: {}, fetch: throwingFetch, stdout: () => {}, stderr: () => {} },
+      { store, processEnv: {}, fetch: throwingFetch, stdout: () => {}, stderr: () => {} },
       async (session) => {
         for (const entry of REGISTRY) {
           try {
@@ -331,7 +331,10 @@ describe('camera api runner', () => {
     const { store } = await temporaryStore()
     const output = capture()
 
-    await runCameraApi({ list: true, json: true }, { store, env: {}, ...output.dependencies })
+    await runCameraApi(
+      { list: true, json: true },
+      { store, processEnv: {}, ...output.dependencies },
+    )
 
     const parsed = output.json() as { count: number; endpoints: Array<Record<string, unknown>> }
     expect(parsed.count).toBe(REGISTRY.length)
@@ -344,7 +347,7 @@ describe('camera api runner', () => {
 
     await runCameraApi(
       { list: true, namespace: 'status', json: true },
-      { store, env: {}, ...output.dependencies },
+      { store, processEnv: {}, ...output.dependencies },
     )
 
     const parsed = output.json() as { endpoints: Array<{ namespace: string }> }
@@ -368,7 +371,7 @@ describe('camera api runner', () => {
 
     await runCameraApi(
       { id: 'status.getBattery', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const parsed = output.json()
@@ -396,7 +399,7 @@ describe('camera api runner', () => {
     await expect(
       runCameraApi(
         { id: 'shooting.getZoom', json: true },
-        { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
       ),
     ).rejects.toThrow(/does not advertise "shooting\/control\/zoom"/)
   })
@@ -411,7 +414,7 @@ describe('camera api runner', () => {
       { id: 'shooting.setAperture', arg: ['value=f5.6'], json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,
@@ -430,7 +433,7 @@ describe('camera api runner', () => {
 
     await runCameraApi(
       { id: 'liveview.getScroll', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     ).catch(() => undefined)
 
     expect(output.stderr.join('\n')).toContain('misbehave on real hardware')
@@ -444,7 +447,7 @@ describe('camera api runner', () => {
 
     await runCameraApi(
       { id: 'status.getBattery', describe: true, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toMatchObject({ id: 'status.getBattery', doc: '4.4.4', mutates: false })

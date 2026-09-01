@@ -66,7 +66,7 @@ describe('target resolution', () => {
 
     const { target } = await resolveCameraTarget(
       { url: 'http://positional:1000', camera: 'http://flag:2000' },
-      { store, env: { [CAMERA_URL_ENV]: 'http://env:3000' } },
+      { store, processEnv: { [CAMERA_URL_ENV]: 'http://env:3000' } },
     )
 
     expect(target.host).toBe('positional')
@@ -81,7 +81,7 @@ describe('target resolution', () => {
 
     const { target } = await resolveCameraTarget(
       { camera: 'http://flag:2000' },
-      { store, env: { [CAMERA_URL_ENV]: 'http://env:3000' } },
+      { store, processEnv: { [CAMERA_URL_ENV]: 'http://env:3000' } },
     )
 
     expect(target.host).toBe('flag')
@@ -96,7 +96,7 @@ describe('target resolution', () => {
 
     const { target } = await resolveCameraTarget(
       {},
-      { store, env: { [CAMERA_URL_ENV]: 'http://env:3000' } },
+      { store, processEnv: { [CAMERA_URL_ENV]: 'http://env:3000' } },
     )
 
     expect(target.host).toBe('env')
@@ -118,7 +118,7 @@ describe('target resolution', () => {
       { makeDefault: true },
     )
 
-    const { target } = await resolveCameraTarget({}, { store, env: {} })
+    const { target } = await resolveCameraTarget({}, { store, processEnv: {} })
 
     expect(target.host).toBe('saved')
     expect(target.credentials).toEqual({ username: 'ccapi', password: 'secret' })
@@ -139,7 +139,7 @@ describe('target resolution', () => {
 
     const { target } = await resolveCameraTarget(
       { camera: 'http://192.168.0.1:8080' },
-      { store, env: {} },
+      { store, processEnv: {} },
     )
 
     expect(target.credentials).toEqual({ username: 'ccapi', password: 'secret' })
@@ -148,7 +148,7 @@ describe('target resolution', () => {
   test('errors with the setup instructions when nothing is configured', async () => {
     const { store } = await temporaryStore()
 
-    await expect(resolveCameraTarget({}, { store, env: {} })).rejects.toThrow(
+    await expect(resolveCameraTarget({}, { store, processEnv: {} })).rejects.toThrow(
       /No camera configured\. Run rawback camera connect/,
     )
   })
@@ -212,7 +212,7 @@ describe('withCameraSession', () => {
 
     const version = await withCameraSession(
       {},
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async (session) => session.apiVersion,
     )
 
@@ -237,7 +237,7 @@ describe('withCameraSession', () => {
 
     await withCameraSession(
       {},
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async (session) => session.client.status.getBattery(),
     )
 
@@ -256,7 +256,7 @@ describe('withCameraSession', () => {
 
     await withCameraSession(
       { refresh: true },
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async () => undefined,
     )
 
@@ -277,7 +277,7 @@ describe('withCameraSession', () => {
       {},
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         now: () => new Date('2026-08-04T00:00:00.000Z'),
         ...silent(),
@@ -318,7 +318,7 @@ describe('withCameraSession', () => {
 
     const battery = await withCameraSession(
       {},
-      { store, env: {}, fetch: flaky, ...silent() },
+      { store, processEnv: {}, fetch: flaky, ...silent() },
       async (session) => session.client.status.getBattery(),
     )
 
@@ -342,7 +342,7 @@ describe('withCameraSession', () => {
 
     await withCameraSession(
       {},
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async (session) => session.client.status.getBattery(),
     )
 
@@ -374,7 +374,7 @@ describe('withCameraSession', () => {
 
     const promise = withCameraSession(
       {},
-      { store, env: {}, fetch: failing, ...silent() },
+      { store, processEnv: {}, fetch: failing, ...silent() },
       async (session) => session.client.status.getBattery(),
     )
 
@@ -392,7 +392,11 @@ describe('withCameraSession', () => {
     ) as typeof globalThis.fetch
 
     await expect(
-      withCameraSession({}, { store, env: {}, fetch: failing, ...silent() }, async () => undefined),
+      withCameraSession(
+        {},
+        { store, processEnv: {}, fetch: failing, ...silent() },
+        async () => undefined,
+      ),
     ).rejects.toThrow(/re-run with --insecure/)
   })
 
@@ -409,7 +413,7 @@ describe('withCameraSession', () => {
 
     await withCameraSession(
       {},
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async (session) => {
         session.register(async () => {
           releasedWhileAborted = session.signal.aborted
@@ -441,7 +445,7 @@ describe('withCameraSession', () => {
 
       const segment = await withCameraSession(
         {},
-        { store, env: {}, fetch: camera.fetch, ...silent() },
+        { store, processEnv: {}, fetch: camera.fetch, ...silent() },
         async (session) => session.folderSegment,
       )
 
@@ -461,7 +465,7 @@ describe('withCameraSession', () => {
 
     const answers = await withCameraSession(
       {},
-      { store, env: {}, fetch: camera.fetch, ...silent() },
+      { store, processEnv: {}, fetch: camera.fetch, ...silent() },
       async (session) => [
         session.supports('devicestatus/battery'),
         session.supports('devicestatus/temperature'),

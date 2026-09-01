@@ -43,7 +43,11 @@ describe('credentials', () => {
     await writeCredentials(credentials, path)
 
     expect(await readCredentials(path)).toEqual(credentials)
-    expect(await Bun.file(path).json()).toEqual(credentials)
+    expect(await Bun.file(path).json()).toEqual({
+      version: 2,
+      ...credentials,
+      environments: { default: credentials },
+    })
 
     if (process.platform !== 'win32') {
       expect((await Bun.file(path).stat()).mode & 0o777).toBe(0o600)

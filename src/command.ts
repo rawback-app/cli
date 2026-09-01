@@ -1,9 +1,12 @@
 import { type RawbackClient, createRawbackClient } from './client.ts'
+import { environmentName } from './config.ts'
 import { CommandOutput, type CommandOutputOptions } from './ui/output.tsx'
 
 export interface ReadCommandDependencies extends CommandOutputOptions {
   configPath?: string
   credentialsPath?: string
+  /** Environment from `~/.rawback/config.yml`; defaults to the `--env` flag. */
+  env?: string
   fetch?: typeof globalThis.fetch
   output?: CommandOutput
 }
@@ -16,8 +19,10 @@ export async function createCommandClient(
   dependencies: ReadCommandDependencies,
   authenticated = true,
 ): Promise<RawbackClient> {
+  const env = environmentName(dependencies)
   const client = await createRawbackClient({
     ...(dependencies.configPath !== undefined ? { configPath: dependencies.configPath } : {}),
+    ...(env !== undefined ? { env } : {}),
     ...(dependencies.credentialsPath !== undefined
       ? { credentialsPath: dependencies.credentialsPath }
       : {}),

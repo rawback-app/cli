@@ -1,6 +1,7 @@
 import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
+import { setSelectedEnvironment } from './environment.ts'
 import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
 
@@ -171,6 +172,14 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
     .alias('help', 'h')
     .version('version', 'output the current version', version)
     .alias('version', 'V')
+    .option('env', {
+      describe: 'environment from ~/.rawback/config.yml; defaults to its current: setting',
+      global: true,
+      type: 'string',
+    })
+    .middleware((args) => {
+      setSelectedEnvironment(typeof args.env === 'string' ? args.env : undefined)
+    })
     .command(
       'auth [subcommand]',
       'authenticate with Rawback',
@@ -2537,7 +2546,42 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               await runCommand(() => runConfigView({ json: args.json }))
             },
           )
-          .demandCommand(1, 'Choose a config command: view')
+          .command(
+            'env <subcommand>',
+            'list the configured environments',
+            (environment) =>
+              environment
+                .positional('subcommand', {
+                  choices: ['list'] as const,
+                  describe: 'environment action',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runConfigEnvList } = await import('./config-env.ts')
+              await runCommand(() => runConfigEnvList({ json: args.json }))
+            },
+          )
+          .command(
+            'use <environment>',
+            'save the environment later commands should use',
+            (use) =>
+              use.positional('environment', {
+                describe: 'environment name from config.yml, or default',
+                type: 'string',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runConfigUse } = await import('./config-env.ts')
+              await runCommand(() => runConfigUse(args.environment as string))
+            },
+          )
+          .demandCommand(1, 'Choose a config command: view, env, or use')
           .strict(),
       () => {},
     )

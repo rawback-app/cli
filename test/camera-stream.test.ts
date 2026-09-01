@@ -118,7 +118,7 @@ describe('liveview stream', () => {
 
     await runCameraLiveviewStream(
       { outputDir: directory, frames: 3, json: true },
-      { store, env: {}, fetch: streaming, ...output.dependencies },
+      { store, processEnv: {}, fetch: streaming, ...output.dependencies },
     )
 
     const files = (await readdir(directory)).sort()
@@ -149,7 +149,7 @@ describe('liveview stream', () => {
 
     await runCameraLiveviewStop(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const parsed = JSON.parse(output.stdout.join('\n')) as { stopped: boolean; released: string[] }
@@ -186,7 +186,7 @@ describe('events watch', () => {
 
     await runCameraEventsWatch(
       { count: 2, json: true },
-      { store, env: {}, fetch: streaming, ...output.dependencies },
+      { store, processEnv: {}, fetch: streaming, ...output.dependencies },
     )
 
     const lines = output.lines().map((line) => JSON.parse(line) as Record<string, unknown>)
@@ -222,7 +222,7 @@ describe('events watch', () => {
 
     await runCameraEventsWatch(
       { count: 1, json: true },
-      { store, env: {}, fetch: streaming, ...output.dependencies },
+      { store, processEnv: {}, fetch: streaming, ...output.dependencies },
     )
 
     const first = JSON.parse(output.lines()[0] as string) as { changedKeys: string[] }
@@ -239,7 +239,7 @@ describe('events clear', () => {
 
     await runCameraEventsClear(
       { force: true, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(JSON.parse(output.stdout.join('\n'))).toEqual({ cleared: true })
@@ -260,7 +260,7 @@ describe('events clear', () => {
       { json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,

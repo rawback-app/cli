@@ -10,6 +10,8 @@ export interface CredentialSessionOptions {
   apiHost: string
   credentials: Credentials
   credentialsPath: string
+  /** Which environment's slot in `credentials.json` a refresh writes back to. */
+  environment?: string
   fetch?: typeof globalThis.fetch
 }
 
@@ -25,7 +27,7 @@ export class CredentialSession {
         version: CLIENT_VERSION,
         userAgent: USER_AGENT,
       },
-      store: new FileCredentialsStore(options.credentialsPath),
+      store: new FileCredentialsStore(options.credentialsPath, options.environment),
       ...(options.fetch ? { fetch: options.fetch } : {}),
     })
   }

@@ -1,7 +1,7 @@
 import { AuthStatusDocument } from '@rawback/sdk'
 
 import { commandOutput, createCommandClient, type ReadCommandDependencies } from './command.ts'
-import { DEFAULT_CONFIG_PATH, DEFAULT_WEB_HOST, readConfig } from './config.ts'
+import { DEFAULT_WEB_HOST } from './config.ts'
 
 export interface WebCommandDependencies extends ReadCommandDependencies {
   open?: (command: string, args: string[]) => Promise<number>
@@ -24,10 +24,11 @@ export function browserCommand(platform: NodeJS.Platform, url: string): [string,
 }
 
 export async function runWeb(dependencies: WebCommandDependencies = {}): Promise<void> {
-  const config = await readConfig(dependencies.configPath ?? DEFAULT_CONFIG_PATH)
   const ui = commandOutput(dependencies)
+  let webHost = DEFAULT_WEB_HOST
   const result = await ui.withActivity('Loading profile…', async () => {
     const client = await createCommandClient(dependencies)
+    webHost = client.environment.webHost ?? DEFAULT_WEB_HOST
     return client.graphql.query({ query: AuthStatusDocument })
   })
   if (result.error) throw result.error
@@ -35,8 +36,7 @@ export async function runWeb(dependencies: WebCommandDependencies = {}): Promise
     throw new Error('The account response did not include a profile slug')
   }
 
-  const webHost = (config.webHost ?? DEFAULT_WEB_HOST).replace(/\/$/, '')
-  const url = `${webHost}/users/${encodeURIComponent(result.data.me.slug)}`
+  const url = `${webHost.replace(/\/$/, '')}/users/${encodeURIComponent(result.data.me.slug)}`
   const [command, args] = browserCommand(dependencies.platform ?? process.platform, url)
   let exitCode: number
   try {

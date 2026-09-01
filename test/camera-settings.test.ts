@@ -64,7 +64,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsList(
       { json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -85,7 +85,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsGet(
       { name: 'av', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -111,7 +111,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsGet(
       { name: 'colortemperature', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -138,7 +138,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsGet(
       { name: 'colortemperature', json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     expect(output.json()).toEqual({
@@ -159,7 +159,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsSet(
       { name: 'av', value: 'f5.6', force: true, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const put = camera.requests.find((request) => request.method === 'PUT')
@@ -182,7 +182,7 @@ describe('camera settings', () => {
       { name: 'av', value: 'f5.6', json: true },
       {
         store,
-        env: {},
+        processEnv: {},
         fetch: camera.fetch,
         prompts: { confirm: async () => false, password: async () => '' },
         ...output.dependencies,
@@ -208,7 +208,7 @@ describe('camera settings', () => {
 
     await runCameraSettingsSet(
       { name: 'colortemperature', value: '5600', force: true, json: true },
-      { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
     )
 
     const put = camera.requests.find((request) => request.method === 'PUT')
@@ -226,7 +226,7 @@ describe('camera settings', () => {
     await expect(
       runCameraSettingsSet(
         { name: 'colortemperature', value: 'warm', force: true, json: true },
-        { store, env: {}, fetch: camera.fetch, ...output.dependencies },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
       ),
     ).rejects.toThrow(/takes a number/)
 

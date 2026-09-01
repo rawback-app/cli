@@ -12,7 +12,13 @@ import {
 import type { RawbackClient } from './client.ts'
 import { createRawbackClient } from './client.ts'
 import { commandOutput, type ReadCommandDependencies } from './command.ts'
-import { DEFAULT_CONFIG_PATH, readConfig, type SftpConfig } from './config.ts'
+import {
+  DEFAULT_CONFIG_PATH,
+  environmentName,
+  readConfig,
+  resolveEnvironment,
+  type SftpConfig,
+} from './config.ts'
 import { DEFAULT_CREDENTIALS_PATH } from './credentials.ts'
 import { UploadProgressController } from './features/upload/progress.tsx'
 import { uploadDryRunDocument, uploadSummaryDocument } from './features/upload/view.ts'
@@ -110,10 +116,13 @@ type RequiredSftpConfig = {
 function requiredSftpConfig(
   config: SftpConfig | undefined,
   configPath: string,
+  environment: string,
 ): RequiredSftpConfig {
   const missing = (['endpoint', 'username', 'password'] as const).filter((key) => !config?.[key])
   if (missing.length > 0) {
-    throw new Error(`Missing ${missing.map((key) => `sftp.${key}`).join(', ')} in ${configPath}`)
+    throw new Error(
+      `Missing ${missing.map((key) => `sftp.${key}`).join(', ')} for the ${environment} environment in ${configPath}`,
+    )
   }
   return {
     endpoint: config!.endpoint!,
@@ -202,11 +211,18 @@ export async function scanUploadPath(
   return files
 }
 
+async function readUploadEnvironment(dependencies: UploadCommandDependencies) {
+  const configPath = dependencies.configPath ?? DEFAULT_CONFIG_PATH
+  return resolveEnvironment(await readConfig(configPath), environmentName(dependencies), configPath)
+}
+
 async function createClient(dependencies: UploadCommandDependencies): Promise<RawbackClient> {
   if (dependencies.client) return dependencies.client
+  const env = environmentName(dependencies)
   return createRawbackClient({
     configPath: dependencies.configPath ?? DEFAULT_CONFIG_PATH,
     credentialsPath: dependencies.credentialsPath ?? DEFAULT_CREDENTIALS_PATH,
+    ...(env !== undefined ? { env } : {}),
     ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
   })
 }
@@ -221,8 +237,8 @@ async function preflight(
   dependencies: UploadCommandDependencies,
 ): Promise<UploadPreflight> {
   const configPath = dependencies.configPath ?? DEFAULT_CONFIG_PATH
-  const config = await readConfig(configPath)
-  const sftp = requiredSftpConfig(config.sftp, configPath)
+  const environment = await readUploadEnvironment(dependencies)
+  const sftp = requiredSftpConfig(environment.sftp, configPath, environment.name)
   await checkConfigPermissions(configPath)
   const client = await createClient(dependencies)
   if (!client.credentials)
@@ -438,7 +454,7 @@ export async function runUpload(
   const preflightResult = await ui.withActivity('Preparing upload…', () =>
     preflight(options, dependencies),
   )
-  const config = await readConfig(dependencies.configPath ?? DEFAULT_CONFIG_PATH)
+  const environment = await readUploadEnvironment(dependencies)
   const statePath = dependencies.statePath ?? DEFAULT_UPLOAD_STATE_PATH
   const state = options.dryRun
     ? await UploadState.openReadonly(statePath)
@@ -446,7 +462,7 @@ export async function runUpload(
 
   try {
     const identified = collapseLocalIdentities(
-      await identifyFiles(preflightResult.files, dependencies, config.metadata?.concurrency),
+      await identifyFiles(preflightResult.files, dependencies, environment.metadata?.concurrency),
     )
     const locallyCompleted = new Set(
       state
@@ -522,7 +538,7 @@ export async function runUpload(
         transportOptions(
           preflightResult,
           state,
-          config.sftp ?? {},
+          environment.sftp ?? {},
           Math.min(options.concurrency, pending.length),
         ),
       )

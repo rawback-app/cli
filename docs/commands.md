@@ -5,12 +5,19 @@ machine. Unknown commands and options are rejected.
 
 ## Global options
 
-| Option            | Description                       |
-| ----------------- | --------------------------------- |
-| `-h`, `--help`    | Show help for the current command |
-| `-V`, `--version` | Print the CLI version             |
+| Option            | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `-h`, `--help`    | Show help for the current command             |
+| `-V`, `--version` | Print the CLI version                         |
+| `--env <name>`    | Run against one environment from `config.yml` |
 
 Running `rawback` without arguments shows top-level help.
+
+`--env` accepts any name under `environments:` in `~/.rawback/config.yml`, plus
+the reserved name `default` for the file's top-level settings. Without it,
+commands use the saved `current:` environment. An unknown name fails and lists
+the names that do exist. See
+[Configuration](configuration.md#environments) for the file format.
 
 ## `rawback auth [status]`
 
@@ -45,6 +52,11 @@ rawback auth status
 
 `--force` is not accepted by `auth status`.
 
+Both commands act on one environment: `rawback --env local auth` signs into
+`local` and leaves every other environment's tokens untouched, and
+`rawback --env local auth status` reports that environment's session. The status
+output names the environment and the API host it queried.
+
 ## `rawback config view`
 
 Displays the stored `~/.rawback/config.yml` without requiring authentication:
@@ -53,12 +65,40 @@ Displays the stored `~/.rawback/config.yml` without requiring authentication:
 rawback config view [--json]
 ```
 
-Human output retains YAML comments and unknown keys. `--json` converts the stored
-mapping to machine-readable JSON and writes no additional prose to stdout. Both
-formats replace `sftp.password` with `[REDACTED]` and do not include environment
-overrides or built-in defaults. A missing or empty optional file is reported as
-an empty configuration; malformed or unreadable files fail with a nonzero exit
-status.
+Human output retains YAML comments and unknown keys, and names the environment
+the current invocation would use along with its API host. `--json` converts the
+stored mapping to machine-readable JSON and writes no additional prose to
+stdout. Both formats replace every `sftp.password` with `[REDACTED]`, including
+the ones inside `environments`, and do not include environment overrides or
+built-in defaults. A missing or empty optional file is reported as an empty
+configuration; malformed or unreadable files fail with a nonzero exit status.
+
+## `rawback config env list`
+
+Lists the environments defined in `~/.rawback/config.yml`:
+
+```bash
+rawback config env list [--json]
+```
+
+Each row shows the environment name, its resolved API host, whether
+`credentials.json` holds a token pair for it, and which one this invocation
+would use. The reserved `default` environment is always listed. Like
+`config view`, this command does not require authentication.
+
+## `rawback config use`
+
+Saves the environment later commands should use, without a flag:
+
+```bash
+rawback config use local
+```
+
+This writes `current:` into `~/.rawback/config.yml`, preserving comments and
+every other key. The name must already exist under `environments:`, or be
+`default`; anything else fails and lists the valid names. **Rawback Desktop
+reads the same setting**, so it follows this choice on its next launch — use
+`--env` instead for a one-off command that should not move Desktop.
 
 ## `rawback credentials`
 
