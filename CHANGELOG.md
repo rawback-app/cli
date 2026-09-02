@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.12](https://github.com/rawback-app/cli/compare/v1.0.11...v1.0.12) (2026-09-02)
+
+
+### Bug Fixes
+
+* **cli:** stop album article view from rejecting default flags as conflicting ([76c8e02](https://github.com/rawback-app/cli/commit/76c8e0246b8b8c57f33f93ef5457b845d83cf2bd))
+* **cli:** stop album article view from rejecting default flags as conflicting ([2736254](https://github.com/rawback-app/cli/commit/2736254d48fa3a60772e50dfb0da1be6ba59e553))
+
 ## [1.0.11](https://github.com/rawback-app/cli/compare/v1.0.10...v1.0.11) (2026-09-02)
 
 
