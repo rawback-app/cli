@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.11](https://github.com/rawback-app/cli/compare/v1.0.10...v1.0.11) (2026-09-02)
+
+
+### Bug Fixes
+
+* **release:** stop ffmpeg staging from stalling the release ([02a0887](https://github.com/rawback-app/cli/commit/02a0887990faa8dead7d69c939e417423d9b7d1b))
+* **release:** stop ffmpeg staging from stalling the release ([37489ce](https://github.com/rawback-app/cli/commit/37489ceb8555f41b899181209d0492cc959f9ade))
+
 ## [1.0.10](https://github.com/rawback-app/cli/compare/v1.0.9...v1.0.10) (2026-09-02)
 
 
