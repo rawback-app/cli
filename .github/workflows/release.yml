@@ -76,7 +76,9 @@ jobs:
         with:
           distribution: goreleaser
           version: v2.17.0
-          args: release --clean
+          # Abort inside the job cap so GoReleaser reports which stage stalled
+          # instead of the runner killing it without a diagnosis.
+          args: release --clean --timeout 30m
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
