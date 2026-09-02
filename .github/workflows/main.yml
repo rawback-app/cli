@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-and-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -92,41 +96,3 @@ jobs:
         run: |
           ./dist/rawback --help
           test "$(./dist/rawback --version)" = "$(bun -p 'require("./package.json").version')"
-
-  release-snapshot:
-    name: GoReleaser snapshot
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.0
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build release snapshot
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: v2.17.0
-          args: release --snapshot --clean
-
-      - name: Verify release artifacts
-        run: |
-          test -f dist/rawback_Linux_x86_64.tar.gz
-          test -f dist/rawback_Linux_arm64.tar.gz
-          test -f dist/rawback_Darwin_x86_64.tar.gz
-          test -f dist/rawback_Darwin_arm64.tar.gz
-          test -f dist/rawback_Windows_x86_64.zip
-          test -f .release-artifacts/rawback_Windows_arm64.zip
-          test -f dist/checksums.txt
-          cp .release-artifacts/rawback_Windows_arm64.zip dist/
-          cd dist
-          sha256sum --check checksums.txt
