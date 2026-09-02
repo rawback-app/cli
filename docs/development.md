@@ -43,10 +43,11 @@ The extra `--` separates arguments for the package script from CLI arguments.
 
 Command modules keep behavior separate from the CLI declaration and build
 feature-specific UI documents for human output. Shared Ink components render
-those documents as responsive tables, fields, notices, help, and activity
-states. `CommandOutput` is the stdout/stderr boundary: JSON and raw content
-bypass Ink decoration, while interactive-only animations are disabled for
-injected or redirected output.
+those documents as responsive tables, fields, quota meters, charts, notices,
+help, and activity states. Chart and meter geometry lives in `src/ui/chart.ts`
+as pure functions so it can be unit-tested without rendering. `CommandOutput` is
+the stdout/stderr boundary: JSON and raw content bypass Ink decoration, while
+interactive-only animations are disabled for injected or redirected output.
 
 Injectable dependency objects let tests replace network clients, prompts,
 output, filesystem paths, and SFTP transports.

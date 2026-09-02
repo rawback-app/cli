@@ -61,7 +61,9 @@ describe('new command hierarchy', () => {
 
   test('documents upload sessions, usage, pricing, and web', () => {
     expect(runCli('uploads', '--help').stdout).toContain('--status')
-    expect(runCli('usage', '--help').stdout).toContain('--json')
+    const usageHelp = runCli('usage', '--help').stdout
+    expect(usageHelp).toContain('--json')
+    expect(usageHelp).toContain('--detail')
     expect(runCli('pricing', '--help').stdout).toContain('--interval')
     expect(runCli('web', '--help').stdout).toContain('open your Rawback profile')
   })

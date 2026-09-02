@@ -1739,15 +1739,21 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       'usage',
       'show storage, AI credit, and face recognition usage',
       (command) =>
-        command.option('json', {
-          default: false,
-          describe: 'output machine-readable JSON',
-          type: 'boolean',
-        }),
+        command
+          .option('detail', {
+            default: false,
+            describe: 'add daily charts, recent AI operations, and top lists',
+            type: 'boolean',
+          })
+          .option('json', {
+            default: false,
+            describe: 'output machine-readable JSON',
+            type: 'boolean',
+          }),
       async (args) => {
         if (process.exitCode !== undefined && process.exitCode !== 0) return
         const { runUsage } = await import('./usage.ts')
-        await runCommand(() => runUsage({ json: args.json }))
+        await runCommand(() => runUsage({ detail: args.detail, json: args.json }))
       },
     )
     .command(

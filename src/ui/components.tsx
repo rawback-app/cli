@@ -1,12 +1,16 @@
 import { Box, Text } from 'ink'
 
+import { layoutColumnChart, meterBar, sparkline, usageRatio } from './chart.ts'
+import { formatPercent } from './format.ts'
 import {
   type UiBlock,
   type UiCell,
   type UiCellValue,
+  type UiChartBlock,
   type UiDocument,
   type UiField,
   type UiHelpBlock,
+  type UiMetersBlock,
   type UiTableBlock,
   type UiTableColumn,
   type UiTone,
@@ -159,6 +163,120 @@ function Table({ block, terminalWidth }: { block: UiTableBlock; terminalWidth: n
   )
 }
 
+function toneProps(tone: UiTone | undefined) {
+  const color = toneColor[tone ?? 'neutral']
+  return color === undefined ? {} : { color }
+}
+
+/*
+ * Meter and chart rows are built as a single <Text> with nested spans and
+ * JS-side padding rather than a row of <Box>es. Box children default to
+ * flexShrink: 1, which lets a long neighbour squeeze a column — the same trap
+ * the Help component documents below.
+ */
+
+const METER_MIN_BAR = 8
+const METER_MAX_BAR = 28
+const METER_SPARK_MIN = 8
+const METER_SPARK_MAX = 30
+const METER_PERCENT_WIDTH = 4
+/** Below this, a label plus a bar plus the amounts cannot share one line legibly. */
+const METER_STACK_WIDTH = 60
+
+function Meters({ block, terminalWidth }: { block: UiMetersBlock; terminalWidth: number }) {
+  // On a narrow terminal the label moves to its own row so the amounts, which
+  // are the point of the meter, survive instead of being truncated away.
+  const stacked = terminalWidth < METER_STACK_WIDTH
+  const labelWidth = stacked ? 2 : Math.max(...block.meters.map((m) => m.label.length), 0) + 2
+  const valueWidth = Math.max(...block.meters.map((meter) => meter.value.length), 0)
+  const barWidth = Math.max(
+    METER_MIN_BAR,
+    Math.min(METER_MAX_BAR, terminalWidth - labelWidth - valueWidth - METER_PERCENT_WIDTH - 4),
+  )
+  const indent = ' '.repeat(labelWidth)
+
+  return (
+    <Box flexDirection="column">
+      {block.meters.map((meter) => {
+        const ratio = usageRatio(meter.used, meter.total)
+        const bar = meterBar(ratio, barWidth)
+        const caption = meter.caption ?? ''
+        const sparkBudget = terminalWidth - labelWidth - caption.length - 2
+        const spark =
+          meter.spark !== undefined && meter.spark.length > 0 && sparkBudget >= METER_SPARK_MIN
+            ? sparkline(meter.spark, Math.min(METER_SPARK_MAX, sparkBudget))
+            : ''
+        const amounts =
+          '  ' + formatPercent(ratio).padStart(METER_PERCENT_WIDTH) + '  ' + meter.value
+
+        return (
+          <Box key={meter.label} flexDirection="column">
+            {stacked ? (
+              <Text dimColor wrap="truncate-end">
+                {meter.label}
+              </Text>
+            ) : null}
+            <Text wrap="truncate-end">
+              <Text dimColor>{stacked ? indent : meter.label.padEnd(labelWidth)}</Text>
+              <Text {...toneProps(meter.tone)}>{bar.filled}</Text>
+              <Text dimColor>{bar.empty}</Text>
+              <Text>{amounts}</Text>
+            </Text>
+            {caption === '' && spark === '' ? null : (
+              <Text dimColor wrap="truncate-end">
+                {indent + caption + (spark === '' || caption === '' ? spark : '  ' + spark)}
+              </Text>
+            )}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+function Chart({ block, terminalWidth }: { block: UiChartBlock; terminalWidth: number }) {
+  const layout = layoutColumnChart(block.points, {
+    width: terminalWidth,
+    maxLabel: block.maxLabel,
+    ...(block.height === undefined ? {} : { height: block.height }),
+    ...(block.minLabel === undefined ? {} : { minLabel: block.minLabel }),
+  })
+  const title = block.title === undefined ? null : <Text bold>{block.title}</Text>
+
+  if (layout.empty) {
+    return (
+      <Box flexDirection="column">
+        {title}
+        <Text dimColor>{block.emptyMessage ?? 'No data.'}</Text>
+      </Box>
+    )
+  }
+
+  const bars = toneProps(block.tone ?? 'info')
+  return (
+    <Box flexDirection="column">
+      {title}
+      {layout.rows.map((row, index) => (
+        <Text key={index} wrap="truncate-end">
+          <Text dimColor>{row.gutter}</Text>
+          <Text {...bars}>{row.plot}</Text>
+        </Text>
+      ))}
+      <Text dimColor wrap="truncate-end">
+        {layout.baseline.gutter + layout.baseline.plot}
+      </Text>
+      <Text dimColor wrap="truncate-end">
+        {layout.labels.gutter + layout.labels.plot}
+      </Text>
+      {block.caption === undefined ? null : (
+        <Text dimColor wrap="truncate-end">
+          {block.caption}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
 function Help({ block }: { block: UiHelpBlock }) {
   return (
     <Box flexDirection="column">
@@ -210,6 +328,10 @@ function Block({ block, terminalWidth }: { block: UiBlock; terminalWidth: number
       return <Fields fields={block.fields} />
     case 'table':
       return <Table block={block} terminalWidth={terminalWidth} />
+    case 'chart':
+      return <Chart block={block} terminalWidth={terminalWidth} />
+    case 'meters':
+      return <Meters block={block} terminalWidth={terminalWidth} />
     case 'text':
       return (
         <Text
