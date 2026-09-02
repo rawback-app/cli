@@ -7,7 +7,7 @@
       "dependencies": {
         "@inquirer/prompts": "^8.7.0",
         "@rawback/ccapi-js": "1.1.0",
-        "@rawback/sdk": "0.3.0",
+        "@rawback/sdk": "0.3.1",
         "ink": "^7.1.1",
         "react": "^19.2.8",
         "react-devtools-core": "^7.0.1",
@@ -147,7 +147,7 @@
 
     "@rawback/ccapi-js": ["@rawback/ccapi-js@1.1.0", "", {}, "sha512-d3TO23EyXCwgWKV/2R6AQqrQD/gIqw8uc/89/tZS7HiJoXTpflH3OqHdsQJjqV2ptXbeiOj0BVk+VZkKCC0j8w=="],
 
-    "@rawback/sdk": ["@rawback/sdk@0.3.0", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "blurhash": "2.0.5", "exiftool-vendored": "37.0.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-WQYJe3iRMO/zdqPwMpYQZS8xDfQb+tEGXgnHlH/2O0HPaRi+wFp/t1335qmglksSZUoe50sP1l8PSP3ydYQsuw=="],
+    "@rawback/sdk": ["@rawback/sdk@0.3.1", "", { "dependencies": { "@graphql-typed-document-node/core": "3.2.0", "blurhash": "2.0.5", "exiftool-vendored": "37.0.0", "graphql": "17.0.2", "proper-lockfile": "4.1.2", "ssh2": "1.17.0", "yaml": "2.9.0", "zod": "4.4.3" } }, "sha512-gHQJLC5RaV4bdrsFX9K2dXLLkCswhQrxH5oVlQ5XRKJvZeZsUZH4tfGOctlY2+8fRZ8miDhOq6rmR4OQ79SVqg=="],
 
     "@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 
