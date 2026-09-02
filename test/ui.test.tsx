@@ -8,8 +8,8 @@ import {
   UploadProgressView,
   type UploadProgressSnapshot,
 } from '../src/features/upload/progress.tsx'
-import { visibleTableColumns } from '../src/ui/components.tsx'
-import { type UiTableBlock } from '../src/ui/model.ts'
+import { DocumentView, visibleTableColumns } from '../src/ui/components.tsx'
+import { type UiDocument, type UiTableBlock } from '../src/ui/model.ts'
 import { type ActivityHandle, CommandOutput, createActivityStop } from '../src/ui/output.tsx'
 
 describe('Ink output', () => {
@@ -174,5 +174,142 @@ describe('Ink output', () => {
     expect(scanning).toContain('Scanning files — 1,250 scanned')
     expect(metadata).toContain('Reading photo metadata — 250 of 1,000 (25%)')
     expect(checking).toContain('Checking Rawback — 500 of 1,000 (50%)')
+  })
+})
+
+// Built from a string so the pattern does not embed a literal control character.
+const ansiPattern = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g')
+
+function stripAnsi(value: string): string {
+  return value.replace(ansiPattern, '')
+}
+
+const chartAndMeters: UiDocument = {
+  blocks: [
+    {
+      type: 'meters',
+      meters: [
+        {
+          label: 'Storage',
+          used: 1024,
+          total: 4096,
+          value: '1 KB / 4 KB',
+          caption: '3 KB free',
+          spark: [1, 4, 2, 8],
+          tone: 'info',
+        },
+        { label: 'Add-on', used: 5, total: 0, value: '5 used', tone: 'neutral' },
+      ],
+    },
+    {
+      type: 'chart',
+      title: 'Storage · last 30 days',
+      points: [1, 4, 2, 0, 3, 1, 0, 2, 4, 1, 0, 3].map((value, index) => ({
+        label: '01-' + String(index + 1).padStart(2, '0'),
+        value,
+      })),
+      maxLabel: '4 KB',
+      caption: 'total 21 KB',
+      tone: 'info',
+    },
+  ],
+}
+
+describe('meters and charts', () => {
+  test('renders a meter with its bar, percentage, amounts, caption and sparkline', () => {
+    const output = stripAnsi(
+      renderToString(<DocumentView document={chartAndMeters} terminalWidth={80} />, {
+        columns: 80,
+      }),
+    )
+
+    expect(output).toContain('Storage')
+    expect(output).toContain('25%')
+    expect(output).toContain('1 KB / 4 KB')
+    expect(output).toContain('3 KB free')
+    expect(output).toContain('━')
+    expect(output).toContain('─')
+  })
+
+  test('shows an unmeasured quota as a dash rather than a full bar', () => {
+    const output = stripAnsi(
+      renderToString(<DocumentView document={chartAndMeters} terminalWidth={80} />, {
+        columns: 80,
+      }),
+    )
+    const row = output.split('\n').find((line) => line.includes('Add-on')) ?? ''
+
+    expect(row).toContain('—')
+    expect(row).not.toContain('━')
+  })
+
+  test('draws the chart grid with a peak label, baseline and date range', () => {
+    const output = stripAnsi(
+      renderToString(<DocumentView document={chartAndMeters} terminalWidth={80} />, {
+        columns: 80,
+      }),
+    )
+
+    expect(output).toContain('Storage · last 30 days')
+    expect(output).toContain('4 KB')
+    expect(output).toContain('█')
+    expect(output).toContain('└')
+    expect(output).toContain('01-01')
+    expect(output).toContain('01-12')
+    expect(output).toContain('total 21 KB')
+  })
+
+  test('drops the closing date label when the plot is too narrow for both', () => {
+    const narrow: UiDocument = {
+      blocks: [
+        {
+          type: 'chart',
+          points: [
+            { label: '01-01', value: 1 },
+            { label: '01-02', value: 4 },
+          ],
+          maxLabel: '4 KB',
+        },
+      ],
+    }
+    const output = stripAnsi(
+      renderToString(<DocumentView document={narrow} terminalWidth={80} />, { columns: 80 }),
+    )
+
+    expect(output).toContain('01-01')
+    expect(output).not.toContain('01-02')
+  })
+
+  test('prints the empty message instead of a blank grid', () => {
+    const empty: UiDocument = {
+      blocks: [
+        {
+          type: 'chart',
+          title: 'Storage',
+          points: [],
+          maxLabel: '0',
+          emptyMessage: 'No storage activity in the last 30 days.',
+        },
+      ],
+    }
+    const output = stripAnsi(
+      renderToString(<DocumentView document={empty} terminalWidth={80} />, { columns: 80 }),
+    )
+
+    expect(output).toContain('No storage activity in the last 30 days.')
+    expect(output).not.toContain('└')
+  })
+
+  test('keeps every rendered line inside a narrow terminal', () => {
+    for (const columns of [40, 60, 80]) {
+      const output = stripAnsi(
+        renderToString(<DocumentView document={chartAndMeters} terminalWidth={columns} />, {
+          columns,
+        }),
+      )
+      for (const line of output.split('\n')) {
+        expect(line.length).toBeLessThanOrEqual(columns)
+      }
+    }
   })
 })

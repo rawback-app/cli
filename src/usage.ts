@@ -5,6 +5,7 @@ import { usageDocument } from './features/usage/view.ts'
 
 export interface UsageOptions {
   json?: boolean
+  detail?: boolean
 }
 
 export type UsageDependencies = ReadCommandDependencies
@@ -91,5 +92,5 @@ export async function runUsage(
     ui.json({ usage: serializeUsage(result.data) })
     return
   }
-  ui.document(usageDocument(result.data))
+  ui.document(usageDocument(result.data, { detail: options.detail === true }))
 }

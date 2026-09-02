@@ -149,6 +149,7 @@ rawback album list
 rawback shares list
 rawback uploads
 rawback usage
+rawback usage --detail
 rawback pricing
 rawback config view
 rawback web
@@ -164,8 +165,8 @@ rawback usage --json
 rawback config view --json
 ```
 
-Human-facing output uses a compact terminal UI with responsive columns, status
-notices, and activity indicators. During uploads, an interactive terminal shows
+Human-facing output uses a compact terminal UI with responsive columns, quota
+meters, charts, status notices, and activity indicators. During uploads, an interactive terminal shows
 aggregate progress, transfer speed, ETA, and the active files. Redirected output
 stays line-oriented and does not contain cursor-control sequences. `--json`,
 article `--content-only`, and `--version` remain undecorated for scripts and

@@ -29,3 +29,39 @@ export function formatTimestamp(value: number | null | undefined): string {
   const date = new Date(value * 1000)
   return Number.isNaN(date.getTime()) ? '—' : date.toISOString()
 }
+
+/** UTC calendar day for a unix-seconds timestamp, so output is timezone-stable. */
+export function formatDate(value: number | null | undefined): string {
+  const timestamp = formatTimestamp(value)
+  return timestamp === '—' ? timestamp : timestamp.slice(0, 10)
+}
+
+/** Renders a 0..1 ratio; values above 1 are reported honestly as over 100%. */
+export function formatPercent(ratio: number | undefined, decimals = 0): string {
+  if (ratio === undefined || !Number.isFinite(ratio)) return '—'
+  const percent = Math.max(0, ratio) * 100
+  return `${percent.toFixed(Math.max(0, decimals))}%`
+}
+
+export function formatCount(value: number): string {
+  if (!Number.isFinite(value)) return '—'
+  // Pin the locale so output does not depend on the machine running the CLI.
+  return value.toLocaleString('en-US')
+}
+
+/**
+ * Human phrasing for an upcoming reset, or `undefined` when there is nothing
+ * useful to say — the caller drops the clause rather than printing a stale or
+ * negative countdown.
+ */
+export function formatRelativeDays(
+  target: number | null | undefined,
+  now: number,
+): string | undefined {
+  if (target === null || target === undefined || !Number.isFinite(target)) return undefined
+  if (!Number.isFinite(now)) return undefined
+  const days = Math.ceil((target - now) / 86_400)
+  if (days < 0) return undefined
+  if (days === 0) return 'today'
+  return days === 1 ? 'in 1 day' : `in ${String(days)} days`
+}

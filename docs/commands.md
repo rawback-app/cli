@@ -902,12 +902,22 @@ rawback uploads [options]
 
 ## `rawback usage`
 
-Shows storage, AI credits, face recognition, daily trends, top images, recent AI
-operations, and operation costs:
+Shows a compact overview of the account: tier, and a quota meter for storage, AI
+credits, and face recognition with the amount remaining and the next reset date.
+Meters turn yellow past 90% and red once a quota is reached.
 
 ```bash
-rawback usage [--json]
+rawback usage [--detail] [--json]
 ```
+
+Add `--detail` for the last 30 days of storage, AI credit, and face recognition
+activity as terminal charts, plus the largest photos, recent AI operations,
+operation costs, and top face matches.
+
+| Option     | Description                                                | Default |
+| ---------- | ---------------------------------------------------------- | ------- |
+| `--detail` | Add daily charts, recent AI operations, and top lists      | `false` |
+| `--json`   | Print a full `usage` JSON object; unaffected by `--detail` | `false` |
 
 ## `rawback pricing`
 
@@ -936,7 +946,9 @@ The URL uses `webHost` from `~/.rawback/config.yml`, or
 Use `--json` when available instead of parsing human-readable tables. JSON is
 written to standard output. Errors and warnings are written to standard error.
 Human output uses responsive Ink layouts, so lower-priority table columns may be
-omitted in narrow terminals. Interactive terminals show transient activity
+omitted in narrow terminals, and charts and quota meters scale to the terminal
+width. Human output is also the only thing `rawback usage --detail` changes: the
+`--json` payload is always complete. Interactive terminals show transient activity
 indicators; redirected output is deterministic and contains no cursor-control
 sequences. JSON, `--content-only`, and version output are never decorated with
 icons or prose.

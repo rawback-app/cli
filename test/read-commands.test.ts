@@ -9,6 +9,7 @@ import { runPricing } from '../src/pricing.ts'
 import { runUploadSessionList } from '../src/uploads.ts'
 import { runUsage } from '../src/usage.ts'
 import { browserCommand, runWeb } from '../src/web.ts'
+import { usageFixture } from './usage-fixture.ts'
 
 const temporaryDirectories: string[] = []
 
@@ -106,78 +107,57 @@ describe('upload sessions', () => {
   })
 })
 
-const usageData = {
-  me: {
-    id: 2,
-    tier: 'pro',
-    usageOverview: {
-      storage: {
-        usedBytes: 1024,
-        quotaBytes: 4096,
-        remainingBytes: 3072,
-        originalsBytes: 800,
-        othersBytes: 224,
-        dailySeries: [{ day: 1_704_067_200, value: 512 }],
-        topImages: [
-          {
-            id: 9,
-            displayName: 'Large photo',
-            originalFilename: 'large.raf',
-            sizeBytes: 800,
-            thumbnailUrl: null,
-            mimeType: 'image/x-fuji-raf',
-          },
-        ],
-      },
-      aiCredits: {
-        balance: 80,
-        monthlyAllowance: 100,
-        resetAt: 1_704_153_600,
-        tier: 'pro',
-        dailySeries: [{ day: 1_704_067_200, value: 3 }],
-        recentOperations: [
-          {
-            id: 5,
-            operationType: 'caption',
-            quotaType: 'credits',
-            creditsUsed: 3,
-            creditsBefore: 83,
-            creditsAfter: 80,
-            referenceType: 'image',
-            referenceId: 9,
-            status: 'completed',
-            createdAt: 1_704_067_200,
-            metadata: null,
-          },
-        ],
-      },
-      faceRecognition: {
-        remaining: 90,
-        monthlyAllowance: 100,
-        resetAt: 1_704_153_600,
-        facesCount: 12,
-        dailySeries: [{ day: 1_704_067_200, value: 2 }],
-        topFaces: [{ id: 3, name: 'Ada', faceCount: 8, coverImageUrl: null }],
-      },
-    },
-  },
-  creditCosts: [
-    { operation: 'caption', cost: 3, description: 'Create a caption', quotaType: 'credits' },
-  ],
-}
-
 describe('usage', () => {
-  test('returns all web usage sections in human and JSON forms', async () => {
+  test('summarizes quotas and hides the detail sections by default', async () => {
     const paths = await authenticatedPaths()
     const fetch = graphqlFetch((body) => {
       expect(body.operationName).toBe('FullUsage')
-      return Response.json({ data: usageData })
+      return Response.json({ data: usageFixture() })
     })
     const human: string[] = []
     await runUsage({}, { ...paths, fetch, stdout: (message) => human.push(message) })
-    expect(human[0]).toContain('Storage · last 30 days')
-    expect(human[0]).toContain('Recent AI operations')
-    expect(human[0]).toContain('Top face matches')
+    const output = human.join('\n')
+
+    expect(output).toContain('Storage')
+    expect(output).toContain('AI credits')
+    expect(output).toContain('Face recognition')
+    expect(output).toContain('━')
+    expect(output).toContain('--detail')
+    for (const section of [
+      'last 30 days',
+      'Recent AI operations',
+      'Largest photos',
+      'Top face matches',
+      'AI operation costs',
+    ]) {
+      expect(output).not.toContain(section)
+    }
+  })
+
+  test('adds charts, recent operations, and top lists with --detail', async () => {
+    const paths = await authenticatedPaths()
+    const fetch = graphqlFetch(() => Response.json({ data: usageFixture() }))
+    const human: string[] = []
+    await runUsage({ detail: true }, { ...paths, fetch, stdout: (message) => human.push(message) })
+    const output = human.join('\n')
+
+    for (const section of [
+      'Storage · last 30 days',
+      'Recent AI operations',
+      'Largest photos',
+      'Top face matches',
+      'AI operation costs',
+    ]) {
+      expect(output).toContain(section)
+    }
+    // The chart baseline: proof the series rendered as a chart, not a table.
+    expect(output).toContain('└')
+    expect(output).not.toContain('--detail for daily charts')
+  })
+
+  test('keeps JSON complete and identical whether or not --detail is set', async () => {
+    const paths = await authenticatedPaths()
+    const fetch = graphqlFetch(() => Response.json({ data: usageFixture() }))
 
     const json: string[] = []
     await runUsage({ json: true }, { ...paths, fetch, stdout: (message) => json.push(message) })
@@ -189,6 +169,13 @@ describe('usage', () => {
         faceRecognition: { topFaces: [{ name: 'Ada' }] },
       },
     })
+
+    const detailed: string[] = []
+    await runUsage(
+      { json: true, detail: true },
+      { ...paths, fetch, stdout: (message) => detailed.push(message) },
+    )
+    expect(detailed.join('\n')).toBe(json.join('\n'))
   })
 })
 

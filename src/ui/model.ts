@@ -42,6 +42,48 @@ export interface UiTableBlock {
   emptyMessage?: string
 }
 
+export interface UiChartPoint {
+  /** Pre-formatted x label, e.g. '01-14'. */
+  label: string
+  /** Raw magnitude; the renderer scales it against the series peak. */
+  value: number
+}
+
+export interface UiChartBlock {
+  type: 'chart'
+  title?: string
+  points: UiChartPoint[]
+  /** Pre-formatted peak, shown against the top of the y-axis. */
+  maxLabel: string
+  minLabel?: string
+  height?: number
+  caption?: string
+  emptyMessage?: string
+  tone?: UiTone
+}
+
+export interface UiMeter {
+  label: string
+  used: number
+  /** A total of zero or less renders as an unmeasured quota. */
+  total: number
+  /** Pre-formatted amounts, e.g. '1.9 GB / 4 GB'. */
+  value: string
+  caption?: string
+  /** Optional trailing series rendered as a sparkline beside the caption. */
+  spark?: number[]
+  tone?: UiTone
+}
+
+/**
+ * Several meters in one block: `DocumentView` puts a blank line between blocks,
+ * so grouping them is what keeps the overview compact.
+ */
+export interface UiMetersBlock {
+  type: 'meters'
+  meters: UiMeter[]
+}
+
 export interface UiTextBlock {
   type: 'text'
   text: string
@@ -74,6 +116,8 @@ export type UiBlock =
   | UiNoticeBlock
   | UiFieldsBlock
   | UiTableBlock
+  | UiChartBlock
+  | UiMetersBlock
   | UiTextBlock
   | UiHelpBlock
   | UiPaginationBlock
