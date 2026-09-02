@@ -1,0 +1,79 @@
+name: Release Snapshot
+
+# The full cross-platform packaging build is far too slow for every push, so it
+# only runs when a packaging input changes, nightly to catch upstream rot, or on
+# demand. Ordinary source changes are covered by the per-platform binary builds
+# in the Build and Test workflow.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.goreleaser.yaml'
+      - 'scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/release-snapshot.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.goreleaser.yaml'
+      - 'scripts/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/release-snapshot.yml'
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-snapshot:
+    name: GoReleaser snapshot
+    runs-on: ubuntu-latest
+    # The before hooks download sidecars from third-party hosts, so a stalled
+    # request must not be allowed to burn an hour of runner time.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build release snapshot
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.17.0
+          # Abort inside the job cap so GoReleaser reports which hook stalled
+          # instead of the runner killing it without a diagnosis.
+          args: release --snapshot --clean --timeout 15m
+
+      - name: Verify release artifacts
+        run: |
+          test -f dist/rawback_Linux_x86_64.tar.gz
+          test -f dist/rawback_Linux_arm64.tar.gz
+          test -f dist/rawback_Darwin_x86_64.tar.gz
+          test -f dist/rawback_Darwin_arm64.tar.gz
+          test -f dist/rawback_Windows_x86_64.zip
+          test -f .release-artifacts/rawback_Windows_arm64.zip
+          test -f dist/checksums.txt
+          cp .release-artifacts/rawback_Windows_arm64.zip dist/
+          cd dist
+          sha256sum --check checksums.txt
