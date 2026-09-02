@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.10](https://github.com/rawback-app/cli/compare/v1.0.9...v1.0.10) (2026-09-02)
+
+
+### Features
+
+* **config:** add --env and per-environment sign-in ([d343e47](https://github.com/rawback-app/cli/commit/d343e473bbfdfaeafa21d8f80365a1c06c8bd6ed))
+* **config:** add --env and per-environment sign-in ([354bff8](https://github.com/rawback-app/cli/commit/354bff84d9469f71a1d8b864da16cb54b2cbb1d4))
+* **usage:** summarize quotas by default and chart trends behind --detail ([baab95f](https://github.com/rawback-app/cli/commit/baab95f582fb0ca1390c3dfa6f7b8f61d52ba1e5))
+* **usage:** summarize quotas by default and chart trends behind --detail ([42d65f3](https://github.com/rawback-app/cli/commit/42d65f32f3a7d17fc9593c5b4b8278b401a2d611))
+
+
+### Miscellaneous
+
+* **deps:** upgrade @rawback/sdk to 0.3.1 ([fbf7578](https://github.com/rawback-app/cli/commit/fbf75780761da256d277c1d377021e742f2dffe3))
+
+
+### Continuous Integration
+
+* **release:** run GoReleaser snapshot only for packaging changes ([d752b3a](https://github.com/rawback-app/cli/commit/d752b3af80e3afe11f7937d6306c956f5aecd763))
+* **release:** run GoReleaser snapshot only for packaging changes ([8d88590](https://github.com/rawback-app/cli/commit/8d885909661a4d5d127d4eeb1e549ea68a7f2587))
+
 ## [1.0.9](https://github.com/rawback-app/cli/compare/v1.0.8...v1.0.9) (2026-08-30)
 
 
