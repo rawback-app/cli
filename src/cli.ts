@@ -1264,7 +1264,12 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                         describe: 'output machine-readable JSON',
                         type: 'boolean',
                       })
-                      .conflicts('content-only', 'json'),
+                      .check((args) => {
+                        if (args.contentOnly && args.json) {
+                          throw new Error('--content-only and --json cannot be used together')
+                        }
+                        return true
+                      }),
                   async (args) => {
                     if (process.exitCode !== undefined && process.exitCode !== 0) return
                     const { runArticleView } = await import('./articles.ts')

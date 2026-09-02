@@ -312,6 +312,16 @@ describe('new command hierarchy', () => {
 
     const outputConflict = runCli('album', 'article', 'view', '7', '--content-only', '--json')
     expect(outputConflict.exitCode).toBe(1)
-    expect(outputConflict.stderr).toContain('mutually exclusive')
+    expect(outputConflict.stderr).toContain('--content-only and --json cannot be used together')
+  })
+
+  // Both output flags default to false, so a presence-based conflict check
+  // (yargs `.conflicts()`) fired on every invocation — even with no flags.
+  test('accepts album article view without output flags', () => {
+    for (const extra of [[], ['--json'], ['--content-only']]) {
+      const result = runCli('album', 'article', 'view', '7', ...extra)
+      expect(result.stderr).not.toContain('cannot be used together')
+      expect(result.stderr).not.toContain('mutually exclusive')
+    }
   })
 })
