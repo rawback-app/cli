@@ -493,22 +493,58 @@ rawback videos list [options]
 rawback videos upload --file <path> [options]
 ```
 
-| Option               | Description                                                 | Default |
-| -------------------- | ----------------------------------------------------------- | ------- |
-| `--file <path>`      | Required video file to upload                               | —       |
-| `--thumbnail <path>` | JPEG or PNG to attach as the poster frame                   | —       |
-| `--transcript`       | Extract audio for transcription; `--no-transcript` skips it | `true`  |
-| `--json`             | Output machine-readable JSON                                | `false` |
+| Option               | Description                                                                      | Default |
+| -------------------- | -------------------------------------------------------------------------------- | ------- |
+| `--file <path>`      | Required video file to upload                                                    | —       |
+| `--thumbnail <path>` | JPEG, PNG, or WebP poster instead of an extracted frame                          | —       |
+| `--transcript`       | Extract and upload audio for server transcription; use `--no-transcript` to skip | `true`  |
+| `--json`             | Output machine-readable JSON                                                     | `false` |
 
 Supported containers are `.mp4`, `.m4v`, `.mov`, `.webm`, `.mkv`, `.avi`,
-`.mpeg`/`.mpg`, `.3gp`, and `.ts`, up to 100 GB. The CLI reads video metadata
-and attempts to extract a poster frame and audio locally. Pass `--thumbnail`
-to supply your own poster frame. `--no-transcript` skips audio extraction;
-the audio cannot be added later.
+`.mpeg`/`.mpg`, `.3gp`, and `.ts`, up to 100 GB. The CLI uses FFprobe and FFmpeg
+to read metadata, extract a poster, and split an audio track when present.
+A video without an audio track does not produce a transcript.
 
 For each of `ffmpeg` and `ffprobe`, the executable on `PATH` takes precedence
 over its bundled copy. If only one is on `PATH`, the other uses its bundled
 copy when available. See [video tool setup](configuration.md#video-tools).
+
+Thumbnail/audio preparation or attachment failures are best-effort: warnings go
+to stderr and the video body continues uploading. A completed body upload exits
+successfully even when an attachment is missing. JSON stdout remains `{ "video":
+... }`, without warning prose. Uploading audio does not mean transcription has
+completed; view the background job's status and text on the web video page.
+
+### `videos repair`
+
+```bash
+rawback --env local videos repair --id 7 --file ~/Movies/hike.mp4
+```
+
+| Option               | Description                                                                    | Default |
+| -------------------- | ------------------------------------------------------------------------------ | ------- |
+| `--id <id>`          | Required positive integer identifying a completed video                        | —       |
+| `--file <path>`      | Required original uploaded video file                                          | —       |
+| `--thumbnail <path>` | JPEG, PNG, or WebP poster; explicitly replaces an existing poster              | —       |
+| `--transcript`       | Attach missing audio; use `--no-transcript` to repair only the poster          | `true`  |
+| `--json`             | Output `{ "videoId": ..., "attachments": { "thumbnail": ..., "audio": ... } }` | `false` |
+
+Each attachment result contains `status` (`repaired`, `skipped`, or `failed`) and
+`reason`. A partial failure preserves successful repairs, emits the JSON result
+when requested, and exits nonzero. Validation and metadata failures exit nonzero
+before any attachment is written. Repeating a completed repair skips existing
+assets; no video body is uploaded or new video record created.
+
+Repair compares the original filename, byte size, MIME type, dimensions, audio
+presence, and duration (within one second). These are consistency checks, not a
+content-hash identity guarantee. Renamed or transcoded copies are rejected.
+Existing audio, and pending, processing, completed, failed, or skipped transcript
+jobs are preserved. Failed or disabled transcription jobs require server-side
+attention; attachment repair does not restart them.
+
+Repair requires a server exposing the `audioChunkCount` GraphQL field. For
+transcription enablement and recovery limits, see
+[video configuration](configuration.md#video-uploads-and-transcription).
 
 ### `videos update`
 

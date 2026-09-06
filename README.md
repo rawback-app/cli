@@ -257,21 +257,32 @@ the photo upload pipeline:
 rawback videos list
 rawback videos upload --file ~/Movies/hike.mp4
 rawback videos upload --file ~/Movies/hike.mp4 --thumbnail ~/Pictures/poster.jpg
+rawback videos repair --id 7 --file ~/Movies/hike.mp4
 rawback videos update --id 7 --title "Hike, day two"
 rawback videos delete --id 7
 ```
 
 Supported containers are MP4, M4V, MOV, WebM, MKV, AVI, MPEG, 3GP, and TS, up
 to 100 GB. The file is sent in parts to presigned URLs and read from disk on
-demand, so memory use stays flat regardless of file size. The CLI reads metadata,
-attempts to extract a poster frame, and extracts audio for transcription locally.
-Pass `--thumbnail` to supply your own poster frame or `--no-transcript` to skip
-audio extraction.
+demand. Before upload, FFmpeg tools extract a poster and audio for transcription. Pass `--thumbnail` to use a JPEG,
+PNG, or WebP poster, or `--no-transcript` to skip audio extraction. Video parts
+are read on demand; the smaller extracted audio chunks are held in memory.
 
 The CLI uses `ffmpeg` and `ffprobe` from `PATH` first, falling back to each
 bundled tool when missing. Each tool is resolved independently, so a system copy
 of one can be used alongside a bundled copy of the other. See
 [video tool setup](docs/configuration.md#video-tools) for details.
+
+Attachment failures produce warnings on stderr while the video still uploads.
+Use `videos repair --id <id> --file <original-file>` to attach missing thumbnails
+and audio without uploading the video again. Existing audio is preserved;
+`--thumbnail` explicitly replaces a poster. Repair reports partial results and
+exits nonzero if an attachment still fails.
+
+Transcription runs asynchronously and requires server enablement and a running
+task worker. The web video page shows its status, text, and an SRT download.
+See [video setup and recovery](docs/configuration.md#video-uploads-and-transcription)
+for local-server configuration and recovery limits.
 
 ## Camera control
 

@@ -229,3 +229,31 @@ describe('rawback photos upload CLI', () => {
     expect(result.stderr).toContain('integer between 1 and 16')
   })
 })
+
+describe('video command help and validation', () => {
+  test('documents automatic extraction and repair', () => {
+    const upload = runCli('videos', 'upload', '--help')
+    expect(upload.exitCode).toBe(0)
+    expect(upload.stdout).toContain('--transcript')
+    expect(upload.stdout).toContain('WebP')
+    expect(upload.stdout).not.toContain('cannot be added later')
+    const repair = runCli('videos', 'repair', '--help')
+    expect(repair.exitCode).toBe(0)
+    for (const option of ['--id', '--file', '--thumbnail', '--transcript', '--json'])
+      expect(repair.stdout).toContain(option)
+  })
+  test.each(['0', '-1', '1.5', 'NaN'])('rejects repair id %s before file access', (id) => {
+    const result = runCli('videos', 'repair', '--id', id, '--file', '/missing.mp4')
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('--id must be a positive integer')
+  })
+  test('requires a nonempty original file', () => {
+    const missing = runCli('videos', 'repair', '--id', '7')
+    expect(missing.exitCode).toBe(1)
+    expect(missing.stderr).toContain('file')
+    const empty = runCli('videos', 'repair', '--id', '7', '--file=')
+    expect(empty.exitCode).toBe(1)
+    expect(empty.stderr).toContain('--file must not be empty')
+  })
+})

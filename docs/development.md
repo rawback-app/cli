@@ -226,3 +226,22 @@ assets if any are missing:
 
 Never print these values or place them in repository files. Windows binaries are
 released without Authenticode signatures.
+
+### Video repair SDK patch
+
+The CLI pins `@rawback/sdk` 0.3.1 with a Bun patch containing the video preparation
+callbacks, skip-thumbnail option, and updated detail operation. Its source of
+truth remains `../sdk`; the patch contains only its generated release output.
+This keeps clean CLI checkouts and CI installable while those SDK changes await
+a release. After publishing the SDK changes, pin that release and remove the
+`patchedDependencies` entry and patch file.
+
+To regenerate the patch after an SDK change, run `pnpm check` in `../sdk` (its
+package check produces the release build), prepare the pinned package with
+`bun patch @rawback/sdk@0.3.1`, copy the changed release files under `../sdk/dist`
+into `node_modules/@rawback/sdk/dist`, and run
+`bun patch --commit node_modules/@rawback/sdk`. Do not edit generated SDK
+implementation by hand. Run `bun run check` after refreshing the patch.
+
+Deploy the server's additive `Video.audioChunkCount` field before using repair or
+the updated web detail query. No database migration is required.

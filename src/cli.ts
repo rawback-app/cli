@@ -612,13 +612,13 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'string',
                 })
                 .option('thumbnail', {
-                  describe: 'JPEG or PNG to use as the poster frame instead of the first frame',
+                  describe: 'JPEG, PNG, or WebP poster instead of an automatically extracted frame',
                   type: 'string',
                 })
                 .option('transcript', {
                   default: true,
                   describe:
-                    'extract and upload the audio track so the video can be transcribed. --no-transcript skips it; the audio cannot be added later',
+                    'extract and upload audio for asynchronous server transcription; --no-transcript skips it (repair can attach it later)',
                   type: 'boolean',
                 })
                 .option('json', {
@@ -631,6 +631,56 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               const { runVideoUpload } = await import('./videos.ts')
               await runCommand(() =>
                 runVideoUpload({
+                  file: args.file,
+                  json: args.json,
+                  transcript: args.transcript,
+                  ...(args.thumbnail !== undefined ? { thumbnail: args.thumbnail } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'repair',
+            'attach missing thumbnails and audio using the original video file',
+            (repair) =>
+              repair
+                .option('id', {
+                  demandOption: true,
+                  describe: 'completed video id',
+                  type: 'number',
+                })
+                .option('file', {
+                  demandOption: true,
+                  describe: 'original uploaded video file',
+                  type: 'string',
+                })
+                .option('thumbnail', {
+                  describe: 'JPEG, PNG, or WebP poster; explicitly replaces an existing thumbnail',
+                  type: 'string',
+                })
+                .option('transcript', {
+                  default: true,
+                  describe:
+                    'attach missing audio for transcription; --no-transcript skips audio repair',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable attachment results',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  if (!Number.isSafeInteger(args.id) || args.id < 1)
+                    throw new Error('--id must be a positive integer')
+                  if (!args.file.trim()) throw new Error('--file must not be empty')
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoRepair } = await import('./video-repair.ts')
+              await runCommand(() =>
+                runVideoRepair({
+                  id: args.id,
                   file: args.file,
                   json: args.json,
                   transcript: args.transcript,
@@ -701,7 +751,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
-          .demandCommand(1, 'Choose a videos command: list, upload, update, or delete')
+          .demandCommand(1, 'Choose a videos command: list, upload, repair, update, or delete')
           .strict(),
       () => {},
     )

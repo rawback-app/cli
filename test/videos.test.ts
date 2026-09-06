@@ -303,6 +303,7 @@ describe('videos upload', () => {
           expect(options).toEqual({
             ffmpegPath: '/system/ffmpeg',
             ffprobePath: '/bundle/ffprobe',
+            onPreparationError: expect.any(Function),
           })
           return stubPrepare(24)(path, options)
         },

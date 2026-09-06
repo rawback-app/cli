@@ -454,3 +454,42 @@ file is discarded solely because the preflight optimization was unavailable.
 
 Stop and verify whether the Rawback SFTP host key intentionally changed. A
 mismatch can also indicate that traffic is reaching the wrong server.
+
+## Video uploads and transcription
+
+Video uploads use presigned storage URLs rather than SFTP. The uploading client
+runs FFprobe and FFmpeg to read metadata, generate a thumbnail, and extract
+mono audio chunks. Release archives include these tools. Each tool on `PATH` takes precedence
+over its bundled copy; see [video tools](#video-tools) for discovery details.
+
+`--env local` selects the local API and credentials; it does not turn on
+speech-to-text. Set `RAWBACK_VIDEO_TRANSCRIBE_ENABLED=true` in both the local API
+and task-worker environments, configure the worker's transcription provider
+(`RAWBACK_OPENAI_API_KEY` or the supported user override), and run the worker
+connected to the API, Redis, and storage. Keep the actual provider key outside
+this repository. The default is disabled; enablement allows transcription to
+consume provider usage and applicable AI credits. `RAWBACK_VIDEO_TRANSCRIBE_MAX_MINUTES`
+defaults to 120, so longer videos can have partial transcripts.
+
+The web detail page displays pending, processing, completed, failed, and skipped
+transcription states. A video without uploaded audio cannot be transcribed by the
+server, because the server does not extract audio from the original video.
+
+To repair missing attachments using the original local file:
+
+```bash
+rawback --env local videos repair --id 7 --file ~/Movies/hike.mp4
+rawback --env local videos repair --id 7 --file ~/Movies/hike.mp4 --no-transcript
+```
+
+The command preserves existing audio and attaches a poster only when missing,
+unless `--thumbnail` explicitly supplies a replacement. It requires the original
+filename, size, MIME type, dimensions, audio presence, and duration to match the
+stored video. Legacy records with missing or inconsistent metadata need separate
+server-side recovery; repair does not overwrite their declared metadata.
+
+If audio is already present but transcription failed or was skipped, inspect
+server configuration and the worker job. Changing the enablement setting does
+not itself requeue old jobs, and `videos repair` does not restart them. Enable
+transcription before repairing a video whose audio is missing if you want the
+audio-confirmation step to schedule transcription.
