@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.13](https://github.com/rawback-app/cli/compare/v1.0.12...v1.0.13) (2026-09-06)
+
+
+### Bug Fixes
+
+* prefer system video tools and sign bundled macOS binaries ([8d61d8c](https://github.com/rawback-app/cli/commit/8d61d8c773c0e2bd071653d4918ac89a5291ade6))
+* prefer system video tools and sign bundled macOS binaries ([4482ec7](https://github.com/rawback-app/cli/commit/4482ec70450805eb466dec2fd5cc8daa2aedee0c))
+* **videos:** report missing attachments and support repair ([3077889](https://github.com/rawback-app/cli/commit/3077889fd11f57d36152751438925fd38d1413fd))
+* **videos:** report missing attachments and support repair ([2a5b4cf](https://github.com/rawback-app/cli/commit/2a5b4cf7984833d7cf882003e620722863b64197))
+
+
+### Miscellaneous
+
+* remove temporary SDK patch pending release ([9c9c5c3](https://github.com/rawback-app/cli/commit/9c9c5c3dc51c7e1d006ee348679b54801ba21cf6))
+
 ## [1.0.12](https://github.com/rawback-app/cli/compare/v1.0.11...v1.0.12) (2026-09-02)
 
 
