@@ -226,3 +226,14 @@ assets if any are missing:
 
 Never print these values or place them in repository files. Windows binaries are
 released without Authenticode signatures.
+
+### Video repair SDK release dependency
+
+Video repair and preparation diagnostics require the pending SDK release with
+preparation callbacks, the skip-thumbnail option, and updated video detail fields.
+The CLI remains pinned to published `@rawback/sdk` 0.3.1 without a package patch.
+After those SDK changes are released, update the dependency and lockfile, then
+run `bun run check` before merging the CLI changes.
+
+Deploy the server's additive `Video.audioChunkCount` field before using repair or
+the updated web detail query. No database migration is required.

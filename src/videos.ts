@@ -5,9 +5,12 @@ import {
   DeleteVideoDocument,
   type FfmpegPaths,
   prepareVideoUpload,
+  type PrepareVideoOptions,
+  RawbackHttpError,
   UpdateVideoDocument,
   VIDEO_MIME_TYPES,
   VideoService,
+  VideoToolError,
   VideosDocument,
   type VideosQuery,
 } from '@rawback/sdk'
@@ -153,6 +156,48 @@ export interface VideoUploadOptions {
   transcript?: boolean
 }
 
+/** Never echo API bodies or presigned URLs: both can contain credentials. */
+export function describeVideoAttachmentError(error: unknown): string {
+  if (error instanceof RawbackHttpError) {
+    return `API returned HTTP ${String(error.status)}; check storage permissions and quota`
+  }
+  if (error instanceof VideoToolError) {
+    if (/ENOENT|EACCES|failed to run/.test(error.message)) {
+      return 'FFmpeg could not be started; check the bundled tools or FFmpeg on PATH'
+    }
+    return 'FFmpeg could not extract this attachment; check that the original file decodes with your FFmpeg build'
+  }
+  if (error instanceof Error) {
+    const storageFailure = error.message.match(
+      /^(?:Thumbnail upload|Audio chunk \d+) failed with status \d+$/,
+    )
+    if (storageFailure) return `${storageFailure[0]}; check storage access`
+  }
+  return 'processing or storage access failed; check the original file, local tools, and server logs'
+}
+
+export async function prepareVideoFile(
+  options: VideoUploadOptions,
+  dependencies: VideoCommandDependencies,
+  preparation: PrepareVideoOptions = {},
+) {
+  // Validate the MIME type before opening an explicitly supplied thumbnail.
+  const thumbnailMime = options.thumbnail ? resolveThumbnailMimeType(options.thumbnail) : undefined
+  return (dependencies.prepareVideo ?? prepareVideoUpload)(options.file, {
+    ...(await (dependencies.resolveVideoTools ?? resolveFfmpegPaths)()),
+    ...preparation,
+    ...(options.thumbnail && thumbnailMime
+      ? {
+          thumbnail: {
+            body: new Uint8Array(await readFile(options.thumbnail)),
+            mimeType: thumbnailMime,
+          },
+        }
+      : {}),
+    ...(options.transcript === false ? { skipAudio: true } : {}),
+  })
+}
+
 export async function runVideoUpload(
   options: VideoUploadOptions,
   dependencies: VideoCommandDependencies = {},
@@ -170,74 +215,91 @@ export async function runVideoUpload(
   // any. Honour an injected fetch so tests can still intercept.
   const videos = new VideoService(client.http, dependencies.fetch ?? globalThis.fetch)
 
-  // The server never opens the uploaded file: it has no ffmpeg, so the
-  // container metadata, the poster frame and the split-out audio all have to be
-  // produced here. An init without the metadata is rejected outright, which is
-  // why this is not wrapped in a try/catch the way the poster frame is.
-  const prepare = dependencies.prepareVideo ?? prepareVideoUpload
+  const attachmentFailures = new Set<'thumbnail' | 'audio'>()
+  const reportFailure = (attachment: 'thumbnail' | 'audio', error: unknown) => {
+    attachmentFailures.add(attachment)
+    ui.warning(
+      `${attachment === 'audio' ? 'Transcript audio' : 'Thumbnail'} unavailable: ${describeVideoAttachmentError(error)}.`,
+    )
+  }
   const prepared = await ui.withActivity(
     `Reading ${basename(options.file)}…`,
-    async () =>
-      prepare(options.file, {
-        ...(await (dependencies.resolveVideoTools ?? resolveFfmpegPaths)()),
-        // --thumbnail wins over a frame cut from the video.
-        ...(options.thumbnail
-          ? {
-              thumbnail: {
-                // readFile rather than open(): the handle from open() was never
-                // closed and leaked a descriptor.
-                body: new Uint8Array(await readFile(options.thumbnail)),
-                mimeType: resolveThumbnailMimeType(options.thumbnail),
-              },
-            }
-          : {}),
-        ...(options.transcript === false ? { skipAudio: true } : {}),
-      }),
+    () => prepareVideoFile(options, dependencies, { onPreparationError: reportFailure }),
     !options.json,
   )
 
-  const handle = await open(options.file, 'r')
   try {
-    const video = await ui.withActivity(
-      `Uploading ${basename(options.file)}…`,
-      async () => {
-        // Parts are read on demand so a very large video is never held in
-        // memory all at once. A positional read can come back short, so keep
-        // reading until the part is full — otherwise the unfilled tail is
-        // zeroes and would upload as silently corrupt data.
-        const readPart = async (_partNumber: number, start: number, end: number) => {
-          const buffer = new Uint8Array(end - start)
-          let filled = 0
-          while (filled < buffer.byteLength) {
-            const { bytesRead } = await handle.read(
-              buffer,
-              filled,
-              buffer.byteLength - filled,
-              start + filled,
-            )
-            if (bytesRead === 0) {
-              throw new Error(`${basename(options.file)} ended early; it changed while uploading`)
-            }
-            filled += bytesRead
-          }
-          return buffer
-        }
-
-        return videos.uploadVideo(prepared.init, readPart, {
-          ...(prepared.audio ? { audio: prepared.audio } : {}),
-          ...(prepared.thumbnail ? { thumbnail: prepared.thumbnail } : {}),
-        })
-      },
-      !options.json,
+    // Also detect an empty result from a custom preparation adapter.
+    if (!prepared.thumbnail && !attachmentFailures.has('thumbnail'))
+      reportFailure('thumbnail', undefined)
+    if (
+      prepared.probe.hasAudio &&
+      options.transcript !== false &&
+      !prepared.audio?.chunks.length &&
+      !attachmentFailures.has('audio')
     )
+      reportFailure('audio', undefined)
+    const handle = await open(options.file, 'r')
+    try {
+      const video = await ui.withActivity(
+        `Uploading ${basename(options.file)}…`,
+        async () => {
+          // Parts are read on demand so a very large video is never held in
+          // memory all at once. A positional read can come back short, so keep
+          // reading until the part is full — otherwise the unfilled tail is
+          // zeroes and would upload as silently corrupt data.
+          const readPart = async (_partNumber: number, start: number, end: number) => {
+            const buffer = new Uint8Array(end - start)
+            let filled = 0
+            while (filled < buffer.byteLength) {
+              const { bytesRead } = await handle.read(
+                buffer,
+                filled,
+                buffer.byteLength - filled,
+                start + filled,
+              )
+              if (bytesRead === 0) {
+                throw new Error(`${basename(options.file)} ended early; it changed while uploading`)
+              }
+              filled += bytesRead
+            }
+            return buffer
+          }
 
-    if (options.json) {
-      ui.json({ video })
-      return
+          return videos.uploadVideo(prepared.init, readPart, {
+            onAttachmentError: reportFailure,
+            ...(prepared.audio ? { audio: prepared.audio } : {}),
+            ...(prepared.thumbnail ? { thumbnail: prepared.thumbnail } : {}),
+          })
+        },
+        !options.json,
+      )
+
+      if (attachmentFailures.size > 0) {
+        ui.warning(
+          `Video saved with missing attachments. Repair with rawback --env ${client.environment.name} videos repair --id ${String(video.id)} --file <original-file>.`,
+        )
+      }
+
+      if (options.json) {
+        ui.json({ video })
+        return
+      }
+      ui.success(`Uploaded ${video.filename} (id ${String(video.id)})`)
+      if (!prepared.probe.hasAudio)
+        ui.info('This video has no audio track; no transcript is expected.')
+      else if (options.transcript === false)
+        ui.info(
+          'Transcript audio was skipped; use videos repair with the original file to attach it later.',
+        )
+      else if (!attachmentFailures.has('audio'))
+        ui.info(
+          'Audio uploaded. Transcription runs asynchronously when enabled on the server; view its status on the video page.',
+        )
+    } finally {
+      await handle.close()
     }
-    ui.success(`Uploaded ${video.filename} (id ${String(video.id)})`)
   } finally {
-    await handle.close()
     // Releases the temp directory holding the extracted audio chunks.
     await prepared.cleanup()
   }
