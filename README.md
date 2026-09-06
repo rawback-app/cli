@@ -74,7 +74,8 @@ rawback --help
 
 Release archives are available for Linux, macOS, and Windows on both x86-64 and
 arm64. The standalone binary does not require Bun. macOS binaries are Developer
-ID-signed and notarized; Windows binaries are not currently Authenticode-signed.
+ID-signed and notarized, including the bundled `ffmpeg` and `ffprobe` helpers;
+Windows binaries are not currently Authenticode-signed.
 
 ### Build from source
 
@@ -262,8 +263,15 @@ rawback videos delete --id 7
 
 Supported containers are MP4, M4V, MOV, WebM, MKV, AVI, MPEG, 3GP, and TS, up
 to 100 GB. The file is sent in parts to presigned URLs and read from disk on
-demand, so memory use stays flat regardless of file size. Pass `--thumbnail` to
-attach a poster frame; otherwise set one later from the web app.
+demand, so memory use stays flat regardless of file size. The CLI reads metadata,
+attempts to extract a poster frame, and extracts audio for transcription locally.
+Pass `--thumbnail` to supply your own poster frame or `--no-transcript` to skip
+audio extraction.
+
+The CLI uses `ffmpeg` and `ffprobe` from `PATH` first, falling back to each
+bundled tool when missing. Each tool is resolved independently, so a system copy
+of one can be used alongside a bundled copy of the other. See
+[video tool setup](docs/configuration.md#video-tools) for details.
 
 ## Camera control
 

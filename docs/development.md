@@ -181,9 +181,37 @@ bun run build:all
 goreleaser release --snapshot --clean
 ```
 
-Snapshot releases generate unsigned local artifacts and never update Homebrew.
-Production releases sign and notarize both macOS binaries, then publish
+Snapshot releases do not apply our Developer ID signature or submit to Apple,
+and never update Homebrew. Production releases sign and notarize both macOS CLI
+binaries and the bundled `ffmpeg` and `ffprobe` for x64 and arm64, then publish
 `Casks/rawback.rb` to `rawback-app/homebrew-tap`.
+
+GoReleaser's built-in notarization covers the CLI build artifacts, but not files
+added through `archives.files`. After staging, `scripts/sign-video-tools.ts`
+signs and notarizes those four macOS helpers in place using
+[Quill](https://github.com/anchore/quill). The release workflow installs Quill
+0.7.1 with a pinned SHA-256 checksum. It reuses the existing `MACOS_*` secrets
+through environment variables; no credentials are passed as command arguments.
+Each submission waits for Apple's result, with a 20-minute process timeout.
+Missing helpers, missing credentials, or a failed submission stop the release
+before packaging and checksum generation. Snapshot builds skip this hook's
+signing work and do not require Quill or signing credentials.
+
+For a production release run locally, install Quill 0.7.1 on `PATH` alongside
+GoReleaser and supply the same release secrets. To verify a published macOS
+archive after extraction, inspect all three executables:
+
+```bash
+codesign --verify --strict --verbose=2 ./rawback
+codesign --verify --strict --verbose=2 ./ffmpeg/ffmpeg
+codesign --verify --strict --verbose=2 ./ffmpeg/ffprobe
+spctl --assess --type execute --verbose=2 ./ffmpeg/ffmpeg
+spctl --assess --type execute --verbose=2 ./ffmpeg/ffprobe
+```
+
+Signature checks alone do not prove notarization; test the downloaded release
+on a Mac with Gatekeeper enabled as well. Existing unsigned downloads need to
+be replaced with a release containing the signed helpers.
 
 The release workflow requires these repository secrets and stops before uploading
 assets if any are missing:

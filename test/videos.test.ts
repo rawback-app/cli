@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { writeCredentials } from '../src/credentials.ts'
 import {
+  resolveFfmpegPaths,
   resolveThumbnailMimeType,
   resolveVideoMimeType,
   runVideoDelete,
@@ -27,6 +28,7 @@ async function dependencies(
   return {
     configPath: join(directory, 'config.yml'),
     credentialsPath,
+    resolveVideoTools: async () => ({}),
     fetch: ((input: unknown, init: RequestInit | undefined) =>
       handler(String(input), init)) as unknown as typeof fetch,
     stdout: (message) => output.push(message),
@@ -75,6 +77,72 @@ afterEach(async () => {
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
   )
+})
+
+describe('resolveFfmpegPaths', () => {
+  test.each([
+    { ffmpeg: true, ffprobe: true },
+    { ffmpeg: true, ffprobe: false },
+    { ffmpeg: false, ffprobe: true },
+    { ffmpeg: false, ffprobe: false },
+  ])('prefers each system tool independently: %j', async (system) => {
+    const bundledLookups: string[] = []
+    const paths = await resolveFfmpegPaths({
+      platform: 'linux',
+      which: (command) => {
+        if (command === 'ffmpeg' && system.ffmpeg) return '/system/ffmpeg'
+        if (command === 'ffprobe' && system.ffprobe) return '/system/ffprobe'
+        return null
+      },
+      findBundledFfmpeg: async () => {
+        bundledLookups.push('ffmpeg')
+        return '/bundle/ffmpeg'
+      },
+      findBundledFfprobe: async () => {
+        bundledLookups.push('ffprobe')
+        return '/bundle/ffprobe'
+      },
+    })
+
+    expect(paths).toEqual({
+      ffmpegPath: system.ffmpeg ? '/system/ffmpeg' : '/bundle/ffmpeg',
+      ffprobePath: system.ffprobe ? '/system/ffprobe' : '/bundle/ffprobe',
+    })
+    expect(bundledLookups.includes('ffmpeg')).toBe(!system.ffmpeg)
+    expect(bundledLookups.includes('ffprobe')).toBe(!system.ffprobe)
+  })
+
+  test.each([null, '/system/ffmpeg'])('omits unavailable tool paths: %s', async (ffmpeg) => {
+    const paths = await resolveFfmpegPaths({
+      platform: 'linux',
+      which: (command) => (command === 'ffmpeg' ? ffmpeg : null),
+      findBundledFfmpeg: async () => undefined,
+      findBundledFfprobe: async () => undefined,
+    })
+    expect(paths).toEqual(ffmpeg ? { ffmpegPath: ffmpeg } : {})
+  })
+
+  test('looks up Windows executable names', async () => {
+    const names: string[] = []
+    const paths = await resolveFfmpegPaths({
+      platform: 'win32',
+      which: (command) => {
+        names.push(command)
+        return `C:\\tools\\${command}`
+      },
+      findBundledFfmpeg: async () => {
+        throw new Error('must not inspect the bundle')
+      },
+      findBundledFfprobe: async () => {
+        throw new Error('must not inspect the bundle')
+      },
+    })
+    expect(names).toEqual(['ffmpeg.exe', 'ffprobe.exe'])
+    expect(paths).toEqual({
+      ffmpegPath: 'C:\\tools\\ffmpeg.exe',
+      ffprobePath: 'C:\\tools\\ffprobe.exe',
+    })
+  })
 })
 
 describe('resolveVideoMimeType', () => {
@@ -215,8 +283,33 @@ describe('videos upload', () => {
       throw new Error(`unexpected request to ${url}`)
     }, lines)
 
-    await runVideoUpload({ file, json: true }, { ...deps, prepareVideo: stubPrepare(24) })
+    let prepared = false
+    await runVideoUpload(
+      { file, json: true },
+      {
+        ...deps,
+        resolveVideoTools: () =>
+          resolveFfmpegPaths({
+            platform: 'linux',
+            which: (command) => (command === 'ffmpeg' ? '/system/ffmpeg' : null),
+            findBundledFfmpeg: async () => {
+              throw new Error('must prefer system ffmpeg')
+            },
+            findBundledFfprobe: async () => '/bundle/ffprobe',
+          }),
+        prepareVideo: async (path, options) => {
+          prepared = true
+          expect(path).toBe(file)
+          expect(options).toEqual({
+            ffmpegPath: '/system/ffmpeg',
+            ffprobePath: '/bundle/ffprobe',
+          })
+          return stubPrepare(24)(path, options)
+        },
+      },
+    )
 
+    expect(prepared).toBe(true)
     expect(storageRequests).toHaveLength(3)
     // A presigned URL signs the request, so the bearer token must not be sent.
     for (const request of storageRequests) {

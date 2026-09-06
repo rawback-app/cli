@@ -22,6 +22,17 @@ function runCli(...args: string[]) {
 }
 
 describe('rawback CLI', () => {
+  test('documents system-first video tool lookup', () => {
+    const result = runCli('videos', 'upload', '--help')
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toContain('rawback videos upload --file <path> [options]')
+    expect(result.stdout.replace(/\s+/g, ' ')).toContain(
+      'Uses ffmpeg and ffprobe from PATH first, falling back to each bundled tool when missing.',
+    )
+  })
+
   test('shows help with no arguments', () => {
     const result = runCli()
 
