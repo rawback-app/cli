@@ -11,8 +11,9 @@ import { dirname, join } from 'node:path'
 async function findBundledBinary(
   directory: string,
   executable: string,
+  execPath = process.execPath,
 ): Promise<string | undefined> {
-  const candidates = [process.execPath, await realpath(process.execPath)].map((path) =>
+  const candidates = [execPath, await realpath(execPath)].map((path) =>
     join(dirname(path), directory, executable),
   )
   for (const candidate of candidates) {
@@ -25,15 +26,29 @@ export function findBundledExiftoolPath(): Promise<string | undefined> {
   return findBundledBinary('exiftool', process.platform === 'win32' ? 'exiftool.exe' : 'exiftool')
 }
 
-/**
- * ffmpeg and ffprobe probe a video, cut its poster frame and split its audio
- * before upload. The server never opens the uploaded file, so without them an
- * upload has no metadata to declare and is rejected.
- */
-export function findBundledFfmpegPath(): Promise<string | undefined> {
-  return findBundledBinary('ffmpeg', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
+interface BundledVideoToolOptions {
+  execPath?: string
+  platform?: NodeJS.Platform
 }
 
-export function findBundledFfprobePath(): Promise<string | undefined> {
-  return findBundledBinary('ffmpeg', process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe')
+/** Finds the bundled fallback used for poster-frame and audio extraction. */
+export function findBundledFfmpegPath(
+  options: BundledVideoToolOptions = {},
+): Promise<string | undefined> {
+  return findBundledBinary(
+    'ffmpeg',
+    (options.platform ?? process.platform) === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
+    options.execPath,
+  )
+}
+
+/** Finds the bundled fallback used to read video metadata before upload. */
+export function findBundledFfprobePath(
+  options: BundledVideoToolOptions = {},
+): Promise<string | undefined> {
+  return findBundledBinary(
+    'ffmpeg',
+    (options.platform ?? process.platform) === 'win32' ? 'ffprobe.exe' : 'ffprobe',
+    options.execPath,
+  )
 }

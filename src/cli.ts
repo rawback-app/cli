@@ -603,6 +603,9 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             'upload a video directly to storage',
             (upload) =>
               upload
+                .usage(
+                  '$0 videos upload --file <path> [options]\n\nUpload a video directly to storage. Uses ffmpeg and ffprobe from PATH first, falling back to each bundled tool when missing.',
+                )
                 .option('file', {
                   demandOption: true,
                   describe: 'video file to upload',

@@ -4,6 +4,29 @@ This guide explains the local Rawback files, custom service hosts, and the SFTP
 upload workflow. For a concise first run, start with the
 [README quick start](../README.md#quick-start).
 
+## Video tools
+
+Video uploads use local `ffprobe` and `ffmpeg` executables for metadata, poster
+frames, and audio extraction. The CLI searches `PATH` first for each tool and
+uses its bundled copy from the `ffmpeg/` directory beside the executable when
+the system tool is absent. Bundled lookup also follows executable symlinks.
+On Windows, the executable names are `ffprobe.exe` and `ffmpeg.exe`.
+
+The tools are selected independently; installing only one on `PATH` still
+allows the other to use its bundled copy. No configuration setting is needed.
+When installing manually, keep the archive's `ffmpeg/` directory beside
+`rawback` to retain the bundled fallback. Source builds need system tools or
+separately staged sidecars.
+
+Official macOS releases sign and notarize the bundled `ffmpeg` and `ffprobe`
+with our Developer ID. If an older bundled copy triggers a macOS security
+warning, replace the installation with a release containing the signed helpers.
+This does not change the signature or trust status of tools found on `PATH`.
+
+Selection does not check versions or retry with a bundled binary if the selected
+system binary fails. If a system installation causes problems, repair it or
+remove it from the CLI's `PATH` to use the bundled copy.
+
 ## Configuration file
 
 The CLI reads `~/.rawback/config.yml`. The file is optional until you upload

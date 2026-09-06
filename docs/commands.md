@@ -493,16 +493,22 @@ rawback videos list [options]
 rawback videos upload --file <path> [options]
 ```
 
-| Option               | Description                               | Default |
-| -------------------- | ----------------------------------------- | ------- |
-| `--file <path>`      | Required video file to upload             | —       |
-| `--thumbnail <path>` | JPEG or PNG to attach as the poster frame | —       |
-| `--json`             | Output machine-readable JSON              | `false` |
+| Option               | Description                                                 | Default |
+| -------------------- | ----------------------------------------------------------- | ------- |
+| `--file <path>`      | Required video file to upload                               | —       |
+| `--thumbnail <path>` | JPEG or PNG to attach as the poster frame                   | —       |
+| `--transcript`       | Extract audio for transcription; `--no-transcript` skips it | `true`  |
+| `--json`             | Output machine-readable JSON                                | `false` |
 
 Supported containers are `.mp4`, `.m4v`, `.mov`, `.webm`, `.mkv`, `.avi`,
-`.mpeg`/`.mpg`, `.3gp`, and `.ts`, up to 100 GB. The CLI does not extract a
-poster frame itself; pass `--thumbnail` to attach one, or set it later from the
-web app.
+`.mpeg`/`.mpg`, `.3gp`, and `.ts`, up to 100 GB. The CLI reads video metadata
+and attempts to extract a poster frame and audio locally. Pass `--thumbnail`
+to supply your own poster frame. `--no-transcript` skips audio extraction;
+the audio cannot be added later.
+
+For each of `ffmpeg` and `ffprobe`, the executable on `PATH` takes precedence
+over its bundled copy. If only one is on `PATH`, the other uses its bundled
+copy when available. See [video tool setup](configuration.md#video-tools).
 
 ### `videos update`
 

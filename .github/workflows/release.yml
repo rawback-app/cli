@@ -70,6 +70,19 @@ jobs:
           done
           exit "$missing"
 
+      - name: Install pinned macOS sidecar signer
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          quill_dir="$RUNNER_TEMP/rawback-quill"
+          mkdir -p "$quill_dir"
+          cd "$quill_dir"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+            https://github.com/anchore/quill/releases/download/v0.7.1/quill_0.7.1_linux_amd64.tar.gz \
+            --output quill.tar.gz
+          echo 'e58c6f86378a22507c1123e24412afd4ee2d3bb32ebd94d6059827dc0c1b3fbf  quill.tar.gz' | sha256sum --check
+          tar -xzf quill.tar.gz quill
+          echo "$quill_dir" >> "$GITHUB_PATH"
+
       - name: Publish standalone binaries
         if: ${{ steps.release.outputs.release_created }}
         uses: goreleaser/goreleaser-action@v7

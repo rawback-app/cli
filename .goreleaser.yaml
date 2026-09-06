@@ -7,6 +7,8 @@ before:
   hooks:
     - bun run scripts/stage-exiftool.ts
     - bun run scripts/stage-ffmpeg.ts
+    # Archive extras are not covered by notarize.macos.ids below.
+    - bun run scripts/sign-video-tools.ts --snapshot={{ .IsSnapshot }}
     - bun run scripts/build-windows-arm64.ts
 
 builds:

@@ -27,19 +27,27 @@ export interface VideoCommandDependencies extends ReadCommandDependencies {
    * ffmpeg installed nor a real encoded video to exercise the upload flow.
    */
   prepareVideo?: typeof prepareVideoUpload
+  resolveVideoTools?: () => Promise<FfmpegPaths>
 }
 
 type Video = VideosQuery['videos']['edges'][number]
 
-/**
- * Prefers the binaries staged beside the compiled executable, falling back to
- * whatever is on PATH — which is what a developer machine with a system ffmpeg
- * wants.
- */
-async function resolveFfmpegPaths(): Promise<FfmpegPaths> {
+interface VideoToolDependencies {
+  which?: (command: string) => string | null
+  platform?: NodeJS.Platform
+  findBundledFfmpeg?: () => Promise<string | undefined>
+  findBundledFfprobe?: () => Promise<string | undefined>
+}
+
+/** Prefer each tool on PATH independently, falling back to its bundled copy. */
+export async function resolveFfmpegPaths(
+  dependencies: VideoToolDependencies = {},
+): Promise<FfmpegPaths> {
+  const which = dependencies.which ?? Bun.which
+  const suffix = (dependencies.platform ?? process.platform) === 'win32' ? '.exe' : ''
   const [ffmpegPath, ffprobePath] = await Promise.all([
-    findBundledFfmpegPath(),
-    findBundledFfprobePath(),
+    which(`ffmpeg${suffix}`) ?? (dependencies.findBundledFfmpeg ?? findBundledFfmpegPath)(),
+    which(`ffprobe${suffix}`) ?? (dependencies.findBundledFfprobe ?? findBundledFfprobePath)(),
   ])
   return {
     ...(ffmpegPath ? { ffmpegPath } : {}),
@@ -171,7 +179,7 @@ export async function runVideoUpload(
     `Reading ${basename(options.file)}…`,
     async () =>
       prepare(options.file, {
-        ...(await resolveFfmpegPaths()),
+        ...(await (dependencies.resolveVideoTools ?? resolveFfmpegPaths)()),
         // --thumbnail wins over a frame cut from the video.
         ...(options.thumbnail
           ? {
