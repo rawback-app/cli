@@ -1,6 +1,6 @@
 {
   "name": "@rawback/cli",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "private": true,
   "description": "Rawback CLI for humans and AI agents",
   "type": "module",
