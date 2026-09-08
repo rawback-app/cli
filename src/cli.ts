@@ -1267,6 +1267,161 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             (article) =>
               article
                 .command(
+                  'translate <album-id>',
+                  'translate and save for 10 credits; shares article visibility',
+                  (builder) =>
+                    builder
+                      .positional('album-id', { type: 'number', demandOption: true })
+                      .option('from', { type: 'string', describe: 'source language' })
+                      .option('to', { type: 'string', describe: 'target language' })
+                      .option('language', { type: 'string', describe: 'version language' })
+                      .option('overwrite', {
+                        type: 'boolean',
+                        default: false,
+                        describe: 'replace an existing target version',
+                      })
+                      .option('json', { type: 'boolean', default: false }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runArticleLanguage } = await import('./articles.ts')
+                    await runCommand(() =>
+                      runArticleLanguage('translate', {
+                        albumId: args.albumId!,
+                        json: args.json,
+                        overwrite: args.overwrite,
+                        ...(args.from ? { from: args.from } : {}),
+                        ...(args.to ? { to: args.to } : {}),
+                        ...(args.language ? { language: args.language } : {}),
+                      }),
+                    )
+                  },
+                )
+
+                .command(
+                  'versions <album-id>',
+                  'list article language versions',
+                  (builder) =>
+                    builder
+                      .positional('album-id', { type: 'number', demandOption: true })
+                      .option('from', { type: 'string', describe: 'source language' })
+                      .option('to', { type: 'string', describe: 'target language' })
+                      .option('language', { type: 'string', describe: 'version language' })
+                      .option('overwrite', {
+                        type: 'boolean',
+                        default: false,
+                        describe: 'replace an existing target version',
+                      })
+                      .option('json', { type: 'boolean', default: false }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runArticleLanguage } = await import('./articles.ts')
+                    await runCommand(() =>
+                      runArticleLanguage('versions', {
+                        albumId: args.albumId!,
+                        json: args.json,
+                        overwrite: args.overwrite,
+                        ...(args.from ? { from: args.from } : {}),
+                        ...(args.to ? { to: args.to } : {}),
+                        ...(args.language ? { language: args.language } : {}),
+                      }),
+                    )
+                  },
+                )
+
+                .command(
+                  'default <album-id>',
+                  'set the default article language',
+                  (builder) =>
+                    builder
+                      .positional('album-id', { type: 'number', demandOption: true })
+                      .option('from', { type: 'string', describe: 'source language' })
+                      .option('to', { type: 'string', describe: 'target language' })
+                      .option('language', { type: 'string', describe: 'version language' })
+                      .option('overwrite', {
+                        type: 'boolean',
+                        default: false,
+                        describe: 'replace an existing target version',
+                      })
+                      .option('json', { type: 'boolean', default: false }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runArticleLanguage } = await import('./articles.ts')
+                    await runCommand(() =>
+                      runArticleLanguage('default', {
+                        albumId: args.albumId!,
+                        json: args.json,
+                        overwrite: args.overwrite,
+                        ...(args.from ? { from: args.from } : {}),
+                        ...(args.to ? { to: args.to } : {}),
+                        ...(args.language ? { language: args.language } : {}),
+                      }),
+                    )
+                  },
+                )
+
+                .command(
+                  'label <album-id>',
+                  'label an existing language version',
+                  (builder) =>
+                    builder
+                      .positional('album-id', { type: 'number', demandOption: true })
+                      .option('from', { type: 'string', describe: 'source language' })
+                      .option('to', { type: 'string', describe: 'target language' })
+                      .option('language', { type: 'string', describe: 'version language' })
+                      .option('overwrite', {
+                        type: 'boolean',
+                        default: false,
+                        describe: 'replace an existing target version',
+                      })
+                      .option('json', { type: 'boolean', default: false }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runArticleLanguage } = await import('./articles.ts')
+                    await runCommand(() =>
+                      runArticleLanguage('label', {
+                        albumId: args.albumId!,
+                        json: args.json,
+                        overwrite: args.overwrite,
+                        ...(args.from ? { from: args.from } : {}),
+                        ...(args.to ? { to: args.to } : {}),
+                        ...(args.language ? { language: args.language } : {}),
+                      }),
+                    )
+                  },
+                )
+
+                .command(
+                  'delete-version <album-id>',
+                  'delete a non-default language version',
+                  (builder) =>
+                    builder
+                      .positional('album-id', { type: 'number', demandOption: true })
+                      .option('from', { type: 'string', describe: 'source language' })
+                      .option('to', { type: 'string', describe: 'target language' })
+                      .option('language', { type: 'string', describe: 'version language' })
+                      .option('overwrite', {
+                        type: 'boolean',
+                        default: false,
+                        describe: 'replace an existing target version',
+                      })
+                      .option('json', { type: 'boolean', default: false }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runArticleLanguage } = await import('./articles.ts')
+                    await runCommand(() =>
+                      runArticleLanguage('delete-version', {
+                        albumId: args.albumId!,
+                        json: args.json,
+                        overwrite: args.overwrite,
+                        ...(args.from ? { from: args.from } : {}),
+                        ...(args.to ? { to: args.to } : {}),
+                        ...(args.language ? { language: args.language } : {}),
+                      }),
+                    )
+                  },
+                )
+
+                .command(
                   'list',
                   'list album articles',
                   (list) =>
@@ -1307,6 +1462,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                         describe: 'album ID',
                         type: 'number',
                       })
+                      .option('language', { type: 'string', describe: 'article language tag' })
                       .option('content-only', {
                         default: false,
                         describe: 'output only stored Markdown content',
@@ -1329,6 +1485,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     await runCommand(() =>
                       runArticleView({
                         albumId: args.albumId!,
+                        ...(args.language ? { language: args.language } : {}),
                         contentOnly: args.contentOnly,
                         json: args.json,
                       }),
@@ -1344,6 +1501,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                         describe: 'album ID',
                         type: 'number',
                       })
+                      .option('language', { type: 'string', describe: 'article language tag' })
                       .option('title', {
                         describe: 'article title',
                         type: 'string',
@@ -1371,6 +1529,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     await runCommand(() =>
                       runArticleEdit({
                         albumId: args.albumId!,
+                        ...(args.language ? { language: args.language } : {}),
                         json: args.json,
                         ...(args.title !== undefined ? { title: args.title } : {}),
                         ...(args.contentFile !== undefined

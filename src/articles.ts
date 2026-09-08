@@ -1,3 +1,9 @@
+import {
+  CliTranslateArticleDocument,
+  CliSetArticleDefaultLanguageDocument,
+  CliLabelArticleVersionDocument,
+  CliDeleteArticleVersionDocument,
+} from '@rawback/sdk'
 import { type FragmentType, useFragment } from '@rawback/sdk'
 import {
   type CliAlbumArticleQuery,
@@ -39,12 +45,14 @@ export interface ArticleListOptions {
 }
 
 export interface ArticleViewOptions {
+  language?: string
   albumId: number
   contentOnly?: boolean
   json?: boolean
 }
 
 export interface ArticleEditOptions {
+  language?: string
   albumId: number
   contentFile?: string
   json?: boolean
@@ -128,6 +136,9 @@ export function serializeArticle(article: CliArticleFieldsFragment) {
     id: article.id,
     title: article.title,
     content: article.content,
+    defaultLanguage: article.defaultLanguage,
+    availableLanguages: article.availableLanguages,
+    versions: article.versions,
     status: article.status,
     album: {
       id: article.album.id,
@@ -237,11 +248,17 @@ export async function runArticleView(
     throw new Error('--content-only and --json cannot be used together')
   }
   const ui = commandOutput(dependencies)
-  const article = await ui.withActivity(
+  let article = await ui.withActivity(
     'Loading article…',
     async () => requireArticle(await queryAlbumArticle(albumId, dependencies)),
     !options.contentOnly && !options.json,
   )
+  if (options.language) {
+    const language = validateArticleLanguage(options.language)
+    const version = article.versions.find((v) => v.language === language)
+    if (!version) throw new Error(`No article version for ${language}`)
+    article = { ...article, title: version.title, content: version.content }
+  }
   if (options.contentOnly) {
     ui.raw(article.content)
   } else if (options.json) {
@@ -261,6 +278,7 @@ export async function runArticleEdit(
   }
   const input: UpsertArticleInput = {
     albumId,
+    ...(options.language ? { language: validateArticleLanguage(options.language) } : {}),
     ...(options.title !== undefined ? { title: options.title.trim() } : {}),
   }
   if (options.contentFile !== undefined) {
@@ -278,7 +296,13 @@ export async function runArticleEdit(
   if (result.error) throw result.error
   const value = result.data?.upsertArticle
   if (!value) throw new Error('The edit article response did not include the article')
-  const article = articleFragment(value)
+  const savedArticle = articleFragment(value)
+  const version = options.language
+    ? savedArticle.versions.find((v) => v.language === validateArticleLanguage(options.language!))
+    : undefined
+  const article = version
+    ? { ...savedArticle, title: version.title, content: version.content }
+    : savedArticle
   writeArticle(
     article,
     options.json,
@@ -370,5 +394,127 @@ export async function runArticleDelete(
     ui.json({ albumId, articleId: article.id, deleted: true })
   } else {
     ui.success(`Deleted article ${article.id} from album ${albumId}.`)
+  }
+}
+
+export function validateArticleLanguage(value: string): string {
+  try {
+    const language = Intl.getCanonicalLocales(value)[0]
+    if (language && language !== 'und') return language
+  } catch {
+    /* actionable error below */
+  }
+  throw new Error('Use a known BCP-47 language tag, such as en or zh-Hant')
+}
+export interface ArticleLanguageOptions {
+  albumId: number
+  from?: string
+  to?: string
+  language?: string
+  overwrite?: boolean
+  json?: boolean
+}
+export async function runArticleLanguage(
+  action: 'translate' | 'versions' | 'default' | 'label' | 'delete-version',
+  options: ArticleLanguageOptions,
+  dependencies: ArticleCommandDependencies = {},
+) {
+  const albumId = validatePositiveId(options.albumId, 'Album ID')
+  const source =
+    options.from === 'und'
+      ? 'und'
+      : options.from
+        ? validateArticleLanguage(options.from)
+        : undefined
+  const target = options.to ? validateArticleLanguage(options.to) : undefined
+  const language =
+    options.language === 'und'
+      ? 'und'
+      : options.language
+        ? validateArticleLanguage(options.language)
+        : undefined
+  if (action === 'translate' && (!source || !target || source === target || source === 'und'))
+    throw new Error('Translation requires distinct --from and --to languages')
+  if (action === 'label' && (!source || !target))
+    throw new Error('Labeling requires --from and --to')
+  if ((action === 'default' || action === 'delete-version') && !language)
+    throw new Error('--language is required')
+  const current = requireArticle(await queryAlbumArticle(albumId, dependencies))
+  const ui = commandOutput(dependencies)
+  if (action === 'versions') {
+    if (options.json) ui.json(current.versions)
+    else
+      ui.raw(
+        current.versions
+          .map(
+            (v) =>
+              `${v.language}  revision ${v.revision}${v.language === current.defaultLanguage ? ' (default)' : ''}`,
+          )
+          .join('\n'),
+      )
+    return
+  }
+  const client = await createCommandClient(dependencies)
+  if (action === 'translate') {
+    const from = current.versions.find((v) => v.language === source)
+    const to = current.versions.find((v) => v.language === target)
+    if (!from) throw new Error('Source version does not exist')
+    if (to && !options.overwrite) throw new Error('Target exists; use --overwrite to replace it')
+    const result = await client.graphql.mutate({
+      mutation: CliTranslateArticleDocument,
+      variables: {
+        input: {
+          articleId: current.id,
+          sourceLanguage: source!,
+          targetLanguage: target!,
+          expectedSourceRevision: from.revision,
+          expectedTargetRevision: to?.revision ?? null,
+          overwrite: options.overwrite ?? false,
+          requestId: crypto.randomUUID(),
+        },
+      },
+    })
+    if (result.error) throw result.error
+    if (!result.data) throw new Error('Translation returned no result')
+    if (options.json) ui.json(result.data.translateArticle)
+    else
+      ui.success(
+        `Saved ${target} translation (10 credits). It shares the article's publication settings.`,
+      )
+  } else if (action === 'default') {
+    const result = await client.graphql.mutate({
+      mutation: CliSetArticleDefaultLanguageDocument,
+      variables: { id: current.id, language: language! },
+    })
+    if (result.error) throw result.error
+    if (options.json) ui.json(result.data)
+    else ui.success(`Default language: ${language}`)
+  } else {
+    const version = current.versions.find(
+      (v) => v.language === (action === 'label' ? source : language),
+    )
+    if (!version) throw new Error('Language version does not exist')
+    if (action === 'label') {
+      const result = await client.graphql.mutate({
+        mutation: CliLabelArticleVersionDocument,
+        variables: {
+          id: current.id,
+          language: source!,
+          targetLanguage: target!,
+          expectedRevision: version.revision,
+        },
+      })
+      if (result.error) throw result.error
+      if (options.json) ui.json(result.data)
+      else ui.success(`Labeled version ${target}`)
+    } else {
+      const result = await client.graphql.mutate({
+        mutation: CliDeleteArticleVersionDocument,
+        variables: { id: current.id, language: language!, expectedRevision: version.revision },
+      })
+      if (result.error) throw result.error
+      if (options.json) ui.json(result.data)
+      else ui.success(`Deleted version ${language}`)
+    }
   }
 }
