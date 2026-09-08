@@ -169,13 +169,13 @@ async function queryAlbumArticle(
   return album
 }
 
-function requireArticle(album: AlbumArticle): CliArticleFieldsFragment {
+function requireArticle(album: AlbumArticle) {
   if (!album.article) {
     throw new Error(
       `Album ${album.id} has no article; create one with rawback album article edit ${album.id} --content-file <path|->`,
     )
   }
-  return articleFragment(album.article)
+  return { ...articleFragment(album.article), versions: album.article.versions }
 }
 
 async function defaultReadContent(path: string): Promise<string> {
@@ -297,8 +297,11 @@ export async function runArticleEdit(
   const value = result.data?.upsertArticle
   if (!value) throw new Error('The edit article response did not include the article')
   const savedArticle = articleFragment(value)
+  const detail = options.language
+    ? requireArticle(await queryAlbumArticle(albumId, dependencies))
+    : undefined
   const version = options.language
-    ? savedArticle.versions.find((v) => v.language === validateArticleLanguage(options.language!))
+    ? detail?.versions.find((v) => v.language === validateArticleLanguage(options.language!))
     : undefined
   const article = version
     ? { ...savedArticle, title: version.title, content: version.content }
