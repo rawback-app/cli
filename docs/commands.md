@@ -998,3 +998,13 @@ icons or prose.
 The CLI exits with status `0` on success, `1` for validation, API, filesystem, or
 upload failures, and `130` when an interactive prompt is cancelled. Scripts
 should check the exit status before consuming output.
+
+## Article languages
+
+`rawback album article versions 42 --json` lists available languages and revisions.
+Use `view 42 --language fr` or `edit 42 --language fr --content-file story.md`.
+`translate 42 --from en --to fr` saves a translation for **10 credits**, immediately
+sharing the article's publication settings. Existing targets require `--overwrite`.
+Use `default 42 --language fr`, `label 42 --from und --to en`, or
+`delete-version 42 --language fr` under `rawback album article` to manage versions.
+The default version cannot be deleted. All commands support `--json`.

@@ -451,3 +451,21 @@ and changelogs from Conventional Commits. Merging its release PR triggers
 GoReleaser, which builds all six platform archives, signs and notarizes the
 macOS binaries, publishes the Homebrew Cask, and includes a `checksums.txt`
 file with each GitHub Release.
+
+## Article languages
+
+`rawback album article versions 42 --json` lists available languages and revisions.
+Use `view 42 --language fr` or `edit 42 --language fr --content-file story.md`.
+`translate 42 --from en --to fr` saves a translation for **10 credits**, immediately
+sharing the article's publication settings. Existing targets require `--overwrite`.
+Use `default 42 --language fr`, `label 42 --from und --to en`, or
+`delete-version 42 --language fr` under `rawback album article` to manage versions.
+The default version cannot be deleted. All commands support `--json`.
+
+The CLI pins `@rawback/sdk` to `0.3.2`, the next SDK release containing
+multilingual article support. Publish that SDK release before installing or
+releasing the CLI from a standalone checkout.
+
+After SDK `0.3.2` is published, run `bun install --lockfile-only` and commit the
+registry lock entry before merging this CLI change. The unpublished package
+cannot yet be resolved for a standalone or frozen-lockfile installation.

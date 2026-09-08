@@ -422,6 +422,29 @@ describe('album article commands', () => {
     expect(JSON.parse(output[0] ?? '')).toMatchObject({ id: 21, content: article.content })
   })
 
+  test('reads saved language content from detail after a summary-only edit response', async () => {
+    const operations: string[] = []
+    const output: string[] = []
+    const version = { language: 'fr', revision: 2, title: 'Voyage', content: 'Texte', imageIds: [] }
+    const dependencies = await temporaryDependencies(
+      (body) => {
+        operations.push(String(body.operationName))
+        if (body.operationName === 'CliUpsertArticle') {
+          return Response.json({
+            data: { upsertArticle: { ...article, versions: [{ language: 'fr', revision: 2 }] } },
+          })
+        }
+        return Response.json({
+          data: { me: { album: { ...album, article: { ...article, versions: [version] } } } },
+        })
+      },
+      { stdout: (message) => output.push(message) },
+    )
+    await runArticleEdit({ albumId: 7, language: 'fr', title: 'Voyage', json: true }, dependencies)
+    expect(operations).toEqual(['CliUpsertArticle', 'CliAlbumArticle'])
+    expect(JSON.parse(output[0] ?? '')).toMatchObject({ title: 'Voyage', content: 'Texte' })
+  })
+
   test('publishes and unpublishes after resolving the album article', async () => {
     const operations: string[] = []
     const dependencies = await temporaryDependencies(
