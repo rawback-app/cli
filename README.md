@@ -462,7 +462,10 @@ Use `default 42 --language fr`, `label 42 --from und --to en`, or
 `delete-version 42 --language fr` under `rawback album article` to manage versions.
 The default version cannot be deleted. All commands support `--json`.
 
-For this coordinated source change, the CLI depends on `file:../sdk`. Build the
-sibling SDK with `pnpm build` before installing/building the CLI. Before a
-standalone source release, publish the SDK and replace that local dependency
-with its released version using `bun add @rawback/sdk@<version>`.
+The CLI pins `@rawback/sdk` to `0.3.2`, the next SDK release containing
+multilingual article support. Publish that SDK release before installing or
+releasing the CLI from a standalone checkout.
+
+After SDK `0.3.2` is published, run `bun install --lockfile-only` and commit the
+registry lock entry before merging this CLI change. The unpublished package
+cannot yet be resolved for a standalone or frozen-lockfile installation.
