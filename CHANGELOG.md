@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.13](https://github.com/rawback-app/cli/compare/v1.0.12...v1.0.13) (2026-09-08)
+
+
+### Features
+
+* **articles:** add language and translation commands ([b9bc5e2](https://github.com/rawback-app/cli/commit/b9bc5e2ff7d1045668e9ca42b69c2fb17f83e61c))
+* **articles:** add language and translation commands ([cb79217](https://github.com/rawback-app/cli/commit/cb79217eb83868d91f4803b898162719e9b4e22b))
+
+
+### Bug Fixes
+
+* **articles:** read translated edit output from article detail ([f7846da](https://github.com/rawback-app/cli/commit/f7846da48d22694732b9036fc39e07e14a324652))
+* **deps:** pin SDK to upcoming 0.3.2 release ([cb26b6a](https://github.com/rawback-app/cli/commit/cb26b6a00f518ac4a614c884cf2cd29f41db01b1))
+* prefer system video tools and sign bundled macOS binaries ([8d61d8c](https://github.com/rawback-app/cli/commit/8d61d8c773c0e2bd071653d4918ac89a5291ade6))
+* prefer system video tools and sign bundled macOS binaries ([4482ec7](https://github.com/rawback-app/cli/commit/4482ec70450805eb466dec2fd5cc8daa2aedee0c))
+* **videos:** report missing attachments and support repair ([3077889](https://github.com/rawback-app/cli/commit/3077889fd11f57d36152751438925fd38d1413fd))
+* **videos:** report missing attachments and support repair ([2a5b4cf](https://github.com/rawback-app/cli/commit/2a5b4cf7984833d7cf882003e620722863b64197))
+
+
+### Miscellaneous
+
+* remove temporary SDK patch pending release ([9c9c5c3](https://github.com/rawback-app/cli/commit/9c9c5c3dc51c7e1d006ee348679b54801ba21cf6))
+
 ## [1.0.12](https://github.com/rawback-app/cli/compare/v1.0.11...v1.0.12) (2026-09-02)
 
 
