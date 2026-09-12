@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.14](https://github.com/rawback-app/cli/compare/v1.0.13...v1.0.14) (2026-09-12)
+
+
+### Bug Fixes
+
+* **bun:** fix lock file ([019752f](https://github.com/rawback-app/cli/commit/019752fad9feb5181d72160534bdcd1f80be8588))
+
 ## [1.0.13](https://github.com/rawback-app/cli/compare/v1.0.12...v1.0.13) (2026-09-08)
 
 
