@@ -1,15 +1,25 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+import { DEFAULT_CONFIG_TEMPLATE } from '../src/config-init.ts'
 
 const entrypoint = new URL('../src/index.ts', import.meta.url).pathname
 
 const temporaryDirectories: string[] = []
 
+/**
+ * A home with no saved cameras, but with `config.yml` already in place: these
+ * tests assert on empty stderr, and a genuinely first-run home would also carry
+ * the one-line notice for the config the CLI creates. First-run behavior has
+ * its own coverage in `config-init.test.ts`.
+ */
 async function emptyHome(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'rawback-camera-cli-'))
   temporaryDirectories.push(directory)
+  await mkdir(join(directory, '.rawback'), { mode: 0o700, recursive: true })
+  await Bun.write(join(directory, '.rawback', 'config.yml'), DEFAULT_CONFIG_TEMPLATE)
   return directory
 }
 

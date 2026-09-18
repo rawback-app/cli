@@ -2755,6 +2755,21 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       (command) =>
         command
           .command(
+            'init',
+            'write a default configuration file',
+            (init) =>
+              init.option('force', {
+                default: false,
+                describe: 'replace an existing configuration file',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runConfigInit } = await import('./config-init.ts')
+              await runCommand(() => runConfigInit({ force: args.force }))
+            },
+          )
+          .command(
             'view',
             'view the local configuration',
             (view) =>
@@ -2804,7 +2819,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               await runCommand(() => runConfigUse(args.environment as string))
             },
           )
-          .demandCommand(1, 'Choose a config command: view, env, or use')
+          .demandCommand(1, 'Choose a config command: init, view, env, or use')
           .strict(),
       () => {},
     )
