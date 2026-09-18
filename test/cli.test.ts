@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { RawbackHttpError } from '@rawback/sdk'
 
@@ -7,9 +10,28 @@ import { describeError } from '../src/cli.ts'
 
 const entrypoint = new URL('../src/index.ts', import.meta.url).pathname
 
+const temporaryHomes: string[] = []
+
+/**
+ * Every invocation gets an empty home, so these tests never read the
+ * developer's real credentials and the first-run config bootstrap writes into a
+ * temporary directory instead of `~/.rawback`.
+ */
+function emptyHome(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'rawback-cli-'))
+  temporaryHomes.push(directory)
+  return directory
+}
+
+afterEach(() => {
+  for (const directory of temporaryHomes.splice(0)) {
+    rmSync(directory, { force: true, recursive: true })
+  }
+})
+
 function runCli(...args: string[]) {
   const result = Bun.spawnSync([process.execPath, 'run', entrypoint, ...args], {
-    env: process.env,
+    env: { ...process.env, HOME: emptyHome() },
     stderr: 'pipe',
     stdout: 'pipe',
   })

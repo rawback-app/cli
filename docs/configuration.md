@@ -29,8 +29,26 @@ remove it from the CLI's `PATH` to use the bundled copy.
 
 ## Configuration file
 
-The CLI reads `~/.rawback/config.yml`. The file is optional until you upload
-photos or need to override a service host.
+The CLI reads `~/.rawback/config.yml`. The first command you run creates it if
+it is missing, writing the default `apiHost` and `webHost` plus a commented
+template for everything else, and reporting the path on stderr. On Linux and
+macOS the file is created at mode `0600` inside a `0700` directory, because it
+is where the SFTP password goes.
+
+An existing file is never overwritten, and neither is an empty one. The file
+also remains optional: if it cannot be created — a read-only home directory, for
+example — commands keep working on the built-in defaults exactly as before.
+
+Write it on demand, or restore the annotated template after editing it away:
+
+```bash
+rawback config init
+rawback config init --force   # replace the current file
+```
+
+`--force` discards whatever the file holds, including `sftp` credentials and the
+`current:` environment, so use it only when you mean to start over. It never
+touches `credentials.json`.
 
 ```yaml
 # Optional. Defaults to https://api.rawback.app
@@ -75,7 +93,8 @@ keys remain visible in human output. Both formats replace every `sftp.password` 
 when you need to inspect or change the real value.
 
 On Linux and macOS, upload commands reject a config file readable or writable by
-group or other users. Fix its permissions with:
+group or other users. A file the CLI created already satisfies this. Repair one
+you wrote by hand or copied from another machine with:
 
 ```bash
 chmod 600 ~/.rawback/config.yml
@@ -303,9 +322,11 @@ SFTP credentials are separate from the tokens used for API authentication.
 
 1. Run `rawback auth status` and note the slug on the `Profile` line.
 2. Create a named credential with `rawback cred add --name "My computer"`.
-3. Copy the one-time password into `sftp.password` in `config.yml`.
+3. Uncomment the `sftp:` block in `config.yml` and copy the one-time password
+   into `sftp.password`.
 4. Put the profile slug in `sftp.username`.
-5. Set the file to mode `0600` on Unix.
+5. The CLI already created the file at mode `0600` on Unix; confirm it still is
+   if you edited it through another tool.
 
 SFTP credentials are per environment, because each one has its own server and
 its own account. Put them under that environment's `sftp:` block and run the

@@ -1,4 +1,5 @@
 import { createProgram } from '../../cli.ts'
+import { bootstrapConfig } from '../../config-init.ts'
 import { CommandOutput } from '../../ui/output.tsx'
 import { helpDocument } from './help.ts'
 
@@ -13,6 +14,14 @@ function isHelpRequest(args: string[]): boolean {
 
 function isVersionRequest(args: string[]): boolean {
   return args.length === 1 && (args[0] === '--version' || args[0] === '-V')
+}
+
+/**
+ * `rawback config init` writes the same file itself and reports what it did, so
+ * the implicit bootstrap must not get there first and turn it into a no-op.
+ */
+function isConfigInit(args: string[]): boolean {
+  return args[0] === 'config' && args[1] === 'init'
 }
 
 export async function runCli(
@@ -34,6 +43,10 @@ export async function runCli(
 
   const parseArgs = normalizedArgs(args)
   if (!isHelpRequest(parseArgs)) {
+    // Creating the config here rather than in a yargs middleware is what keeps
+    // `--help` and `--version` from writing to the user's home directory: both
+    // return above, and every help request takes the branch below.
+    if (!isConfigInit(parseArgs)) await bootstrapConfig(output)
     await program.parseAsync(parseArgs)
     return
   }

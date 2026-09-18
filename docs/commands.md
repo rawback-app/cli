@@ -57,6 +57,23 @@ Both commands act on one environment: `rawback --env local auth` signs into
 `rawback --env local auth status` reports that environment's session. The status
 output names the environment and the API host it queried.
 
+## `rawback config init`
+
+Writes `~/.rawback/config.yml` with the default hosts and a commented template
+for every other setting:
+
+```bash
+rawback config init [--force]
+```
+
+Every other command already does this on its first run, so `config init` is for
+restoring the annotated template after editing it away. Without `--force` an
+existing file is left untouched and the command reports its path. `--force`
+replaces the file outright, discarding any `sftp` credentials and the `current:`
+environment it held; it never touches `credentials.json`. On Linux and macOS the
+file is written at mode `0600` inside a `0700` directory. Like the other config
+commands, it does not require authentication.
+
 ## `rawback config view`
 
 Displays the stored `~/.rawback/config.yml` without requiring authentication:
@@ -70,8 +87,10 @@ the current invocation would use along with its API host. `--json` converts the
 stored mapping to machine-readable JSON and writes no additional prose to
 stdout. Both formats replace every `sftp.password` with `[REDACTED]`, including
 the ones inside `environments`, and do not include environment overrides or
-built-in defaults. A missing or empty optional file is reported as an empty
-configuration; malformed or unreadable files fail with a nonzero exit status.
+built-in defaults. The file exists from the first run on any machine where it
+can be created, so this normally shows the generated template; a missing or
+empty file is still reported as an empty configuration, and malformed or
+unreadable files fail with a nonzero exit status.
 
 ## `rawback config env list`
 

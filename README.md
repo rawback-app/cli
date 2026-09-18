@@ -182,7 +182,8 @@ before continuing:
 rawback cred add --name "My computer"
 ```
 
-Create `~/.rawback/config.yml` with the account slug shown by
+Open `~/.rawback/config.yml` — the CLI created it on your first command — and
+uncomment its `sftp:` block, filling in the account slug shown by
 `rawback auth status` and the generated password:
 
 ```yaml
@@ -192,7 +193,9 @@ sftp:
   password: 'generated-password'
 ```
 
-On Linux and macOS, protect the file because it contains a password:
+The file was created at mode `0600` on Linux and macOS because it holds that
+password. If you replaced it by hand or copied it from another machine, restore
+the permissions:
 
 ```bash
 chmod 600 ~/.rawback/config.yml
@@ -408,9 +411,13 @@ camera without pairing twice. It holds a camera password only when you pass
 the same trade `config.yml` already makes for the SFTP password. Commands that
 read it refuse a file that group or others can read.
 
-The CLI creates credential, camera, and upload-state files with restrictive permissions
-on Unix. You create `config.yml` yourself, so upload commands require it to have
-mode `0600` on Unix. Never commit files from `~/.rawback/` or paste their secrets
+The CLI creates credential, camera, upload-state, and config files with
+restrictive permissions on Unix. `config.yml` is written on your first command
+with the default hosts and a commented template for everything else, and upload
+commands still require it to have mode `0600` on Unix — which matters if you
+replace it by hand or copy it from another machine. Run `rawback config init
+--force` to put the annotated template back. Never commit files from
+`~/.rawback/` or paste their secrets
 into issues and logs. `rawback config view` masks every `sftp.password` in both
 terminal and JSON output, including the ones inside `environments`.
 
