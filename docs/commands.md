@@ -1,7 +1,9 @@
 # Command reference
 
 Run `rawback <command> --help` for the version-specific help installed on your
-machine. Unknown commands and options are rejected.
+machine. Unknown commands and options are rejected. The product is called 出片
+in Chinese; the binary, its commands and its help text are `rawback` and
+English only.
 
 ## Global options
 

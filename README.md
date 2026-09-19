@@ -1,6 +1,6 @@
 # Rawback CLI
 
-Use [Rawback](https://rawback.app) from a terminal or an automation script. The
+Use [Rawback](https://rawback.app) (出片 in Chinese) from a terminal or an automation script. The
 CLI can sign in to your account, upload photo and RAW files, search your library,
 manage albums and their Markdown articles, inspect usage, and open your profile
 in a browser.
