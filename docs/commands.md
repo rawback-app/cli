@@ -21,6 +21,10 @@ commands use the saved `current:` environment. An unknown name fails and lists
 the names that do exist. See
 [Configuration](configuration.md#environments) for the file format.
 
+Options that take a local file or directory expand a leading `~` to your home
+directory, so `--path=~/Pictures` works even though most shells leave a tilde
+after `=` unexpanded. `~user` forms are not expanded.
+
 ## `rawback auth [status]`
 
 Sign in through the browser:
