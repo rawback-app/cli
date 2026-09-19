@@ -202,16 +202,22 @@ GoReleaser and supply the same release secrets. To verify a published macOS
 archive after extraction, inspect all three executables:
 
 ```bash
-codesign --verify --strict --verbose=2 ./rawback
-codesign --verify --strict --verbose=2 ./ffmpeg/ffmpeg
-codesign --verify --strict --verbose=2 ./ffmpeg/ffprobe
-spctl --assess --type execute --verbose=2 ./ffmpeg/ffmpeg
-spctl --assess --type execute --verbose=2 ./ffmpeg/ffprobe
+codesign --verify --strict --check-notarization -R='notarized' --verbose=2 ./rawback
+codesign --verify --strict --check-notarization -R='notarized' --verbose=2 ./ffmpeg/ffmpeg
+codesign --verify --strict --check-notarization -R='notarized' --verbose=2 ./ffmpeg/ffprobe
+spctl --assess --type install --verbose=4 ./rawback
+spctl --assess --type install --verbose=4 ./ffmpeg/ffmpeg
+spctl --assess --type install --verbose=4 ./ffmpeg/ffprobe
 ```
 
-Signature checks alone do not prove notarization; test the downloaded release
-on a Mac with Gatekeeper enabled as well. Existing unsigned downloads need to
-be replaced with a release containing the signed helpers.
+Each `codesign` call must end with `explicit requirement satisfied`, and each
+`spctl` call must report `accepted` with `source=Notarized Developer ID`. A bare
+Mach-O executable cannot carry a stapled notarization ticket, so both checks
+fetch the ticket from Apple and need network access. Do not use
+`spctl --assess --type execute` here: it rejects command-line binaries even when
+they are notarized, and reports `source=Unnotarized Developer ID` whenever the
+ticket lookup has not succeeded. Existing unsigned downloads need to be replaced
+with a release containing the signed helpers.
 
 The release workflow requires these repository secrets and stops before uploading
 assets if any are missing:
