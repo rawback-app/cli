@@ -252,6 +252,16 @@ describe('rawback photos upload CLI', () => {
   })
 })
 
+describe('path option home expansion', () => {
+  test('expands a leading tilde the shell left inside --file=~/…', () => {
+    const result = runCli('videos', 'upload', '--file=~/missing.mp4')
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('ENOENT')
+    expect(result.stderr).not.toContain('~')
+  })
+})
+
 describe('video command help and validation', () => {
   test('documents automatic extraction and repair', () => {
     const upload = runCli('videos', 'upload', '--help')

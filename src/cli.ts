@@ -2,6 +2,7 @@ import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
 import { setSelectedEnvironment } from './environment.ts'
+import { expandHomePath } from './paths.ts'
 import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
 
@@ -495,6 +496,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             (check) =>
               check
                 .option('path', {
+                  coerce: expandHomePath,
                   demandOption: true,
                   describe: 'image/RAW file or directory to scan recursively',
                   type: 'string',
@@ -521,6 +523,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             (upload) =>
               upload
                 .option('path', {
+                  coerce: expandHomePath,
                   demandOption: true,
                   describe: 'image/RAW file or directory to scan recursively',
                   type: 'string',
@@ -607,11 +610,13 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   '$0 videos upload --file <path> [options]\n\nUpload a video directly to storage. Uses ffmpeg and ffprobe from PATH first, falling back to each bundled tool when missing.',
                 )
                 .option('file', {
+                  coerce: expandHomePath,
                   demandOption: true,
                   describe: 'video file to upload',
                   type: 'string',
                 })
                 .option('thumbnail', {
+                  coerce: expandHomePath,
                   describe: 'JPEG, PNG, or WebP poster instead of an automatically extracted frame',
                   type: 'string',
                 })
@@ -650,11 +655,13 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'number',
                 })
                 .option('file', {
+                  coerce: expandHomePath,
                   demandOption: true,
                   describe: 'original uploaded video file',
                   type: 'string',
                 })
                 .option('thumbnail', {
+                  coerce: expandHomePath,
                   describe: 'JPEG, PNG, or WebP poster; explicitly replaces an existing thumbnail',
                   type: 'string',
                 })
@@ -1509,6 +1516,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                         type: 'string',
                       })
                       .option('content-file', {
+                        coerce: expandHomePath,
                         describe: 'Markdown file, or - to read stdin',
                         type: 'string',
                       })
@@ -2365,6 +2373,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 })
                 .option('output', {
                   alias: 'o',
+                  coerce: expandHomePath,
                   describe: 'destination file or directory, for get',
                   type: 'string',
                 })
@@ -2480,6 +2489,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'string',
                 })
                 .positional('output', {
+                  coerce: expandHomePath,
                   describe: 'destination file, for frame',
                   type: 'string',
                 })
@@ -2496,6 +2506,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'string',
                 })
                 .option('output-dir', {
+                  coerce: expandHomePath,
                   describe: 'directory for streamed frames, or - for stdout',
                   type: 'string',
                 })
