@@ -760,15 +760,31 @@ the same album object printed by `album create` and `album edit`.
 
 ### `album image`
 
-Adds or removes one photo from an album:
+Adds or removes one or more photos in one request:
 
 ```bash
-rawback album image add <album-id> <image-id> [--json]
-rawback album image remove <album-id> <image-id> [--force] [--json]
+rawback album image add <album-id> <image-id> [image-id...] [--json]
+rawback album image remove <album-id> <image-id> [image-id...] [--force] [--json]
 ```
 
+Image IDs may be separated by spaces or commas (`108 109,110`). IDs must be
+positive integers, duplicates are ignored, and one command accepts at most 500
+IDs. Adding a photo that is already in the album is not an error; the summary
+reports how many were already there.
+
+Valid photos are applied even when other IDs in the same command cannot be:
+photos that are not in your library when adding, or not in the album when
+removing. The command then prints its normal result, lists the failed IDs on
+stderr, and exits with status 1.
+
+`--json` prints the album object with two extra fields: `addedCount` (or
+`removedCount`) for the photos whose membership changed, and `failedImageIds`
+for the IDs that were skipped.
+
 Removing a photo only changes album membership; it does not delete the photo.
-Removal asks for confirmation unless `--force` is supplied.
+Removal asks for one confirmation for the whole batch unless `--force` is
+supplied. A declined removal prints `{ "albumId", "imageIds", "removed": false }`
+with `--json`.
 
 ### `album tag`
 

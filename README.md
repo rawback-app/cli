@@ -361,8 +361,8 @@ rawback album view 42
 # Recollect the photos matching an album's smart filter
 rawback album refresh 42
 
-# Add a photo and write the album's Markdown article
-rawback album image add 42 108
+# Add photos and write the album's Markdown article
+rawback album image add 42 108 109 110
 rawback album article edit 42 --title "Iceland in winter" --content-file story.md
 rawback album article publish 42
 

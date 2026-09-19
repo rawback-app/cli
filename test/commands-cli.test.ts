@@ -327,6 +327,36 @@ describe('new command hierarchy', () => {
     expect(badId.stderr).not.toContain('Authentication credentials')
   })
 
+  test('accepts several image IDs for album membership', () => {
+    const add = runCli('album', 'image', 'add', '--help')
+    expect(add.exitCode).toBe(0)
+    expect(add.stdout).toContain('add <album-id> <image-ids..>')
+    expect(add.stdout).toContain('add one or more photos to an album')
+
+    const remove = runCli('album', 'image', 'remove', '--help')
+    expect(remove.stdout).toContain('remove <album-id> <image-ids..>')
+    expect(remove.stdout).toContain('--force')
+
+    const missingIds = runCli('album', 'image', 'add', '7')
+    expect(missingIds.exitCode).toBe(1)
+    expect(missingIds.stderr).toContain('Not enough non-option arguments')
+
+    const badIds = runCli('album', 'image', 'add', '7', '11', 'abc')
+    expect(badIds.exitCode).toBe(1)
+    expect(badIds.stderr).toContain('Image IDs must contain only positive integers')
+    expect(badIds.stderr).not.toContain('Authentication credentials')
+
+    const badRemove = runCli('album', 'image', 'remove', '7', '11,0', '--force')
+    expect(badRemove.exitCode).toBe(1)
+    expect(badRemove.stderr).toContain('Image IDs must contain only positive integers')
+    expect(badRemove.stderr).not.toContain('Authentication credentials')
+
+    // Validation passed, so the command gets as far as needing credentials.
+    const valid = runCli('album', 'image', 'add', '7', '11', '12,13')
+    expect(valid.exitCode).toBe(1)
+    expect(valid.stderr).not.toContain('Image IDs')
+  })
+
   test('rejects incompatible album and article options', () => {
     const clearConflict = runCli('album', 'edit', '7', '--camera-id', '2', '--clear-camera')
     expect(clearConflict.exitCode).toBe(1)

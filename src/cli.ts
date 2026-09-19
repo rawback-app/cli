@@ -1119,17 +1119,18 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             (image) =>
               image
                 .command(
-                  'add <album-id> <image-id>',
-                  'add a photo to an album',
+                  'add <album-id> <image-ids..>',
+                  'add one or more photos to an album',
                   (add) =>
                     add
                       .positional('album-id', {
                         describe: 'album ID',
                         type: 'number',
                       })
-                      .positional('image-id', {
-                        describe: 'image ID',
-                        type: 'number',
+                      .positional('image-ids', {
+                        array: true,
+                        describe: 'image IDs (space or comma-separated)',
+                        type: 'string',
                       })
                       .option('json', {
                         default: false,
@@ -1142,24 +1143,25 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     await runCommand(() =>
                       runAlbumImageAdd({
                         albumId: args.albumId!,
-                        imageId: args.imageId!,
+                        imageIds: args.imageIds ?? [],
                         json: args.json,
                       }),
                     )
                   },
                 )
                 .command(
-                  'remove <album-id> <image-id>',
-                  'remove a photo from an album',
+                  'remove <album-id> <image-ids..>',
+                  'remove one or more photos from an album',
                   (remove) =>
                     remove
                       .positional('album-id', {
                         describe: 'album ID',
                         type: 'number',
                       })
-                      .positional('image-id', {
-                        describe: 'image ID',
-                        type: 'number',
+                      .positional('image-ids', {
+                        array: true,
+                        describe: 'image IDs (space or comma-separated)',
+                        type: 'string',
                       })
                       .option('force', {
                         default: false,
@@ -1178,7 +1180,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                       () =>
                         runAlbumImageRemove({
                           albumId: args.albumId!,
-                          imageId: args.imageId!,
+                          imageIds: args.imageIds ?? [],
                           force: args.force,
                           json: args.json,
                         }),
