@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.15](https://github.com/rawback-app/cli/compare/v1.0.14...v1.0.15) (2026-09-19)
+
+
+### Features
+
+* **album:** support adding and removing multiple photos per command ([6071d48](https://github.com/rawback-app/cli/commit/6071d483e52a35532c4f51eec31c65016fecac21))
+* **album:** support adding and removing multiple photos per command ([cf653ee](https://github.com/rawback-app/cli/commit/cf653eef0379522882351da5b449702150a5aa3e))
+* **config:** create a default config.yml on first run ([6cfe499](https://github.com/rawback-app/cli/commit/6cfe499f28273ed8e24baa7ced6c4b305bcc047a))
+* **config:** create a default config.yml on first run ([742a93c](https://github.com/rawback-app/cli/commit/742a93c7ea683a3e771e486937c1eb37e526f6f0)), closes [#74](https://github.com/rawback-app/cli/issues/74)
+
+
+### Bug Fixes
+
+* **cli:** expand leading ~ in path options ([5c83f00](https://github.com/rawback-app/cli/commit/5c83f0039ddc3bbce8050ab8de3366c528f82269))
+* **cli:** expand leading ~ in path options ([769784a](https://github.com/rawback-app/cli/commit/769784aea72471a2780a2483e223d2cc28cde024))
+
+
+### Documentation
+
+* note the Chinese product name 出片 ([5f41619](https://github.com/rawback-app/cli/commit/5f41619c62650056e0653933f6179e6f649783f5))
+* note the Chinese product name 出片 ([4f9b7e7](https://github.com/rawback-app/cli/commit/4f9b7e76cb0aec9d49c86371bb7173df5d546386))
+* **release:** document the notarization check that works for CLI binaries ([956b329](https://github.com/rawback-app/cli/commit/956b32902460877a3606ea2e582c85af70e1ead2))
+* **release:** document the notarization check that works for CLI binaries ([520c210](https://github.com/rawback-app/cli/commit/520c210383aae34b210124434b2573a6bc5eec27)), closes [#73](https://github.com/rawback-app/cli/issues/73)
+
 ## [1.0.14](https://github.com/rawback-app/cli/compare/v1.0.13...v1.0.14) (2026-09-12)
 
 
