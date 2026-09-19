@@ -255,13 +255,17 @@ describe('album commands', () => {
     const dependencies = await temporaryDependencies(
       (body) => {
         operations.push(String(body.operationName))
-        if (body.operationName === 'CliAddImageToAlbum') {
-          expect(body.variables).toEqual({ albumId: 7, imageId: 11 })
-          return Response.json({ data: { addImageToAlbum: album } })
+        if (body.operationName === 'CliAddImagesToAlbum') {
+          expect(body.variables).toEqual({ albumId: 7, imageIds: [11, 12] })
+          return Response.json({
+            data: { addImagesToAlbum: { album, changedCount: 2, failedImageIds: [] } },
+          })
         }
-        if (body.operationName === 'CliRemoveImageFromAlbum') {
-          expect(body.variables).toEqual({ albumId: 7, imageId: 11 })
-          return Response.json({ data: { removeImageFromAlbum: album } })
+        if (body.operationName === 'CliRemoveImagesFromAlbum') {
+          expect(body.variables).toEqual({ albumId: 7, imageIds: [11] })
+          return Response.json({
+            data: { removeImagesFromAlbum: { album, changedCount: 1, failedImageIds: [] } },
+          })
         }
         if (body.operationName === 'CliAddTagsToAlbum') {
           expect(body.variables).toEqual({ albumId: 7, tagIds: [3, 4] })
@@ -274,16 +278,144 @@ describe('album commands', () => {
       { stdout() {} },
     )
 
-    await runAlbumImageAdd({ albumId: 7, imageId: 11 }, dependencies)
-    await runAlbumImageRemove({ albumId: 7, imageId: 11, force: true }, dependencies)
+    await runAlbumImageAdd({ albumId: 7, imageIds: ['11', '12,11'] }, dependencies)
+    await runAlbumImageRemove({ albumId: 7, imageIds: [11], force: true }, dependencies)
     await runAlbumTagAdd({ albumId: 7, tagIds: ['3', '4', '3'] }, dependencies)
     await runAlbumTagRemove({ albumId: 7, tagIds: [3] }, dependencies)
 
     expect(operations).toEqual([
-      'CliAddImageToAlbum',
-      'CliRemoveImageFromAlbum',
+      'CliAddImagesToAlbum',
+      'CliRemoveImagesFromAlbum',
       'CliAddTagsToAlbum',
       'CliRemoveTagsFromAlbum',
+    ])
+  })
+
+  test('reports added, already present, and failed images', async () => {
+    const output: string[] = []
+    const responses = [
+      { album, changedCount: 2, failedImageIds: [] },
+      { album, changedCount: 1, failedImageIds: [99] },
+      { album, changedCount: 1, failedImageIds: [99] },
+      { album, changedCount: 0, failedImageIds: [98, 99] },
+    ]
+    const dependencies = await temporaryDependencies(
+      (body) => {
+        expect(body.operationName).toBe('CliAddImagesToAlbum')
+        return Response.json({ data: { addImagesToAlbum: responses.shift() } })
+      },
+      { stdout: (message) => output.push(message) },
+    )
+
+    await runAlbumImageAdd({ albumId: 7, imageIds: [11, 12, 13] }, dependencies)
+    expect(output).toEqual(['✓ Added 2 images to album 7 (Iceland). 1 already in the album.'])
+
+    // Valid images are applied and printed before the failure is raised.
+    await expect(
+      runAlbumImageAdd({ albumId: 7, imageIds: [11, 99], json: true }, dependencies),
+    ).rejects.toThrow(
+      '1 of 2 images could not be added to album 7: 99. Check that these image IDs belong to your library.',
+    )
+    expect(JSON.parse(output[1] ?? '')).toMatchObject({
+      addedCount: 1,
+      failedImageIds: [99],
+      id: 7,
+      name: 'Iceland',
+    })
+
+    await expect(
+      runAlbumImageAdd({ albumId: 7, imageIds: [11, 99] }, dependencies),
+    ).rejects.toThrow('1 of 2 images could not be added')
+    expect(output[2]).toBe('✓ Added 1 image to album 7 (Iceland).')
+
+    // Nothing changed, so there is no success line to print.
+    await expect(
+      runAlbumImageAdd({ albumId: 7, imageIds: [98, 99] }, dependencies),
+    ).rejects.toThrow('2 of 2 images could not be added to album 7: 98, 99.')
+    expect(output).toHaveLength(3)
+  })
+
+  test('validates image batches before authenticating', async () => {
+    let requests = 0
+    const dependencies = await temporaryDependencies(
+      () => {
+        requests += 1
+        return Response.json({ data: {} })
+      },
+      { stdout() {} },
+    )
+
+    await expect(runAlbumImageAdd({ albumId: 7, imageIds: [] }, dependencies)).rejects.toThrow(
+      'At least one image ID is required',
+    )
+    await expect(runAlbumImageAdd({ albumId: 7, imageIds: [' , '] }, dependencies)).rejects.toThrow(
+      'At least one image ID is required',
+    )
+    await expect(
+      runAlbumImageAdd({ albumId: 7, imageIds: ['11', 'abc'] }, dependencies),
+    ).rejects.toThrow('Image IDs must contain only positive integers')
+    await expect(
+      runAlbumImageRemove({ albumId: 0, imageIds: [11], force: true }, dependencies),
+    ).rejects.toThrow('Album ID must be a positive integer')
+    await expect(
+      runAlbumImageAdd(
+        { albumId: 7, imageIds: Array.from({ length: 501 }, (_, index) => index + 1) },
+        dependencies,
+      ),
+    ).rejects.toThrow('At most 500 image IDs can be changed per command (received 501)')
+    expect(requests).toBe(0)
+  })
+
+  test('confirms a multi-image removal once', async () => {
+    const output: string[] = []
+    const prompts: string[] = []
+    const operations: string[] = []
+    let answer = false
+    const dependencies = await temporaryDependencies(
+      (body) => {
+        operations.push(String(body.operationName))
+        if (body.operationName === 'CliAlbumSummary') {
+          return Response.json({ data: { me: { album } } })
+        }
+        expect(body.operationName).toBe('CliRemoveImagesFromAlbum')
+        expect(body.variables).toEqual({ albumId: 7, imageIds: [11, 12, 13] })
+        return Response.json({
+          data: { removeImagesFromAlbum: { album, changedCount: 2, failedImageIds: [13] } },
+        })
+      },
+      {
+        prompts: {
+          async confirm(message) {
+            prompts.push(message)
+            return answer
+          },
+        },
+        stdout: (message) => output.push(message),
+      },
+    )
+
+    await runAlbumImageRemove({ albumId: 7, imageIds: [11, 12, 13], json: true }, dependencies)
+    expect(JSON.parse(output[0] ?? '')).toEqual({
+      albumId: 7,
+      imageIds: [11, 12, 13],
+      removed: false,
+    })
+    expect(operations).toEqual(['CliAlbumSummary'])
+
+    answer = true
+    await expect(
+      runAlbumImageRemove({ albumId: 7, imageIds: [11, 12, 13], json: true }, dependencies),
+    ).rejects.toThrow(
+      '1 of 3 images could not be removed from album 7: 13. These images are not in the album.',
+    )
+    expect(JSON.parse(output[1] ?? '')).toMatchObject({
+      failedImageIds: [13],
+      id: 7,
+      removedCount: 2,
+    })
+    expect(prompts).toEqual([
+      'Remove 3 images from album "Iceland" (ID 7)?',
+      'Remove 3 images from album "Iceland" (ID 7)?',
     ])
   })
 

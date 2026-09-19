@@ -11,8 +11,8 @@ import {
   CliCreateAlbumDocument,
   CliUpdateAlbumDocument,
   CliDeleteAlbumDocument,
-  CliAddImageToAlbumDocument,
-  CliRemoveImageFromAlbumDocument,
+  CliAddImagesToAlbumDocument,
+  CliRemoveImagesFromAlbumDocument,
   CliAddTagsToAlbumDocument,
   CliRemoveTagsFromAlbumDocument,
   CliRefreshAlbumDocument,
@@ -107,7 +107,7 @@ export interface AlbumRefreshOptions {
 export interface AlbumImageOptions {
   albumId: number
   force?: boolean
-  imageId: number
+  imageIds: ReadonlyArray<string | number>
   json?: boolean
 }
 
@@ -561,46 +561,40 @@ export async function runAlbumRefresh(
   )
 }
 
-export async function runAlbumImageAdd(
-  options: AlbumImageOptions,
-  dependencies: AlbumCommandDependencies = {},
-): Promise<void> {
-  const albumId = validatePositiveId(options.albumId, 'Album ID')
-  const imageId = validatePositiveId(options.imageId, 'Image ID')
-  const client = await createCommandClient(dependencies)
-  const result = await client.graphql.mutate({
-    mutation: CliAddImageToAlbumDocument,
-    variables: { albumId, imageId },
-  })
-  if (result.error) throw result.error
-  const value = result.data?.addImageToAlbum
-  if (!value) throw new Error('The add image response did not include the album')
-  const album = fragmentAlbum(value)
-  mutationOutput(
-    album,
-    options,
-    dependencies,
-    `Added image ${imageId} to album ${album.id} (${album.name}).`,
-  )
+// Mirrors the server's per-request cap so an oversized batch fails before any
+// credentials are read or requests are sent.
+const MAX_ALBUM_IMAGES_PER_COMMAND = 500
+
+function imageCountLabel(count: number): string {
+  return `${count} image${count === 1 ? '' : 's'}`
 }
 
-export async function runAlbumImageRemove(
+async function runAlbumImages(
+  operation: 'add' | 'remove',
   options: AlbumImageOptions,
-  dependencies: AlbumCommandDependencies = {},
+  dependencies: AlbumCommandDependencies,
 ): Promise<void> {
   const albumId = validatePositiveId(options.albumId, 'Album ID')
-  const imageId = validatePositiveId(options.imageId, 'Image ID')
-  if (!options.force) {
+  const imageIds = parsePositiveIds(options.imageIds, 'Image IDs')
+  if (imageIds.length === 0) throw new Error('At least one image ID is required')
+  if (imageIds.length > MAX_ALBUM_IMAGES_PER_COMMAND) {
+    throw new Error(
+      `At most ${MAX_ALBUM_IMAGES_PER_COMMAND} image IDs can be changed per command (received ${imageIds.length})`,
+    )
+  }
+  if (operation === 'remove' && !options.force) {
     const album = await albumSummary(albumId, dependencies)
+    const [onlyImageId] = imageIds
+    const target = imageIds.length === 1 ? `image ${onlyImageId}` : imageCountLabel(imageIds.length)
     const confirmed = await confirm(
       dependencies,
-      `Remove image ${imageId} from album "${album.name}" (ID ${albumId})?`,
-      'Removing an image from an album requires an interactive terminal unless --force is provided.',
+      `Remove ${target} from album "${album.name}" (ID ${albumId})?`,
+      'Removing images from an album requires an interactive terminal unless --force is provided.',
     )
     if (!confirmed) {
       const ui = commandOutput(dependencies)
       if (options.json) {
-        ui.json({ albumId, imageId, removed: false })
+        ui.json({ albumId, imageIds, removed: false })
       } else {
         ui.info('Image removal cancelled.')
       }
@@ -608,20 +602,73 @@ export async function runAlbumImageRemove(
     }
   }
   const client = await createCommandClient(dependencies)
-  const result = await client.graphql.mutate({
-    mutation: CliRemoveImageFromAlbumDocument,
-    variables: { albumId, imageId },
-  })
-  if (result.error) throw result.error
-  const value = result.data?.removeImageFromAlbum
-  if (!value) throw new Error('The remove image response did not include the album')
-  const album = fragmentAlbum(value)
-  mutationOutput(
-    album,
-    options,
-    dependencies,
-    `Removed image ${imageId} from album ${album.id} (${album.name}).`,
-  )
+  let payload:
+    | {
+        album: FragmentType<typeof CliAlbumFieldsFragmentDoc>
+        changedCount: number
+        failedImageIds: number[]
+      }
+    | undefined
+  if (operation === 'add') {
+    const result = await client.graphql.mutate({
+      mutation: CliAddImagesToAlbumDocument,
+      variables: { albumId, imageIds },
+    })
+    if (result.error) throw result.error
+    payload = result.data?.addImagesToAlbum
+  } else {
+    const result = await client.graphql.mutate({
+      mutation: CliRemoveImagesFromAlbumDocument,
+      variables: { albumId, imageIds },
+    })
+    if (result.error) throw result.error
+    payload = result.data?.removeImagesFromAlbum
+  }
+  if (!payload) throw new Error(`The ${operation} images response did not include the album`)
+  const album = fragmentAlbum(payload.album)
+  const { changedCount, failedImageIds } = payload
+  const added = operation === 'add'
+
+  const ui = commandOutput(dependencies)
+  if (options.json) {
+    ui.json({
+      ...serializeAlbum(album),
+      [added ? 'addedCount' : 'removedCount']: changedCount,
+      failedImageIds,
+    })
+  } else if (changedCount > 0 || failedImageIds.length === 0) {
+    const unchanged = imageIds.length - changedCount - failedImageIds.length
+    const alreadyPresent = added && unchanged > 0 ? ` ${unchanged} already in the album.` : ''
+    ui.success(
+      `${added ? 'Added' : 'Removed'} ${imageCountLabel(changedCount)} ${added ? 'to' : 'from'} album ${album.id} (${album.name}).${alreadyPresent}`,
+    )
+  }
+
+  // The valid images are already applied; failing afterwards keeps stdout clean
+  // while still giving scripts a nonzero exit status.
+  if (failedImageIds.length > 0) {
+    throw new Error(
+      `${failedImageIds.length} of ${imageCountLabel(imageIds.length)} could not be ${added ? 'added to' : 'removed from'} album ${album.id}: ${failedImageIds.join(', ')}. ${
+        added
+          ? 'Check that these image IDs belong to your library.'
+          : 'These images are not in the album.'
+      }`,
+    )
+  }
+}
+
+export function runAlbumImageAdd(
+  options: AlbumImageOptions,
+  dependencies: AlbumCommandDependencies = {},
+): Promise<void> {
+  return runAlbumImages('add', options, dependencies)
+}
+
+export function runAlbumImageRemove(
+  options: AlbumImageOptions,
+  dependencies: AlbumCommandDependencies = {},
+): Promise<void> {
+  return runAlbumImages('remove', options, dependencies)
 }
 
 async function runAlbumTags(
