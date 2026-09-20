@@ -79,7 +79,7 @@ Windows binaries are not currently Authenticode-signed.
 
 ### Build from source
 
-[Bun 1.3.14](https://bun.sh/) is required:
+[Bun 1.4.0](https://bun.sh/) is required:
 
 ```bash
 git clone https://github.com/rawback-app/cli.git
@@ -468,11 +468,3 @@ sharing the article's publication settings. Existing targets require `--overwrit
 Use `default 42 --language fr`, `label 42 --from und --to en`, or
 `delete-version 42 --language fr` under `rawback album article` to manage versions.
 The default version cannot be deleted. All commands support `--json`.
-
-The CLI pins `@rawback/sdk` to `0.3.2`, the next SDK release containing
-multilingual article support. Publish that SDK release before installing or
-releasing the CLI from a standalone checkout.
-
-After SDK `0.3.2` is published, run `bun install --lockfile-only` and commit the
-registry lock entry before merging this CLI change. The unpublished package
-cannot yet be resolved for a standalone or frozen-lockfile installation.
