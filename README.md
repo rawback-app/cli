@@ -394,6 +394,22 @@ rawback album article --help
 rawback shares list --help
 ```
 
+### When something goes wrong
+
+The CLI keeps JSON logs in `~/.rawback/logs/`, shared with Rawback Desktop. At the default verbosity it records every failure — including the trace
+and `cf-ray` IDs identifying the request on the server — and nothing else.
+
+```bash
+rawback logs show --level warn   # what recently failed, and why
+rawback -v photos upload ~/raw   # re-run the failing command with more detail
+rawback logs path                # where the files are, and how big
+rawback logs purge               # delete them, this app and Desktop
+```
+
+Logs never go to standard output, so `-v` cannot disturb a script parsing
+`--json`. Tokens, passwords and authorization headers are redacted before
+anything is written.
+
 ## Files and security
 
 Rawback stores local state under `~/.rawback/`:
@@ -404,6 +420,7 @@ Rawback stores local state under `~/.rawback/`:
 | `config.yml`        | Environments, optional hosts, metadata workers, and SFTP       |
 | `upload-state.json` | Shared upload queue, history, and trusted host keys            |
 | `cameras.json`      | Saved Canon cameras, shared with Rawback Desktop               |
+| `logs/`             | Rolling JSON diagnostics, shared with Rawback Desktop          |
 
 `cameras.json` is shared with the Rawback desktop app, so both can reach the same
 camera without pairing twice. It holds a camera password only when you pass
@@ -420,6 +437,12 @@ replace it by hand or copy it from another machine. Run `rawback config init
 `~/.rawback/` or paste their secrets
 into issues and logs. `rawback config view` masks every `sftp.password` in both
 terminal and JSON output, including the ones inside `environments`.
+
+Log files are written at mode `0600` too, and secret field and header names are
+replaced with `[REDACTED]` before a record reaches disk. At `--log-level trace`
+the log does record request and response bodies — file paths and album titles
+among them — so turn that on to diagnose something rather than leaving it on.
+See [Logging](docs/configuration.md#logging).
 
 ## Development
 

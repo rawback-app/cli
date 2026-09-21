@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -375,5 +375,106 @@ describe('new command hierarchy', () => {
       expect(result.stderr).not.toContain('cannot be used together')
       expect(result.stderr).not.toContain('mutually exclusive')
     }
+  })
+})
+
+describe('logs commands', () => {
+  test('documents the logs group and each subcommand', () => {
+    const group = runCli('logs', '--help')
+    expect(group.exitCode).toBe(0)
+    for (const subcommand of ['path', 'show', 'purge']) {
+      expect(group.stdout).toContain(subcommand)
+    }
+
+    const show = runCli('logs', 'show', '--help')
+    for (const flag of ['--lines', '--level', '--app', '--json']) {
+      expect(show.stdout).toContain(flag)
+    }
+
+    const purge = runCli('logs', 'purge', '--help')
+    for (const flag of ['--app', '--yes', '--json']) {
+      expect(purge.stdout).toContain(flag)
+    }
+  })
+
+  test('requires a logs subcommand and rejects an unknown one', () => {
+    expect(runCli('logs').exitCode).toBe(1)
+    expect(runCli('logs').stderr).toContain('Choose a logs command')
+    expect(runCli('logs', 'tailf').exitCode).toBe(1)
+  })
+
+  test('documents the global verbosity options', () => {
+    const help = runCli('--help')
+    expect(help.stdout).toContain('--log-level')
+    expect(help.stdout.replace(/\s+/g, ' ')).toContain('--verbose')
+  })
+
+  test('rejects a log level that is not one of the known ones', () => {
+    const result = runCli('--log-level', 'verbose', 'logs', 'path')
+    expect(result.exitCode).toBe(1)
+  })
+
+  test('writes no log directory for --help or --version', () => {
+    // The logger is built lazily behind the same boundary that keeps the config
+    // bootstrap off these paths; a regression here would create files in the
+    // user's home just for asking for help.
+    for (const args of [['--help'], ['--version'], ['logs', '--help']]) {
+      const home = emptyHome()
+      const result = Bun.spawnSync([process.execPath, 'run', entrypoint, ...args], {
+        env: { ...process.env, HOME: home },
+        stderr: 'pipe',
+        stdout: 'pipe',
+      })
+      expect(result.exitCode).toBe(0)
+      expect(existsSync(join(home, '.rawback', 'logs'))).toBe(false)
+    }
+  })
+
+  test('records a failed command, with its trace-able exit code', () => {
+    const home = emptyHome()
+    const run = (...args: string[]) =>
+      Bun.spawnSync([process.execPath, 'run', entrypoint, ...args], {
+        env: { ...process.env, HOME: home },
+        stderr: 'pipe',
+        stdout: 'pipe',
+      })
+
+    // No credentials in an empty home, so this fails and should be recorded.
+    expect(run('photos', 'list').exitCode).toBe(1)
+
+    // pino-roll numbers every file, so discover it rather than assume a name.
+    const logs = join(home, '.rawback', 'logs')
+    const [file] = readdirSync(logs)
+    expect(file).toMatch(/^cli\.\d+\.log$/)
+    const contents = readFileSync(join(logs, file!), 'utf8')
+    const records = contents
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    expect(records.at(-1)).toMatchObject({
+      level: 'warn',
+      event: 'cli.command.done',
+      exitCode: 1,
+      app: 'cli',
+      command: 'photos list',
+    })
+
+    // And the CLI can read back what it just wrote.
+    const shown = run('logs', 'show', '--json')
+    expect(shown.exitCode).toBe(0)
+    expect(
+      (JSON.parse(shown.stdout.toString()) as { lines: unknown[] }).lines.length,
+    ).toBeGreaterThan(0)
+  })
+
+  test('keeps --json output clean while logging verbosely', () => {
+    const home = emptyHome()
+    const result = Bun.spawnSync(
+      [process.execPath, 'run', entrypoint, '-vv', 'logs', 'path', '--json'],
+      { env: { ...process.env, HOME: home }, stderr: 'pipe', stdout: 'pipe' },
+    )
+    expect(result.exitCode).toBe(0)
+    // stdout is the machine-readable contract; log records never belong in it.
+    expect(() => JSON.parse(result.stdout.toString())).not.toThrow()
   })
 })

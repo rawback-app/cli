@@ -72,6 +72,12 @@ cannot run, report exactly which command was skipped and why.
 - Author shared GraphQL operations and transport behavior in `../sdk`; this
   repository should keep only CLI presentation and platform adapters.
 - Keep secrets in `~/.rawback/`, never in repository fixtures or documentation.
+- Diagnostics go to `~/.rawback/logs/` through the SDK's pino logger, **never**
+  to stdout: stdout is the `--json` contract. Records use pino's argument
+  order, `logger.info({ event }, 'message')`, and `pino-roll` numbers every
+  file, so use `activeLogFile()` rather than building a name. `src/log-level.ts` holds the
+  `--log-level`/`-v` singleton and must stay SDK-free at runtime (its import is
+  type-only) for the same startup-cost reason `src/trace.ts` documents.
 
 ## Implementation expectations
 
@@ -122,9 +128,10 @@ platform support that the release configuration does not provide.
 
 ## Gotchas
 
-- `~/.rawback/{config.yml,credentials.json,upload-state.json,cameras.json}` is
-  shared with the Desktop app at runtime. Changing a file's shape here breaks
-  Desktop, and the contract is owned by `@rawback/sdk`, not by this repo.
+- `~/.rawback/{config.yml,credentials.json,upload-state.json,cameras.json}` and
+  `~/.rawback/logs/` are shared with the Desktop app at runtime. Changing a
+  file's shape here breaks Desktop, and the contract is owned by `@rawback/sdk`,
+  not by this repo. `rawback logs purge` clears Desktop's log too, by design.
 - `@rawback/sdk` and `@rawback/ccapi-js` are pinned to exact versions. Bumping
   one means regenerating the lockfile; CI installs `--frozen-lockfile`.
 - The binary's `--version` must equal `package.json`'s version — CI asserts it

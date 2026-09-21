@@ -1,5 +1,8 @@
+import type { Logger, LogLevel } from '@rawback/sdk'
+
 import { type RawbackClient, createRawbackClient } from './client.ts'
 import { environmentName } from './config.ts'
+import { commandLogger } from './logging.ts'
 import { CommandOutput, type CommandOutputOptions } from './ui/output.tsx'
 
 export interface ReadCommandDependencies extends CommandOutputOptions {
@@ -8,6 +11,10 @@ export interface ReadCommandDependencies extends CommandOutputOptions {
   /** Environment from `~/.rawback/config.yml`; defaults to the `--env` flag. */
   env?: string
   fetch?: typeof globalThis.fetch
+  /** Overrides the shared logger; tests inject a capturing one. */
+  logger?: Logger
+  /** Overrides the `--log-level` flag. */
+  logLevel?: LogLevel
   output?: CommandOutput
 }
 
@@ -20,7 +27,14 @@ export async function createCommandClient(
   authenticated = true,
 ): Promise<RawbackClient> {
   const env = environmentName(dependencies)
+  const logger = await commandLogger({
+    ...(dependencies.configPath !== undefined ? { configPath: dependencies.configPath } : {}),
+    ...(env !== undefined ? { env } : {}),
+    ...(dependencies.logger !== undefined ? { logger: dependencies.logger } : {}),
+    ...(dependencies.logLevel !== undefined ? { logLevel: dependencies.logLevel } : {}),
+  })
   const client = await createRawbackClient({
+    logger,
     ...(dependencies.configPath !== undefined ? { configPath: dependencies.configPath } : {}),
     ...(env !== undefined ? { env } : {}),
     ...(dependencies.credentialsPath !== undefined
