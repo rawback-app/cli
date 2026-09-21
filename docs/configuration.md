@@ -483,13 +483,14 @@ logging:
   file: true # set false to stop writing to disk entirely
   directory: ~/.rawback/logs
   maxFileSize: 10485760 # roll the active file at this many bytes
-  maxFiles: 3 # how many files to keep in total
+  maxFiles: 3 # how many files to keep in total, at least 1
   redact: [] # extra field names to blank out, added to the built-in list
   stderr: false # also mirror records to standard error
 ```
 
 `maxFiles` is how many files are kept in total, so the defaults come to about
-30 MB per app. `redact` only ever adds to the built-in list — a setting that
+30 MB per app. It must be at least `1` — a rolling log always has a file open,
+so set `file: false` rather than `maxFiles: 0` to stop writing to disk. `redact` only ever adds to the built-in list — a setting that
 could switch redaction off is a setting that leaks tokens.
 
 Like every other section, `logging` can appear at the top level and inside a
