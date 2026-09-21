@@ -1036,9 +1036,9 @@ The URL uses `webHost` from `~/.rawback/config.yml`, or
 
 ## `rawback logs`
 
-Read and clear the diagnostic log the CLI and the Desktop app write to
-`~/.rawback/logs/`. One JSON object per line, so `jq` works directly on the
-file.
+Read and clear the diagnostic logs the CLI and the Desktop app write to
+`~/.rawback/logs/`. One JSON object per line — pino's format — so `jq` and
+`pino-pretty` work on them directly.
 
 ```bash
 rawback logs path
@@ -1049,7 +1049,8 @@ rawback logs purge --yes
 ### `rawback logs path`
 
 Prints the log directory and every file in it with its size and modification
-time.
+time. Files are numbered (`cli.1.log`, `cli.2.log`, …) and the highest number
+is the one currently being written.
 
 | Option   | Description                  |
 | -------- | ---------------------------- |
@@ -1057,8 +1058,8 @@ time.
 
 ### `rawback logs show`
 
-Prints the most recent records, oldest first. Only the tail of the file is read,
-so this stays fast on a ten-megabyte log.
+Prints the most recent records from the file currently being written, oldest
+first. Only the tail is read, so this stays fast on a ten-megabyte log.
 
 | Option            | Description                                      |
 | ----------------- | ------------------------------------------------ |

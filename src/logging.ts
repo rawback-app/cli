@@ -1,11 +1,11 @@
 import {
   createAppLogger,
+  flushLogger,
   type Logger,
   type LogLevel,
   NOOP_LOGGER,
   readEnvironment,
   resolveLoggingOptions,
-  type RootLogger,
 } from '@rawback/sdk'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -18,15 +18,15 @@ export interface LoggerDependencies {
   logLevel?: LogLevel
 }
 
-let root: RootLogger | undefined
-let building: Promise<RootLogger> | undefined
+let root: Logger | undefined
+let building: Promise<Logger> | undefined
 
 /**
  * The one logger this process writes through.
  *
  * Built lazily and memoized: a command that never talks to the network should
- * not create `~/.rawback/logs/` on the way past, and one process wants one file
- * handle and one exit hook rather than one per command module.
+ * not create `~/.rawback/logs/` on the way past, and one process wants one
+ * rolling destination rather than one per command module.
  */
 export async function commandLogger(dependencies: LoggerDependencies = {}): Promise<Logger> {
   if (dependencies.logger) return dependencies.logger
@@ -36,7 +36,7 @@ export async function commandLogger(dependencies: LoggerDependencies = {}): Prom
   return root
 }
 
-async function buildLogger(dependencies: LoggerDependencies): Promise<RootLogger> {
+async function buildLogger(dependencies: LoggerDependencies): Promise<Logger> {
   const level = dependencies.logLevel ?? selectedLogLevel()
   const environment = await readEnvironment(dependencies.configPath, dependencies.env).catch(
     () => undefined,
@@ -56,12 +56,12 @@ async function buildLogger(dependencies: LoggerDependencies): Promise<RootLogger
  * Writes out anything still buffered.
  *
  * Called from `runCli`'s `finally` so a command's records reach the file even
- * when it failed; the sink's process-exit drain is the backstop, not the
- * mechanism.
+ * when it failed: the rolling destination is asynchronous, and a CLI process
+ * exits long before it would drain on its own.
  */
 export async function flushCommandLogger(): Promise<void> {
   if (!root) return
-  await root.flush()
+  await flushLogger(root)
 }
 
 /** Forgets the memoized logger. Tests need this; nothing else should. */

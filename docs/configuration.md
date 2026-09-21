@@ -483,15 +483,14 @@ logging:
   file: true # set false to stop writing to disk entirely
   directory: ~/.rawback/logs
   maxFileSize: 10485760 # roll the active file at this many bytes
-  maxFiles: 3 # rolled archives kept, *besides* the active file
+  maxFiles: 3 # how many files to keep in total
   redact: [] # extra field names to blank out, added to the built-in list
   stderr: false # also mirror records to standard error
 ```
 
-`maxFiles` counts archives, not the total: the default keeps `cli.log` plus
-`cli.1.log` through `cli.3.log`, about 40 MB per app at the default size.
-`redact` only ever adds to the built-in list — a setting that could switch
-redaction off is a setting that leaks tokens.
+`maxFiles` is how many files are kept in total, so the defaults come to about
+30 MB per app. `redact` only ever adds to the built-in list — a setting that
+could switch redaction off is a setting that leaks tokens.
 
 Like every other section, `logging` can appear at the top level and inside a
 named environment, where it merges key by key: a shared `level` applies
@@ -528,6 +527,10 @@ See [`rawback logs`](commands.md#rawback-logs) for the full options.
 On Linux and macOS log files are created at mode `0600` inside a `0700`
 directory, the same as `credentials.json`. Windows has no equivalent, so the
 files inherit the directory's permissions there.
+
+Logging is [pino](https://github.com/pinojs/pino) under the hood, so the output
+is the line-JSON format `pino-pretty` and most log tooling already understands:
+`rawback logs show --json | jq -c .lines[] | pino-pretty` works.
 
 ## Troubleshooting
 

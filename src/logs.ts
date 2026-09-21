@@ -1,19 +1,30 @@
 import { open } from 'node:fs/promises'
 
 import {
+  activeLogFile,
   isLogApp,
   LOG_APPS,
   type LogApp,
   type LogDirectoryListing,
   type LogLevel,
   listLogFiles,
-  logFileName,
-  LOG_LEVELS,
+  LOG_LEVEL_NAMES,
   type PurgeLogsResult,
   purgeLogs,
   readEnvironment,
   resolveLoggingOptions,
 } from '@rawback/sdk'
+
+/** pino's numbering, so `--level warn` can mean "warn and above". */
+const LEVEL_ORDER: Record<LogLevel, number> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: 70,
+}
 
 import { commandOutput, type ReadCommandDependencies } from './command.ts'
 import { environmentName } from './config.ts'
@@ -161,8 +172,10 @@ function parseLine(line: string): LogLine {
 function atLeastLevel(line: LogLine, minimum: LogLevel | undefined): boolean {
   if (minimum === undefined) return true
   const level = line.level as LogLevel | undefined
-  if (level === undefined || !(level in LOG_LEVELS)) return true
-  return LOG_LEVELS[level] >= LOG_LEVELS[minimum]
+  // A line without a usable level is shown rather than filtered away: it is
+  // more likely a torn record than something the caller meant to hide.
+  if (level === undefined || !(level in LEVEL_ORDER)) return true
+  return LEVEL_ORDER[level] >= LEVEL_ORDER[minimum]
 }
 
 export async function runLogsShow(
@@ -174,23 +187,25 @@ export async function runLogsShow(
     throw new Error('--lines must be an integer between 1 and 10000')
   }
   const level = options.level as LogLevel | undefined
-  if (level !== undefined && !(level in LOG_LEVELS)) {
-    throw new Error(`--level must be one of ${Object.keys(LOG_LEVELS).join(', ')}`)
+  if (level !== undefined && !(level in LEVEL_ORDER)) {
+    throw new Error(`--level must be one of ${LOG_LEVEL_NAMES.join(', ')}`)
   }
 
   const directory = await resolveLogDirectory(dependencies)
   const app = requireApp(options.app) ?? 'cli'
-  const path = `${directory}/${logFileName(app)}`
-  const lines = (await readTail(path, count))
-    .map(parseLine)
-    .filter((line) => atLeastLevel(line, level))
+  // `pino-roll` numbers every file, so the current one is the highest-numbered
+  // rather than a fixed name.
+  const path = await activeLogFile(directory, app)
+  const lines = path
+    ? (await readTail(path, count)).map(parseLine).filter((line) => atLeastLevel(line, level))
+    : []
   const output = commandOutput(dependencies)
 
   if (options.json) {
-    output.json({ file: path, lines })
+    output.json({ file: path ?? null, lines })
     return
   }
-  output.document(logLinesDocument(path, lines))
+  output.document(logLinesDocument(path ?? directory, lines))
 }
 
 export async function runLogsPurge(

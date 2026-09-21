@@ -68,7 +68,7 @@ export async function runCli(
     const command = commandName(parseArgs)
     const logger = (await commandLogger()).child({ component: 'cli', command })
     const startedAt = performance.now()
-    logger.debug(`running ${command}`, { event: 'cli.command.start' })
+    logger.debug({ event: 'cli.command.start' }, `running ${command}`)
     try {
       await program.parseAsync(parseArgs)
     } finally {
@@ -77,15 +77,16 @@ export async function runCli(
       const exitCode = process.exitCode ?? 0
       const failed = exitCode !== 0
       logger[failed ? 'warn' : 'debug'](
-        failed ? `${command} exited ${String(exitCode)}` : `${command} finished`,
         {
           event: 'cli.command.done',
           exitCode,
           durationMs: Math.round(performance.now() - startedAt),
         },
+        failed ? `${command} exited ${String(exitCode)}` : `${command} finished`,
       )
       // A failed command is exactly the one whose records need to reach the
-      // file; the sink's exit drain is the backstop, not the mechanism.
+      // file, and the rolling destination is asynchronous — without this the
+      // process exits before it drains.
       await flushCommandLogger()
     }
     return

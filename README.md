@@ -396,8 +396,7 @@ rawback shares list --help
 
 ### When something goes wrong
 
-The CLI keeps a JSON log at `~/.rawback/logs/cli.log`, shared with Rawback
-Desktop. At the default verbosity it records every failure — including the trace
+The CLI keeps JSON logs in `~/.rawback/logs/`, shared with Rawback Desktop. At the default verbosity it records every failure — including the trace
 and `cf-ray` IDs identifying the request on the server — and nothing else.
 
 ```bash

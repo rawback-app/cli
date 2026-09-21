@@ -43,8 +43,8 @@ function capture() {
 describe('rawback logs path', () => {
   test('reports every log file with its size', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), 'aaaa')
-    writeFileSync(join(directory, 'desktop.log'), 'bb')
+    writeFileSync(join(directory, 'cli.1.log'), 'aaaa')
+    writeFileSync(join(directory, 'desktop.1.log'), 'bb')
     const output = capture()
 
     await runLogsPath({ json: true }, { logDirectory: directory, stdout: output.stdout })
@@ -56,14 +56,14 @@ describe('rawback logs path', () => {
       totalBytes: 6,
       files: [
         {
-          name: 'cli.log',
-          path: join(directory, 'cli.log'),
+          name: 'cli.1.log',
+          path: join(directory, 'cli.1.log'),
           bytes: 4,
           modifiedAt: expect.any(String),
         },
         {
-          name: 'desktop.log',
-          path: join(directory, 'desktop.log'),
+          name: 'desktop.1.log',
+          path: join(directory, 'desktop.1.log'),
           bytes: 2,
           modifiedAt: expect.any(String),
         },
@@ -83,7 +83,7 @@ describe('rawback logs show', () => {
   test('prints the most recent records, newest last', async () => {
     const directory = logDirectory()
     writeFileSync(
-      join(directory, 'cli.log'),
+      join(directory, 'cli.1.log'),
       [record('info', 'one'), record('info', 'two'), record('info', 'three')].join('\n') + '\n',
     )
     const output = capture()
@@ -97,7 +97,7 @@ describe('rawback logs show', () => {
   test('filters to the given level and above', async () => {
     const directory = logDirectory()
     writeFileSync(
-      join(directory, 'cli.log'),
+      join(directory, 'cli.1.log'),
       [record('debug', 'noisy'), record('warn', 'notable'), record('error', 'bad')].join('\n'),
     )
     const output = capture()
@@ -116,7 +116,7 @@ describe('rawback logs show', () => {
   test('surfaces the trace ID so it can be quoted in a support report', async () => {
     const directory = logDirectory()
     writeFileSync(
-      join(directory, 'cli.log'),
+      join(directory, 'cli.1.log'),
       record('warn', 'http failed', { event: 'http.request', ids: { traceId: 'abc123' } }),
     )
     const output = capture()
@@ -127,7 +127,7 @@ describe('rawback logs show', () => {
 
   test('shows a torn line rather than dropping the evidence', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), `${record('info', 'fine')}\n{"half":`)
+    writeFileSync(join(directory, 'cli.1.log'), `${record('info', 'fine')}\n{"half":`)
     const output = capture()
 
     await runLogsShow({ json: true }, { logDirectory: directory, stdout: output.stdout })
@@ -137,7 +137,7 @@ describe('rawback logs show', () => {
   test('reads only the tail of a large file', async () => {
     const directory = logDirectory()
     const many = Array.from({ length: 5_000 }, (_, index) => record('info', `line-${index}`))
-    writeFileSync(join(directory, 'cli.log'), `${many.join('\n')}\n`)
+    writeFileSync(join(directory, 'cli.1.log'), `${many.join('\n')}\n`)
     const output = capture()
 
     await runLogsShow({ json: true, lines: 3 }, { logDirectory: directory, stdout: output.stdout })
@@ -166,7 +166,7 @@ describe('rawback logs show', () => {
 
   test('reads the app the caller asked for', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'desktop.log'), record('info', 'from desktop'))
+    writeFileSync(join(directory, 'desktop.1.log'), record('info', 'from desktop'))
     const output = capture()
 
     await runLogsShow(
@@ -180,8 +180,8 @@ describe('rawback logs show', () => {
 describe('rawback logs purge', () => {
   test('deletes the log files and leaves everything else alone', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), 'aaa')
-    writeFileSync(join(directory, 'cli.1.log'), 'aa')
+    writeFileSync(join(directory, 'cli.1.log'), 'aaa')
+    writeFileSync(join(directory, 'cli.2.log'), 'aa')
     // `logging.directory` is user-controlled, so purging must stay surgical.
     writeFileSync(join(directory, 'notes.txt'), 'keep me')
     const output = capture()
@@ -197,15 +197,15 @@ describe('rawback logs purge', () => {
 
   test('narrows to one app when asked', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), 'a')
-    writeFileSync(join(directory, 'desktop.log'), 'a')
+    writeFileSync(join(directory, 'cli.1.log'), 'a')
+    writeFileSync(join(directory, 'desktop.1.log'), 'a')
     const output = capture()
 
     await runLogsPurge(
       { app: 'desktop', json: true, yes: true },
       { logDirectory: directory, stdout: output.stdout },
     )
-    expect(readdirSync(directory)).toEqual(['cli.log'])
+    expect(readdirSync(directory)).toEqual(['cli.1.log'])
   })
 
   test('rejects an unknown app rather than deleting the wrong thing', async () => {
@@ -217,7 +217,7 @@ describe('rawback logs purge', () => {
 
   test('asks before deleting, and leaves the files when the answer is no', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), 'aaa')
+    writeFileSync(join(directory, 'cli.1.log'), 'aaa')
     const output = capture()
     const asked: string[] = []
 
@@ -236,13 +236,13 @@ describe('rawback logs purge', () => {
     )
 
     expect(asked[0]).toContain('Delete 1 log file')
-    expect(readdirSync(directory)).toEqual(['cli.log'])
+    expect(readdirSync(directory)).toEqual(['cli.1.log'])
     expect(output.lines.join('')).toContain('Left the log files in place')
   })
 
   test('deletes once the prompt is answered yes', async () => {
     const directory = logDirectory()
-    writeFileSync(join(directory, 'cli.log'), 'aaa')
+    writeFileSync(join(directory, 'cli.1.log'), 'aaa')
     const output = capture()
 
     await runLogsPurge(

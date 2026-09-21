@@ -72,8 +72,10 @@ cannot run, report exactly which command was skipped and why.
 - Author shared GraphQL operations and transport behavior in `../sdk`; this
   repository should keep only CLI presentation and platform adapters.
 - Keep secrets in `~/.rawback/`, never in repository fixtures or documentation.
-- Diagnostics go to `~/.rawback/logs/cli.log` through the SDK logger, **never**
-  to stdout: stdout is the `--json` contract. `src/log-level.ts` holds the
+- Diagnostics go to `~/.rawback/logs/` through the SDK's pino logger, **never**
+  to stdout: stdout is the `--json` contract. Records use pino's argument
+  order, `logger.info({ event }, 'message')`, and `pino-roll` numbers every
+  file, so use `activeLogFile()` rather than building a name. `src/log-level.ts` holds the
   `--log-level`/`-v` singleton and must stay SDK-free at runtime (its import is
   type-only) for the same startup-cost reason `src/trace.ts` documents.
 

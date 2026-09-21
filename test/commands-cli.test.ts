@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -442,7 +442,11 @@ describe('logs commands', () => {
     // No credentials in an empty home, so this fails and should be recorded.
     expect(run('photos', 'list').exitCode).toBe(1)
 
-    const contents = readFileSync(join(home, '.rawback', 'logs', 'cli.log'), 'utf8')
+    // pino-roll numbers every file, so discover it rather than assume a name.
+    const logs = join(home, '.rawback', 'logs')
+    const [file] = readdirSync(logs)
+    expect(file).toMatch(/^cli\.\d+\.log$/)
+    const contents = readFileSync(join(logs, file!), 'utf8')
     const records = contents
       .split('\n')
       .filter(Boolean)
