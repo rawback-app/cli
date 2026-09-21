@@ -62,6 +62,11 @@ webHost: https://rawback.app
 metadata:
   concurrency: 8
 
+# Optional. Diagnostic logging, shared with the Desktop app. See "Logging".
+logging:
+  level: info
+  maxFiles: 3
+
 # Required only by `rawback photos upload`
 sftp:
   endpoint: sftp://ftp.rawback.app:23168
@@ -427,7 +432,108 @@ Verify the fingerprint through a trusted Rawback channel before pinning it. Do
 not delete the upload-state file merely to bypass a host-key mismatch; investigate
 the server or network change first.
 
+## Logging
+
+The CLI and the Desktop app both write diagnostics to `~/.rawback/logs/`, beside
+`config.yml` and `credentials.json`:
+
+| File                        | Written by                    |
+| --------------------------- | ----------------------------- |
+| `cli.log`                   | `rawback`                     |
+| `desktop.log`               | The Desktop app               |
+| `cli.1.log`, `cli.2.log`, … | Rolled archives, newest first |
+
+Each line is one JSON object, so the file is ordinary JSONL:
+
+```bash
+tail -f ~/.rawback/logs/cli.log | jq -c '{time, level, event, ids}'
+jq 'select(.levelValue >= 40)' ~/.rawback/logs/cli.log
+```
+
+Every record carries `time`, `level`, `levelValue`, `msg`, the writing app and
+its version, the process ID, and the environment in use. API records add the
+method, path, status and duration, plus the `x-trace-id`, `cf-ray` and
+`x-request-id` values identifying that request server-side — those are the IDs
+worth quoting in a support report.
+
+### Levels
+
+`trace` < `debug` < `info` < `warn` < `error` < `fatal`, plus `silent` to write
+nothing. The default is `info`, at which a run records **every failure and
+nothing else** — browsing the library does not fill the file with one line per
+request.
+
+- `debug` adds the full request stream and request/response headers.
+- `trace` adds request and response bodies, truncated.
+
+Secret field and header names — `authorization`, `cookie`, `password`, `token`,
+`refreshToken` and friends — are replaced with `[REDACTED]` at every level, at
+any nesting depth. Credential and authentication GraphQL operations never log
+their variables or body even at `trace`. Query strings are stripped from logged
+URLs, because they carry search terms.
+
+`trace` still records file paths, album titles and other content from request
+bodies. Turn it on to diagnose something, not as a standing setting.
+
+### Configuration
+
+```yaml
+logging:
+  level: info # trace|debug|info|warn|error|fatal|silent
+  file: true # set false to stop writing to disk entirely
+  directory: ~/.rawback/logs
+  maxFileSize: 10485760 # roll the active file at this many bytes
+  maxFiles: 3 # rolled archives kept, *besides* the active file
+  redact: [] # extra field names to blank out, added to the built-in list
+  stderr: false # also mirror records to standard error
+```
+
+`maxFiles` counts archives, not the total: the default keeps `cli.log` plus
+`cli.1.log` through `cli.3.log`, about 40 MB per app at the default size.
+`redact` only ever adds to the built-in list — a setting that could switch
+redaction off is a setting that leaks tokens.
+
+Like every other section, `logging` can appear at the top level and inside a
+named environment, where it merges key by key: a shared `level` applies
+everywhere while one environment overrides just the `directory`.
+
+These environment variables override the file, and the `--log-level` flag
+overrides them:
+
+| Variable                | Effect                                  |
+| ----------------------- | --------------------------------------- |
+| `RAWBACK_LOG_LEVEL`     | One of the level names above            |
+| `RAWBACK_DEBUG=1`       | Shorthand for `RAWBACK_LOG_LEVEL=debug` |
+| `RAWBACK_LOG_FILE=0`    | Stop writing to disk                    |
+| `RAWBACK_LOG_DIR`       | Write somewhere other than the default  |
+| `RAWBACK_LOG_MAX_SIZE`  | Roll at this many bytes                 |
+| `RAWBACK_LOG_MAX_FILES` | Keep this many rolled archives          |
+| `RAWBACK_LOG_STDERR=1`  | Also mirror records to standard error   |
+
+An unrecognised value is ignored rather than rejected, so a typo in a shell
+profile cannot stop a command from running.
+
+### Reading and clearing
+
+```bash
+rawback logs path              # where the files are, and how big
+rawback logs show --level warn # the recent records that mattered
+rawback logs purge --yes       # delete them, this app and Desktop
+```
+
+`purge` removes only the files listed above and leaves the directory itself
+alone, so pointing `logging.directory` at a folder holding other things is safe.
+See [`rawback logs`](commands.md#rawback-logs) for the full options.
+
+On Linux and macOS log files are created at mode `0600` inside a `0700`
+directory, the same as `credentials.json`. Windows has no equivalent, so the
+files inherit the directory's permissions there.
+
 ## Troubleshooting
+
+Whatever the symptom, `rawback logs show --level warn` is the fastest way to see
+what actually failed, including the trace and `cf-ray` IDs to quote when
+reporting it. Re-run the failing command with `-v` first if the log is empty.
 
 ### Device authorization is temporarily unavailable
 

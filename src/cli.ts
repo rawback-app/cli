@@ -2,6 +2,7 @@ import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
 import { setSelectedEnvironment } from './environment.ts'
+import { LOG_LEVEL_CHOICES, setSelectedLogLevel } from './log-level.ts'
 import { expandHomePath } from './paths.ts'
 import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
@@ -178,8 +179,24 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
       global: true,
       type: 'string',
     })
+    .option('log-level', {
+      choices: LOG_LEVEL_CHOICES,
+      describe: 'verbosity of ~/.rawback/logs/cli.log; never affects stdout',
+      global: true,
+      type: 'string',
+    })
+    .option('verbose', {
+      alias: 'v',
+      count: true,
+      describe: 'log more: -v for debug, -vv for trace',
+      global: true,
+    })
     .middleware((args) => {
       setSelectedEnvironment(typeof args.env === 'string' ? args.env : undefined)
+      setSelectedLogLevel({
+        ...(typeof args.logLevel === 'string' ? { level: args.logLevel } : {}),
+        ...(typeof args.verbose === 'number' ? { verbose: args.verbose } : {}),
+      })
     })
     .command(
       'auth [subcommand]',
@@ -2833,6 +2850,98 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             },
           )
           .demandCommand(1, 'Choose a config command: init, view, env, or use')
+          .strict(),
+      () => {},
+    )
+    .command(
+      'logs',
+      'inspect and clear the local diagnostic logs',
+      (command) =>
+        command
+          .command(
+            'path',
+            'show where the logs are written and how large they are',
+            (path) =>
+              path.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runLogsPath } = await import('./logs.ts')
+              await runCommand(() => runLogsPath({ json: args.json }))
+            },
+          )
+          .command(
+            'show',
+            'print the most recent log records',
+            (show) =>
+              show
+                .option('lines', {
+                  default: 50,
+                  describe: 'how many records to show (1-10000)',
+                  type: 'number',
+                })
+                .option('level', {
+                  choices: LOG_LEVEL_CHOICES,
+                  describe: 'show only records at this level or above',
+                  type: 'string',
+                })
+                .option('app', {
+                  choices: ['cli', 'desktop'] as const,
+                  default: 'cli',
+                  describe: 'which client wrote the records',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runLogsShow } = await import('./logs.ts')
+              await runCommand(() =>
+                runLogsShow({
+                  app: args.app,
+                  json: args.json,
+                  lines: args.lines,
+                  ...(args.level !== undefined ? { level: args.level } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'purge',
+            'delete the local log files',
+            (purge) =>
+              purge
+                .option('app', {
+                  choices: ['cli', 'desktop', 'all'] as const,
+                  default: 'all',
+                  describe: "which client's logs to delete",
+                  type: 'string',
+                })
+                .option('yes', {
+                  default: false,
+                  describe: 'skip the confirmation prompt',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runLogsPurge } = await import('./logs.ts')
+              await runCommand(() =>
+                runLogsPurge({ app: args.app, json: args.json, yes: args.yes }),
+              )
+            },
+          )
+          .demandCommand(1, 'Choose a logs command: path, show, or purge')
           .strict(),
       () => {},
     )

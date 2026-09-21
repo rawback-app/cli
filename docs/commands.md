@@ -7,13 +7,23 @@ English only.
 
 ## Global options
 
-| Option            | Description                                   |
-| ----------------- | --------------------------------------------- |
-| `-h`, `--help`    | Show help for the current command             |
-| `-V`, `--version` | Print the CLI version                         |
-| `--env <name>`    | Run against one environment from `config.yml` |
+| Option                | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `-h`, `--help`        | Show help for the current command              |
+| `-V`, `--version`     | Print the CLI version                          |
+| `--env <name>`        | Run against one environment from `config.yml`  |
+| `--log-level <level>` | Verbosity of `~/.rawback/logs/cli.log`         |
+| `-v`, `--verbose`     | Shorthand: `-v` for `debug`, `-vv` for `trace` |
 
 Running `rawback` without arguments shows top-level help.
+
+`--log-level` takes `trace`, `debug`, `info`, `warn`, `error`, `fatal` or
+`silent` and only affects the log file — **never** standard output, so `--json`
+stays machine-readable at any verbosity. The default is `info`, at which a run
+records every failure and nothing else. `RAWBACK_LOG_LEVEL` sets the same thing
+for a shell session, and the flag beats it. See
+[Configuration](configuration.md#logging) for the file layout and
+[`rawback logs`](#rawback-logs) for reading and clearing it.
 
 `--env` accepts any name under `environments:` in `~/.rawback/config.yml`, plus
 the reserved name `default` for the file's top-level settings. Without it,
@@ -1024,6 +1034,61 @@ rawback web
 The URL uses `webHost` from `~/.rawback/config.yml`, or
 `https://rawback.app` by default.
 
+## `rawback logs`
+
+Read and clear the diagnostic log the CLI and the Desktop app write to
+`~/.rawback/logs/`. One JSON object per line, so `jq` works directly on the
+file.
+
+```bash
+rawback logs path
+rawback logs show --lines 100 --level warn
+rawback logs purge --yes
+```
+
+### `rawback logs path`
+
+Prints the log directory and every file in it with its size and modification
+time.
+
+| Option   | Description                  |
+| -------- | ---------------------------- |
+| `--json` | Output machine-readable JSON |
+
+### `rawback logs show`
+
+Prints the most recent records, oldest first. Only the tail of the file is read,
+so this stays fast on a ten-megabyte log.
+
+| Option            | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `--lines <n>`     | How many records to show, 1–10000 (default `50`) |
+| `--level <level>` | Show only records at this level or above         |
+| `--app <name>`    | `cli` (default) or `desktop`                     |
+| `--json`          | Output machine-readable JSON                     |
+
+A line that cannot be parsed is shown as-is rather than dropped — a torn record
+is evidence too. `--json` emits `{ "file", "lines" }`, where an unparseable line
+appears as `{ "raw": "…" }`.
+
+### `rawback logs purge`
+
+Deletes the log files. Only files this tool writes are removed and the directory
+itself is left in place, so a custom `logging.directory` holding other files is
+safe.
+
+| Option         | Description                          |
+| -------------- | ------------------------------------ |
+| `--app <name>` | `all` (default), `cli`, or `desktop` |
+| `--yes`        | Skip the confirmation prompt         |
+| `--json`       | Output machine-readable JSON         |
+
+Without `--yes` it asks first, and fails with a message naming `--yes` when the
+terminal is not interactive. The default `--app all` includes the Desktop app's
+log, because both share one directory. A file that cannot be deleted is reported
+rather than thrown — on Windows the Desktop app holds `desktop.log` open — and
+the command exits `1` when any file was left behind.
+
 ## Scripting and exit behavior
 
 Use `--json` when available instead of parsing human-readable tables. JSON is
@@ -1035,6 +1100,10 @@ width. Human output is also the only thing `rawback usage --detail` changes: the
 indicators; redirected output is deterministic and contains no cursor-control
 sequences. JSON, `--content-only`, and version output are never decorated with
 icons or prose.
+
+Diagnostic logs go to `~/.rawback/logs/cli.log`, never to standard output or
+standard error, so raising the verbosity with `-v` cannot disturb a script
+parsing `--json`.
 
 The CLI exits with status `0` on success, `1` for validation, API, filesystem, or
 upload failures, and `130` when an interactive prompt is cancelled. Scripts
