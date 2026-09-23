@@ -99,7 +99,7 @@ describe('new command hierarchy', () => {
     const json = runCli('social', '--json')
     expect(json.exitCode).toBe(0)
     expect(JSON.parse(json.stdout)).toEqual({
-      links: [{ network: 'x', name: 'X (Twitter)', url: 'https://twitter.com/rawback.app' }],
+      links: [{ network: 'x', name: 'X (Twitter)', url: 'https://x.com/rawbackapp' }],
     })
 
     const conflict = runCli('social', '--open', '--json')
