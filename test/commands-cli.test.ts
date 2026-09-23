@@ -90,6 +90,24 @@ describe('new command hierarchy', () => {
     expect(runCli('web', '--help').stdout).toContain('open your Rawback profile')
   })
 
+  test('lists social media links and rejects --open with --json', () => {
+    const help = runCli('social', '--help')
+    expect(help.exitCode).toBe(0)
+    expect(help.stdout).toContain("show Rawback's social media links")
+    expect(help.stdout).toContain('--open')
+
+    const json = runCli('social', '--json')
+    expect(json.exitCode).toBe(0)
+    expect(JSON.parse(json.stdout)).toEqual({
+      links: [{ network: 'x', name: 'X (Twitter)', url: 'https://twitter.com/rawback.app' }],
+    })
+
+    const conflict = runCli('social', '--open', '--json')
+    expect(conflict.exitCode).toBe(1)
+    expect(conflict.stdout).toBe('')
+    expect(conflict.stderr).toContain('--open or --json, not both')
+  })
+
   test('documents the config view command and JSON output', () => {
     const config = runCli('config', '--help')
     expect(config.exitCode).toBe(0)

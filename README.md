@@ -20,6 +20,7 @@ in a browser.
 - Inspect the shared local configuration without exposing its SFTP password.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
 - Request machine-readable JSON from read and credential commands.
+- Find Rawback on social media with `rawback social`.
 
 ## Install
 
@@ -154,6 +155,7 @@ rawback usage --detail
 rawback pricing
 rawback config view
 rawback web
+rawback social
 ```
 
 Add `--json` to data-oriented commands when you need structured output:

@@ -1034,6 +1034,24 @@ rawback web
 The URL uses `webHost` from `~/.rawback/config.yml`, or
 `https://rawback.app` by default.
 
+## `rawback social`
+
+Lists Rawback's social media accounts. It needs no sign-in and makes no network
+request:
+
+```bash
+rawback social
+rawback social --open
+rawback social --json
+```
+
+| Option   | Description                                         | Default |
+| -------- | --------------------------------------------------- | ------- |
+| `--open` | Open every link in the system browser               | `false` |
+| `--json` | Print `{ "links": [{ "network", "name", "url" }] }` | `false` |
+
+`--open` and `--json` cannot be combined.
+
 ## `rawback logs`
 
 Read and clear the diagnostic logs the CLI and the Desktop app write to
