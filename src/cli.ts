@@ -2955,6 +2955,33 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
         await runCommand(() => runWeb())
       },
     )
+    .command(
+      'social',
+      "show Rawback's social media links",
+      (command) =>
+        command
+          .option('open', {
+            default: false,
+            describe: 'open the links in your web browser',
+            type: 'boolean',
+          })
+          .option('json', {
+            default: false,
+            describe: 'output machine-readable JSON',
+            type: 'boolean',
+          })
+          .check((args) => {
+            if (args.open && args.json) {
+              throw new Error('rawback social takes --open or --json, not both')
+            }
+            return true
+          }),
+      async (args) => {
+        if (process.exitCode !== undefined && process.exitCode !== 0) return
+        const { runSocial } = await import('./social.ts')
+        await runCommand(() => runSocial({ json: args.json, open: args.open }))
+      },
+    )
     .strict()
     .fail((message, error) => {
       output.error(error ? describeError(error) : message, "Run 'rawback --help' for usage.")

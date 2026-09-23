@@ -71,6 +71,7 @@ describe('rawback CLI', () => {
     expect(result.stdout).toContain('usage')
     expect(result.stdout).toContain('pricing')
     expect(result.stdout).toContain('web')
+    expect(result.stdout).toContain('social')
   })
 
   test.each(['--help', '-h'])('shows help for %s', (flag) => {

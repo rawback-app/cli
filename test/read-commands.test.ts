@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { writeCredentials } from '../src/credentials.ts'
 import { runMemory } from '../src/memory.ts'
 import { runPricing } from '../src/pricing.ts'
+import { runSocial, SOCIAL_LINKS } from '../src/social.ts'
 import { runUploadSessionList } from '../src/uploads.ts'
 import { runUsage } from '../src/usage.ts'
 import { browserCommand, runWeb } from '../src/web.ts'
@@ -350,5 +351,45 @@ describe('web', () => {
       'cmd',
       ['/c', 'start', '', 'https://rawback.app'],
     ])
+  })
+})
+
+describe('social', () => {
+  test('prints the social media links as a table', async () => {
+    const lines: string[] = []
+    await runSocial({}, { stdout: (message) => lines.push(message), columns: 100 })
+    const output = lines.join('\n')
+    expect(output).toContain('X (Twitter)')
+    expect(output).toContain('https://twitter.com/rawback.app')
+  })
+
+  test('emits the links as JSON', async () => {
+    const lines: string[] = []
+    await runSocial({ json: true }, { stdout: (message) => lines.push(message) })
+    expect(JSON.parse(lines.join('\n'))).toEqual({ links: SOCIAL_LINKS })
+  })
+
+  test('opens every link without shell interpolation', async () => {
+    const opened: Array<{ command: string; args: string[] }> = []
+    const lines: string[] = []
+    await runSocial(
+      { open: true },
+      {
+        platform: 'linux',
+        async open(command, args) {
+          opened.push({ command, args })
+          return 0
+        },
+        stdout: (message) => lines.push(message),
+      },
+    )
+    expect(opened).toEqual([{ command: 'xdg-open', args: ['https://twitter.com/rawback.app'] }])
+    expect(lines[0]).toContain('Opened https://twitter.com/rawback.app')
+  })
+
+  test('reports a browser that fails to open', async () => {
+    await expect(
+      runSocial({ open: true }, { platform: 'darwin', open: async () => 1, stdout: () => {} }),
+    ).rejects.toThrow('Unable to open https://twitter.com/rawback.app: open exited with status 1')
   })
 })
