@@ -9,7 +9,7 @@ export interface SocialLink {
 }
 
 export const SOCIAL_LINKS: readonly SocialLink[] = [
-  { network: 'x', name: 'X (Twitter)', url: 'https://twitter.com/rawback.app' },
+  { network: 'x', name: 'X (Twitter)', url: 'https://x.com/rawbackapp' },
 ]
 
 export interface SocialOptions {

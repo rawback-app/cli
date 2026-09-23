@@ -360,7 +360,7 @@ describe('social', () => {
     await runSocial({}, { stdout: (message) => lines.push(message), columns: 100 })
     const output = lines.join('\n')
     expect(output).toContain('X (Twitter)')
-    expect(output).toContain('https://twitter.com/rawback.app')
+    expect(output).toContain('https://x.com/rawbackapp')
   })
 
   test('emits the links as JSON', async () => {
@@ -383,13 +383,13 @@ describe('social', () => {
         stdout: (message) => lines.push(message),
       },
     )
-    expect(opened).toEqual([{ command: 'xdg-open', args: ['https://twitter.com/rawback.app'] }])
-    expect(lines[0]).toContain('Opened https://twitter.com/rawback.app')
+    expect(opened).toEqual([{ command: 'xdg-open', args: ['https://x.com/rawbackapp'] }])
+    expect(lines[0]).toContain('Opened https://x.com/rawbackapp')
   })
 
   test('reports a browser that fails to open', async () => {
     await expect(
       runSocial({ open: true }, { platform: 'darwin', open: async () => 1, stdout: () => {} }),
-    ).rejects.toThrow('Unable to open https://twitter.com/rawback.app: open exited with status 1')
+    ).rejects.toThrow('Unable to open https://x.com/rawbackapp: open exited with status 1')
   })
 })
