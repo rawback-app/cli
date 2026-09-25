@@ -372,6 +372,9 @@ results — a summary line plus one field per filter it applied.
 | ---------------------- | ---------------------------------------------------------------- | ------- |
 | `<prompt>`             | What to look for, in plain language (required)                   | —       |
 | `--ai-search-id <id>`  | Reuse an earlier interpretation instead of spending an AI credit | —       |
+| `--near <lat,lng>`     | Only photos taken near this point, in degrees                    | —       |
+| `--radius <meters>`    | Meters around `--near`, up to 500000                             | `1000`  |
+| `--sort <order>`       | `newest`, `rating`, or `distance` (needs `--near`)               | newest  |
 | `--page <number>`      | Positive result page                                             | `1`     |
 | `--page-size <number>` | Results per page, from 1 through 100                             | `24`    |
 | `--json`               | Print machine-readable JSON                                      | `false` |
@@ -424,6 +427,10 @@ rawback photos list [options]
 | `--city <value>`              | Filter by city                                                | —       |
 | `--country <value>`           | Filter by country                                             | —       |
 | `--has-gps`                   | Include only photos with GPS coordinates                      | `false` |
+| `--near <lat,lng>`            | Only photos taken near this point, in degrees                 | —       |
+| `--radius <meters>`           | Meters around `--near`, up to 500000                          | `1000`  |
+| `--sort <order>`              | `newest`, `rating`, `relevance`, or `distance`                | newest  |
+| `--permission <value>`        | Filter by access: `private`, `protected`, `public`            | —       |
 | `--page <number>`             | Positive result page                                          | `1`     |
 | `--page-size <number>`        | Results per page, from 1 through 100                          | `24`    |
 | `--json`                      | Print machine-readable JSON                                   | `false` |
@@ -444,6 +451,43 @@ must form a valid chronological range.
 wins over the AI's reading of the prompt. Supplying `--prompt` also drops the
 `3,4,5` rating default, for the reason given under
 [`rawback photos search`](#rawback-photos-search).
+
+`--near` keeps photos whose GPS position lies within `--radius` meters of the
+point; photos without GPS never match. `--sort distance` lists the nearest
+first and needs `--near`; `--sort relevance` ranks by `--search` and needs it.
+Both are refused rather than silently falling back to newest-first.
+
+```bash
+rawback photos list --near 37.7749,-122.4194 --radius 2000 --sort distance
+rawback photos list --permission public   # everything you have published
+```
+
+`--permission` matches each photo's own access setting. A private photo in a
+shared album is still `private` here, because album access is contextual.
+
+## `rawback photos permission`
+
+Sets who can see one or more photos:
+
+```bash
+rawback photos permission <level> <image-ids..>
+rawback photos permission public 12 13 14
+rawback photos permission private 12,13 --json
+```
+
+| Level       | Who can see the photo                                                      |
+| ----------- | -------------------------------------------------------------------------- |
+| `private`   | Only you. The default for every upload                                     |
+| `protected` | Anyone signed in to Rawback                                                |
+| `public`    | Anyone, and the photo is listed in [Spots](#rawback-spots) when it has GPS |
+
+Albums and share links you created keep working for private photos: an album
+you shared still shows its photos to the people you shared it with, whatever
+each photo's own level.
+
+Each photo is updated separately. One failure does not stop the rest, but the
+command exits `1` if any photo could not be updated. With `--json` the output is
+`{ permission, results: [{ id, ok, permission, error }], succeeded, failed }`.
 
 ## `rawback photos check`
 
@@ -502,6 +546,41 @@ supported files. Exact duplicates use the filename plus the locally extracted
 EXIF capture time; duplicate-check failures do not block the SFTP upload.
 Local EXIF workers are controlled separately by `metadata.concurrency` in the
 shared configuration file.
+
+## `rawback spots`
+
+Browses public photography Spots: places where Rawback photographers published
+photos. Spots are public, so these commands also work signed out.
+
+```bash
+rawback spots list [--near <lat,lng> [--radius <meters>]] [--featured]
+rawback spots view <id>
+rawback spots sun <id> --date <YYYY-MM-DD>
+```
+
+`spots list` options:
+
+| Option                 | Description                               | Default |
+| ---------------------- | ----------------------------------------- | ------- |
+| `--near <lat,lng>`     | Only spots near this point, nearest first | —       |
+| `--radius <meters>`    | Meters around `--near`, up to 500000      | `1000`  |
+| `--featured`           | Rank by community reactions instead       | `false` |
+| `--page <number>`      | Positive result page                      | `1`     |
+| `--page-size <number>` | Spots per page, from 1 through 100        | `24`    |
+| `--json`               | Print `spots` and `pageInfo` as JSON      | `false` |
+
+A spot ID looks like `18-240801-157013`. `spots view <id>` lists the photos
+published there with photographer, camera and exposure settings, and takes
+`--page`, `--page-size` and `--json`.
+
+`spots sun <id> --date 2026-06-21` prints sunrise, sunset, and the morning and
+evening golden hours for that local date, in the spot's own time zone, with the
+sun's azimuth at sunrise and sunset. `--photo-id <id>` uses one published
+photo's exact position inside the spot. `--json` prints the times as RFC 3339
+timestamps next to the IANA `timezone`.
+
+To publish your own photos to Spots, set them `public` with
+[`rawback photos permission`](#rawback-photos-permission).
 
 ## `rawback videos`
 

@@ -1,14 +1,27 @@
-import { type ImageFilter, ImageStatus, PhotosDocument, type PhotosQuery } from '@rawback/sdk'
+import {
+  CliUpdatePhotoDocument,
+  type ImageFilter,
+  ImageOrderBy,
+  ImagePermission,
+  ImageStatus,
+  PhotosDocument,
+  type PhotosQuery,
+} from '@rawback/sdk'
 
+import { parsePositiveIds } from './albums.ts'
 import {
   createCommandClient,
   commandOutput,
   type ReadCommandDependencies,
   validatePagination,
 } from './command.ts'
-import { photoListDocument } from './features/photos/view.ts'
+import { photoListDocument, photoPermissionDocument } from './features/photos/view.ts'
+import { parseNear } from './geo.ts'
 
 const IMAGE_STATUSES = new Set<string>(Object.values(ImageStatus))
+const IMAGE_PERMISSIONS = new Set<string>(Object.values(ImagePermission))
+export const PHOTO_SORTS = ['newest', 'rating', 'relevance', 'distance'] as const
+export type PhotoSort = (typeof PHOTO_SORTS)[number]
 
 export interface PhotoListOptions {
   /**
@@ -29,12 +42,19 @@ export interface PhotoListOptions {
   hasGps?: boolean
   json?: boolean
   lensModel?: string[]
+  /** `"latitude,longitude"`: only photos taken within `radius` meters of it. */
+  near?: string
   page: number
   pageSize: number
+  /** Standalone access levels to keep: private, protected, public. */
+  permission?: string[]
   /** A plain-language request the server translates into filters. */
   prompt?: string
+  /** Meters around `near`; defaults to 1000. */
+  radius?: number
   rate?: string[]
   search?: string
+  sort?: string
   status?: string[]
 }
 
@@ -119,6 +139,12 @@ export function createPhotoFilter(options: PhotoListOptions): ImageFilter {
     throw new Error('--captured-after must not be later than --captured-before')
   }
 
+  const permissions = listValues(options.permission)
+  if (permissions?.some((permission) => !IMAGE_PERMISSIONS.has(permission))) {
+    throw new Error(`--permission must contain only: ${[...IMAGE_PERMISSIONS].join(', ')}`)
+  }
+  const near = parseNear(options.near, options.radius)
+
   const search = options.search?.trim()
   return {
     ...(rates ? { rate: [...new Set(rates)] } : {}),
@@ -141,6 +167,31 @@ export function createPhotoFilter(options: PhotoListOptions): ImageFilter {
     ...(listValues(options.city) ? { city: listValues(options.city) } : {}),
     ...(listValues(options.country) ? { country: listValues(options.country) } : {}),
     ...(options.hasGps ? { hasGps: true } : {}),
+    ...(near ? { near } : {}),
+    ...(permissions ? { permission: permissions as ImagePermission[] } : {}),
+  }
+}
+
+/**
+ * Maps `--sort` onto `ImageOrderBy`. `distance` and `relevance` would quietly
+ * fall back to newest-first on the server without the input they rank by, so
+ * that is refused here instead.
+ */
+export function photoOrderBy(options: PhotoListOptions): ImageOrderBy | undefined {
+  switch (options.sort) {
+    case undefined:
+    case 'newest':
+      return undefined
+    case 'rating':
+      return ImageOrderBy.RATEDESC
+    case 'relevance':
+      if (!options.search?.trim()) throw new Error('--sort relevance needs --search')
+      return ImageOrderBy.RELEVANCE
+    case 'distance':
+      if (options.near === undefined) throw new Error('--sort distance needs --near')
+      return ImageOrderBy.DISTANCE
+    default:
+      throw new Error(`--sort must be one of: ${PHOTO_SORTS.join(', ')}`)
   }
 }
 
@@ -160,6 +211,11 @@ function serializePhoto(photo: Photo) {
     cameraModel: photo.cameraModel ?? null,
     rotation: photo.rotation,
     rate: photo.rate ?? null,
+    permission: photo.permission,
+    latitude: photo.latitude ?? null,
+    longitude: photo.longitude ?? null,
+    city: photo.city ?? null,
+    country: photo.country ?? null,
     editedImages: photo.editedImages.map((image) => ({
       url: image.url,
       thumbnailUrl: image.thumbnailUrl ?? null,
@@ -176,6 +232,7 @@ export async function runPhotoList(
   dependencies: PhotoListDependencies = {},
 ): Promise<void> {
   const filter = createPhotoFilter(options)
+  const orderBy = photoOrderBy(options)
   const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
     'Loading photos…',
@@ -186,6 +243,7 @@ export async function runPhotoList(
         variables: {
           filter,
           pagination: { page: options.page, pageSize: options.pageSize },
+          ...(orderBy ? { orderBy } : {}),
         },
       })
     },
@@ -232,4 +290,96 @@ export function runPhotoSearch(
     )
   }
   return runPhotoList(options, dependencies)
+}
+
+export interface PhotoPermissionOptions {
+  imageIds: ReadonlyArray<string | number>
+  json?: boolean
+  /** private, protected or public. */
+  level: string
+}
+
+export interface PhotoPermissionResult {
+  id: number
+  ok: boolean
+  permission: ImagePermission | null
+  error: string | null
+}
+
+/** Parallel `updateImage` calls; small enough to stay polite to the API. */
+const PERMISSION_CONCURRENCY = 4
+
+export function photoPermission(level: string): ImagePermission {
+  if (!IMAGE_PERMISSIONS.has(level)) {
+    throw new Error(`Permission must be one of: ${[...IMAGE_PERMISSIONS].join(', ')}`)
+  }
+  return level as ImagePermission
+}
+
+/**
+ * `rawback photos permission <level> <image-ids..>` — sets each photo's
+ * standalone access. The server takes one photo per call, so the IDs are sent
+ * a few at a time; one photo failing does not stop the rest, but any failure
+ * makes the command exit nonzero.
+ */
+export async function runPhotoPermission(
+  options: PhotoPermissionOptions,
+  dependencies: PhotoListDependencies = {},
+): Promise<void> {
+  const permission = photoPermission(options.level)
+  const ids = parsePositiveIds(options.imageIds, 'Image ID')
+  if (ids.length === 0) throw new Error('Provide at least one image ID')
+  const ui = commandOutput(dependencies)
+  const results = await ui.withActivity(
+    `Setting ${String(ids.length)} photo${ids.length === 1 ? '' : 's'} to ${permission}…`,
+    async () => {
+      const client = await createCommandClient(dependencies)
+      const out: PhotoPermissionResult[] = Array.from({ length: ids.length })
+      let next = 0
+      const worker = async (): Promise<void> => {
+        while (next < ids.length) {
+          const index = next++
+          const id = ids[index] as number
+          try {
+            const result = await client.graphql.mutate({
+              mutation: CliUpdatePhotoDocument,
+              variables: { input: { id, permission } },
+            })
+            if (result.error) throw result.error
+            if (!result.data) throw new Error('The response did not include the updated photo')
+            out[index] = {
+              id,
+              ok: true,
+              permission: result.data.updateImage.permission,
+              error: null,
+            }
+          } catch (error) {
+            out[index] = {
+              id,
+              ok: false,
+              permission: null,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          }
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(PERMISSION_CONCURRENCY, ids.length) }, () => worker()),
+      )
+      return out
+    },
+    !options.json,
+  )
+
+  const failed = results.filter((result) => !result.ok).length
+  if (options.json) {
+    ui.json({ permission, results, succeeded: results.length - failed, failed })
+  } else {
+    ui.document(photoPermissionDocument(permission, results))
+  }
+  if (failed > 0) {
+    throw new Error(
+      `${String(failed)} of ${String(results.length)} photo${results.length === 1 ? '' : 's'} could not be updated`,
+    )
+  }
 }

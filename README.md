@@ -11,7 +11,9 @@ in a browser.
 - Safely resume an interrupted upload and skip exact files already uploaded.
 - Check which local photo and RAW files are already in your Rawback library.
 - Find photos by describing them — "from 2012, all images in NYC" — or by
-  metadata, capture date, rating, location, and GPS data.
+  metadata, capture date, rating, access level, place, and distance from a point.
+- Choose who can see each photo: private, any signed-in user, or public.
+- Discover public photography Spots near you and plan sunrise, sunset and golden hour there.
 - Create and curate albums, smart filters, cover images, tags, and Markdown stories.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Browse content shared with you and manage your outgoing share links.
@@ -343,6 +345,17 @@ rawback photos list \
   --captured-after 2026-01-01 \
   --captured-before 2026-02-01
 
+# Photos taken within 2 km of a point, nearest first
+rawback photos list --near 37.7749,-122.4194 --radius 2000 --sort distance
+
+# Publish photos (public also lists them in Spots), or list what you have published
+rawback photos permission public 108 109
+rawback photos list --permission public
+
+# Find public photo spots nearby and plan the light at one
+rawback spots list --near 37.7749,-122.4194 --radius 5000
+rawback spots sun 18-41928-101324 --date 2026-06-21
+
 # Upload up to eight files in parallel
 rawback photos upload --path ./photos --concurrency 8
 
@@ -388,7 +401,9 @@ and automation note. You can also ask the binary for context-specific help:
 rawback --help
 rawback photos search --help
 rawback photos list --help
+rawback photos permission --help
 rawback photos upload --help
+rawback spots --help
 rawback dream --help
 rawback config --help
 rawback album --help

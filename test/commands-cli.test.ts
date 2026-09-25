@@ -74,11 +74,72 @@ describe('new command hierarchy', () => {
       '--city',
       '--country',
       '--has-gps',
+      '--near',
+      '--radius',
+      '--sort',
+      '--permission',
       '--page-size',
       '--json',
     ]) {
       expect(result.stdout).toContain(flag)
     }
+  })
+
+  test('documents photo permission and warns what public means', () => {
+    const result = runCli('photos', 'permission', '--help')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('rawback photos permission <level> <image-ids..>')
+    expect(result.stdout).toContain('listed in Spots')
+  })
+
+  test('rejects an unknown permission level and missing IDs before authentication', () => {
+    const level = runCli('photos', 'permission', 'secret', '1')
+    expect(level.exitCode).toBe(1)
+    expect(level.stderr).toContain('Invalid values')
+    expect(level.stderr).not.toContain('Authentication credentials')
+
+    const ids = runCli('photos', 'permission', 'public')
+    expect(ids.exitCode).toBe(1)
+    expect(ids.stderr).not.toContain('Authentication credentials')
+  })
+
+  test('validates photo location options before authentication', () => {
+    const radius = runCli('photos', 'list', '--radius', '100')
+    expect(radius.exitCode).toBe(1)
+    expect(radius.stderr).toContain('--radius needs --near')
+    expect(radius.stderr).not.toContain('Authentication credentials')
+
+    const sort = runCli('photos', 'list', '--sort', 'distance')
+    expect(sort.exitCode).toBe(1)
+    expect(sort.stderr).toContain('--sort distance needs --near')
+
+    const bad = runCli('photos', 'list', '--sort', 'oldest')
+    expect(bad.exitCode).toBe(1)
+    expect(bad.stderr).toContain('Invalid values')
+  })
+
+  test('documents the spots commands', () => {
+    const group = runCli('spots', '--help')
+    expect(group.exitCode).toBe(0)
+    for (const command of ['list', 'view', 'sun']) {
+      expect(group.stdout).toContain(`rawback spots ${command}`)
+    }
+    const list = runCli('spots', 'list', '--help').stdout
+    for (const flag of ['--near', '--radius', '--featured', '--page-size', '--json']) {
+      expect(list).toContain(flag)
+    }
+    expect(runCli('spots', 'sun', '--help').stdout).toContain('--date')
+    expect(runCli('spots').stderr).toContain('Choose a spots command')
+  })
+
+  test('validates spots arguments before any request', () => {
+    const id = runCli('spots', 'view', 'not-a-spot')
+    expect(id.exitCode).toBe(1)
+    expect(id.stderr).toContain('Spot ID must look like')
+
+    const date = runCli('spots', 'sun', '18-1-1')
+    expect(date.exitCode).toBe(1)
+    expect(date.stderr).toContain('Missing required argument: date')
   })
 
   test('documents upload sessions, usage, pricing, and web', () => {
