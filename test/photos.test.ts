@@ -6,7 +6,9 @@ import { join } from 'node:path'
 import { writeCredentials } from '../src/credentials.ts'
 import {
   createPhotoFilter,
+  photoOrderBy,
   runPhotoList,
+  runPhotoPermission,
   runPhotoSearch,
   type PhotoListDependencies,
 } from '../src/photos.ts'
@@ -76,6 +78,7 @@ describe('photos list', () => {
                 cameraMake: 'Fujifilm',
                 cameraModel: 'X-T5',
                 rotation: 0,
+                permission: 'private',
                 rate: 2,
                 editedImages: [],
               },
@@ -116,7 +119,16 @@ describe('photos list', () => {
     )
 
     expect(JSON.parse(lines.join('\n'))).toMatchObject({
-      photos: [{ id: 7, thumbnailUrl: null, editedImages: [] }],
+      photos: [
+        {
+          id: 7,
+          thumbnailUrl: null,
+          editedImages: [],
+          permission: 'private',
+          latitude: null,
+          city: null,
+        },
+      ],
       pageInfo: { page: 2, totalCount: 17 },
     })
   })
@@ -144,6 +156,7 @@ describe('photos list', () => {
                   cameraMake: 'Sony',
                   cameraModel: 'A7',
                   rotation: 0,
+                  permission: 'private',
                   rate: 5,
                   editedImages: [],
                 },
@@ -209,6 +222,7 @@ describe('photos search', () => {
               cameraMake: 'Canon',
               cameraModel: 'EOS R5',
               rotation: 0,
+              permission: 'private',
               rate: 4,
               editedImages: [],
             },
@@ -309,5 +323,211 @@ describe('photos search', () => {
     expect(output).toContain('New York')
     expect(output).toContain('--ai-search-id abc123')
     expect(output).toContain('--page 2')
+  })
+})
+
+describe('photos location and access filters', () => {
+  test('maps --near, --radius, --sort and --permission onto the query', async () => {
+    const lines: string[] = []
+    const deps = await dependencies((body) => {
+      expect(body.variables).toEqual({
+        filter: {
+          rate: [3, 4, 5],
+          near: { latitude: 37.7749, longitude: -122.4194, radiusMeters: 2500 },
+          permission: ['public', 'protected'],
+        },
+        pagination: { page: 1, pageSize: 24 },
+        orderBy: 'DISTANCE',
+      })
+      return Response.json({
+        data: {
+          images: {
+            edges: [
+              {
+                id: 9,
+                filename: 'bridge.jpg',
+                url: 'https://cdn/bridge',
+                thumbnailUrl: null,
+                status: 'completed',
+                width: null,
+                height: null,
+                capturedAt: null,
+                cameraMake: null,
+                cameraModel: null,
+                rotation: 0,
+                rate: 4,
+                permission: 'public',
+                latitude: 37.77,
+                longitude: -122.42,
+                city: 'San Francisco',
+                country: 'United States',
+                editedImages: [],
+              },
+            ],
+            pageInfo: {
+              page: 1,
+              pageSize: 24,
+              totalCount: 1,
+              totalPages: 1,
+              hasNextPage: false,
+              hasPreviousPage: false,
+            },
+            aiSearch: null,
+          },
+        },
+      })
+    }, lines)
+
+    await runPhotoList(
+      {
+        json: true,
+        near: ' 37.7749 , -122.4194 ',
+        page: 1,
+        pageSize: 24,
+        permission: ['public,protected'],
+        radius: 2500,
+        sort: 'distance',
+      },
+      deps,
+    )
+    expect(JSON.parse(lines.join('\n')).photos[0]).toMatchObject({
+      id: 9,
+      permission: 'public',
+      latitude: 37.77,
+      longitude: -122.42,
+      city: 'San Francisco',
+    })
+  })
+
+  test('defaults the radius to 1000 meters', () => {
+    expect(createPhotoFilter({ near: '51.5,-0.12', page: 1, pageSize: 24 }).near).toEqual({
+      latitude: 51.5,
+      longitude: -0.12,
+      radiusMeters: 1000,
+    })
+  })
+
+  test('rejects malformed location, sort and permission input before any request', () => {
+    const base = { page: 1, pageSize: 24 }
+    expect(() => createPhotoFilter({ ...base, radius: 500 })).toThrow(/--radius needs --near/)
+    expect(() => createPhotoFilter({ ...base, near: '91,0' })).toThrow(/--near must be/)
+    expect(() => createPhotoFilter({ ...base, near: 'paris' })).toThrow(/--near must be/)
+    expect(() => createPhotoFilter({ ...base, near: '1,2,3' })).toThrow(/--near must be/)
+    expect(() => createPhotoFilter({ ...base, near: '1,2', radius: 0 })).toThrow(/--radius must/)
+    expect(() => createPhotoFilter({ ...base, near: '1,2', radius: 600_000 })).toThrow(
+      /--radius must/,
+    )
+    expect(() => createPhotoFilter({ ...base, permission: ['secret'] })).toThrow(
+      /--permission must contain only/,
+    )
+    expect(() => photoOrderBy({ ...base, sort: 'distance' })).toThrow(/needs --near/)
+    expect(() => photoOrderBy({ ...base, sort: 'relevance' })).toThrow(/needs --search/)
+    expect(() => photoOrderBy({ ...base, sort: 'oldest' })).toThrow(/--sort must be one of/)
+    expect(photoOrderBy({ ...base, sort: 'relevance', search: 'bridge' })).toBe('RELEVANCE')
+    expect(photoOrderBy({ ...base, sort: 'rating' })).toBe('RATE_DESC')
+    expect(photoOrderBy({ ...base, sort: 'newest' })).toBeUndefined()
+  })
+})
+
+describe('photos permission', () => {
+  test('updates every photo and reports each result in JSON', async () => {
+    const lines: string[] = []
+    const seen: number[] = []
+    const deps = await dependencies((body) => {
+      expect(body.operationName).toBe('CliUpdatePhoto')
+      expect(body.variables.input.permission).toBe('protected')
+      seen.push(body.variables.input.id)
+      return Response.json({
+        data: {
+          updateImage: {
+            id: body.variables.input.id,
+            filename: 'a.jpg',
+            displayName: '',
+            rate: null,
+            permission: 'protected',
+          },
+        },
+      })
+    }, lines)
+
+    await runPhotoPermission({ imageIds: ['3,4', 5, '3'], json: true, level: 'protected' }, deps)
+
+    expect(seen.toSorted()).toEqual([3, 4, 5])
+    expect(JSON.parse(lines.join('\n'))).toEqual({
+      permission: 'protected',
+      results: [
+        { id: 3, ok: true, permission: 'protected', error: null },
+        { id: 4, ok: true, permission: 'protected', error: null },
+        { id: 5, ok: true, permission: 'protected', error: null },
+      ],
+      succeeded: 3,
+      failed: 0,
+    })
+  })
+
+  test('keeps going past a failed photo and then fails the command', async () => {
+    const lines: string[] = []
+    const deps = await dependencies((body) => {
+      if (body.variables.input.id === 8) {
+        return Response.json({ errors: [{ message: 'image not found' }], data: null })
+      }
+      return Response.json({
+        data: {
+          updateImage: {
+            id: body.variables.input.id,
+            filename: 'a.jpg',
+            displayName: '',
+            rate: null,
+            permission: 'public',
+          },
+        },
+      })
+    }, lines)
+
+    await expect(
+      runPhotoPermission({ imageIds: [7, 8], json: true, level: 'public' }, deps),
+    ).rejects.toThrow('1 of 2 photos could not be updated')
+    const output = JSON.parse(lines.join('\n'))
+    expect(output).toMatchObject({ succeeded: 1, failed: 1 })
+    expect(output.results[0]).toMatchObject({ id: 7, ok: true })
+    expect(output.results[1]).toMatchObject({ id: 8, ok: false, permission: null })
+    expect(output.results[1].error).toContain('image not found')
+  })
+
+  test('prints a table and the publication notice for public photos', async () => {
+    const lines: string[] = []
+    const deps = await dependencies(
+      (body) =>
+        Response.json({
+          data: {
+            updateImage: {
+              id: body.variables.input.id,
+              filename: 'a.jpg',
+              displayName: '',
+              rate: null,
+              permission: 'public',
+            },
+          },
+        }),
+      lines,
+    )
+    await runPhotoPermission({ imageIds: [12], level: 'public' }, deps)
+    const output = lines.join('\n')
+    expect(output).toContain('12')
+    expect(output).toContain('public')
+    expect(output).toContain('appear in Spots')
+  })
+
+  test('rejects an unknown level or bad IDs before any request', async () => {
+    const lines: string[] = []
+    const deps = await dependencies(() => {
+      throw new Error('should not have made a request')
+    }, lines)
+    await expect(runPhotoPermission({ imageIds: [1], level: 'secret' }, deps)).rejects.toThrow(
+      /Permission must be one of/,
+    )
+    await expect(runPhotoPermission({ imageIds: ['x'], level: 'public' }, deps)).rejects.toThrow(
+      /Image ID/,
+    )
   })
 })

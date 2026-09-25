@@ -1,4 +1,4 @@
-import { type PhotosQuery } from '@rawback/sdk'
+import { type ImagePermission, type PhotosQuery } from '@rawback/sdk'
 
 import { formatTimestamp } from '../../ui/format.ts'
 import { type UiBlock, cell, type UiDocument } from '../../ui/model.ts'
@@ -60,6 +60,7 @@ export function photoListDocument(
           { key: 'filename', label: 'Filename', required: true, priority: 1, minWidth: 12 },
           { key: 'status', label: 'Status', priority: 2 },
           { key: 'rating', label: 'Rating', priority: 5 },
+          { key: 'access', label: 'Access', priority: 4 },
           { key: 'captured', label: 'Captured', priority: 3, minWidth: 10 },
           { key: 'camera', label: 'Camera', priority: 6, minWidth: 8 },
           { key: 'dimensions', label: 'Dimensions', priority: 4 },
@@ -72,6 +73,9 @@ export function photoListDocument(
           }),
           rating:
             photo.rate === null || photo.rate === undefined ? cell('—', { dim: true }) : photo.rate,
+          access: cell(photo.permission, {
+            tone: photo.permission === 'public' ? 'info' : 'neutral',
+          }),
           captured: formatTimestamp(photo.capturedAt).slice(0, 10),
           camera:
             [photo.cameraMake, photo.cameraModel].filter(Boolean).join(' ') ||
@@ -92,4 +96,34 @@ export function photoListDocument(
       },
     ],
   }
+}
+
+export function photoPermissionDocument(
+  permission: ImagePermission,
+  results: ReadonlyArray<{ id: number; ok: boolean; error: string | null }>,
+): UiDocument {
+  const blocks: UiBlock[] = [
+    {
+      type: 'table',
+      columns: [
+        { key: 'id', label: 'ID', required: true, priority: 1 },
+        { key: 'result', label: 'Result', required: true, priority: 1, minWidth: 12 },
+      ],
+      rows: results.map((result) => ({
+        id: result.id,
+        result: result.ok
+          ? cell(permission, { tone: 'success' })
+          : cell(result.error ?? 'failed', { tone: 'error' }),
+      })),
+    },
+  ]
+  if (permission === 'public' && results.some((result) => result.ok)) {
+    blocks.push({
+      type: 'notice',
+      tone: 'info',
+      message:
+        'Public photos are visible to anyone and appear in Spots when they carry GPS coordinates.',
+    })
+  }
+  return { title: 'Photo access', blocks }
 }

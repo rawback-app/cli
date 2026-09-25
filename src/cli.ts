@@ -326,7 +326,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
     )
     .command(
       'photos',
-      'search, list and upload photos',
+      'search, list, share and upload photos',
       (command) =>
         command
           .command(
@@ -341,6 +341,19 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 .option('ai-search-id', {
                   describe:
                     "reuse a previous search's interpretation (from aiSearch.id) instead of spending another AI credit",
+                  type: 'string',
+                })
+                .option('near', {
+                  describe: 'only photos taken near "latitude,longitude", e.g. 37.7749,-122.4194',
+                  type: 'string',
+                })
+                .option('radius', {
+                  describe: 'meters around --near (default 1000, max 500000)',
+                  type: 'number',
+                })
+                .option('sort', {
+                  choices: ['newest', 'rating', 'distance'] as const,
+                  describe: 'order: distance needs --near',
                   type: 'string',
                 })
                 .option('page', {
@@ -368,6 +381,9 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   json: args.json,
                   ...(args.prompt !== undefined ? { prompt: args.prompt } : {}),
                   ...(args.aiSearchId !== undefined ? { aiSearchId: args.aiSearchId } : {}),
+                  ...(args.near !== undefined ? { near: args.near } : {}),
+                  ...(args.radius !== undefined ? { radius: args.radius } : {}),
+                  ...(args.sort !== undefined ? { sort: args.sort } : {}),
                 }),
               )
             },
@@ -455,6 +471,25 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'only include photos with GPS coordinates',
                   type: 'boolean',
                 })
+                .option('near', {
+                  describe: 'only photos taken near "latitude,longitude", e.g. 37.7749,-122.4194',
+                  type: 'string',
+                })
+                .option('radius', {
+                  describe: 'meters around --near (default 1000, max 500000)',
+                  type: 'number',
+                })
+                .option('sort', {
+                  choices: ['newest', 'rating', 'relevance', 'distance'] as const,
+                  describe: 'order: distance needs --near, relevance needs --search',
+                  type: 'string',
+                })
+                .option('permission', {
+                  array: true,
+                  describe:
+                    'filter by access: private, protected, public (repeat or comma-separate)',
+                  type: 'string',
+                })
                 .option('page', {
                   default: 1,
                   describe: 'result page',
@@ -503,6 +538,43 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   ...(args.rate !== undefined ? { rate: args.rate } : {}),
                   ...(args.city !== undefined ? { city: args.city } : {}),
                   ...(args.country !== undefined ? { country: args.country } : {}),
+                  ...(args.near !== undefined ? { near: args.near } : {}),
+                  ...(args.radius !== undefined ? { radius: args.radius } : {}),
+                  ...(args.sort !== undefined ? { sort: args.sort } : {}),
+                  ...(args.permission !== undefined ? { permission: args.permission } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'permission <level> <image-ids..>',
+            'set who can see photos: private, protected, or public',
+            (permission) =>
+              permission
+                .positional('level', {
+                  choices: ['private', 'protected', 'public'] as const,
+                  describe:
+                    'private: only you; protected: any signed-in Rawback user; public: anyone, and listed in Spots when the photo has GPS',
+                  type: 'string',
+                })
+                .positional('image-ids', {
+                  array: true,
+                  describe: 'photo IDs (space- or comma-separated)',
+                  type: 'string',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runPhotoPermission } = await import('./photos.ts')
+              await runCommand(() =>
+                runPhotoPermission({
+                  imageIds: args.imageIds ?? [],
+                  json: args.json,
+                  level: args.level ?? '',
                 }),
               )
             },
@@ -577,7 +649,137 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
-          .demandCommand(1, 'Choose a photos command: search, list, check, or upload')
+          .demandCommand(1, 'Choose a photos command: search, list, permission, check, or upload')
+          .strict(),
+      () => {},
+    )
+    .command(
+      'spots',
+      'discover public photography spots and plan the light',
+      (command) =>
+        command
+          .command(
+            'list',
+            'list public spots, optionally near a point',
+            (list) =>
+              list
+                .option('near', {
+                  describe: 'only spots near "latitude,longitude", nearest first',
+                  type: 'string',
+                })
+                .option('radius', {
+                  describe: 'meters around --near (default 1000, max 500000)',
+                  type: 'number',
+                })
+                .option('featured', {
+                  default: false,
+                  describe: 'rank by community reactions',
+                  type: 'boolean',
+                })
+                .option('page', {
+                  default: 1,
+                  describe: 'page number',
+                  type: 'number',
+                })
+                .option('page-size', {
+                  default: 24,
+                  describe: 'spots per page (1-100)',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runSpotList } = await import('./spots.ts')
+              await runCommand(() =>
+                runSpotList({
+                  featured: args.featured,
+                  json: args.json,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                  ...(args.near !== undefined ? { near: args.near } : {}),
+                  ...(args.radius !== undefined ? { radius: args.radius } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'view <id>',
+            'show a spot and the photos published there',
+            (view) =>
+              view
+                .positional('id', {
+                  describe: 'spot ID from rawback spots list, e.g. 18-206451-130118',
+                  type: 'string',
+                })
+                .option('page', {
+                  default: 1,
+                  describe: 'page of photos',
+                  type: 'number',
+                })
+                .option('page-size', {
+                  default: 24,
+                  describe: 'photos per page (1-100)',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runSpotGet } = await import('./spots.ts')
+              await runCommand(() =>
+                runSpotGet({
+                  id: args.id ?? '',
+                  json: args.json,
+                  page: args.page,
+                  pageSize: args.pageSize,
+                }),
+              )
+            },
+          )
+          .command(
+            'sun <id>',
+            "sunrise, sunset and golden hour at a spot, in the spot's time zone",
+            (sun) =>
+              sun
+                .positional('id', {
+                  describe: 'spot ID from rawback spots list',
+                  type: 'string',
+                })
+                .option('date', {
+                  demandOption: true,
+                  describe: 'local date at the spot, YYYY-MM-DD',
+                  type: 'string',
+                })
+                .option('photo-id', {
+                  describe: "use this photo's exact coordinates within the spot",
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runSpotSun } = await import('./spots.ts')
+              await runCommand(() =>
+                runSpotSun({
+                  date: args.date,
+                  id: args.id ?? '',
+                  json: args.json,
+                  ...(args.photoId !== undefined ? { photoId: args.photoId } : {}),
+                }),
+              )
+            },
+          )
+          .demandCommand(1, 'Choose a spots command: list, view, or sun')
           .strict(),
       () => {},
     )
