@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.16](https://github.com/rawback-app/cli/compare/v1.0.15...v1.0.16) (2026-09-25)
+
+
+### Features
+
+* location search, photo permission and spots commands ([#84](https://github.com/rawback-app/cli/issues/84)) ([e03b55e](https://github.com/rawback-app/cli/commit/e03b55e9fd4a583480d47d28573c4c36c91c5d20))
+
 ## [1.0.15](https://github.com/rawback-app/cli/compare/v1.0.14...v1.0.15) (2026-09-23)
 
 
