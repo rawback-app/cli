@@ -1,11 +1,11 @@
 import { createWriteStream } from 'node:fs'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { Writable } from 'node:stream'
 
 import type { ContentDataKind, ContentType, ContentsOrder } from '@rawback/ccapi-js'
 
-import { CameraError } from './camera-errors.ts'
+import { isDirectory, refuseOverwrite } from './camera-files.ts'
 import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
 import {
   withCameraSession,
@@ -186,9 +186,7 @@ export async function runCameraContentsGet(
     ? join(options.output, locator.file)
     : options.output
 
-  if (options.overwrite !== true && (await exists(target))) {
-    throw new CameraError(`${target} already exists; pass --overwrite to replace it.`)
-  }
+  await refuseOverwrite(target, options.overwrite)
 
   await withCameraSession(options, dependencies, async (session) => {
     // Streamed rather than buffered: a RAW file is tens of megabytes.
@@ -246,21 +244,4 @@ export async function runCameraContentsDelete(
     }
     ui.success(`Deleted ${locator.file}.`)
   })
-}
-
-async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
 }

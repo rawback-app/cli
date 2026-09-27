@@ -108,12 +108,7 @@ export async function runCameraApi(
   }
 
   await withCameraSession(options, dependencies, async (session) => {
-    if (entry.suffix !== undefined && !session.supports(entry.suffix)) {
-      throw new CameraError(
-        `This camera does not advertise "${entry.suffix}", which ${entry.id} needs. ` +
-          'Run rawback camera api --list to see what it supports.',
-      )
-    }
+    if (entry.suffix !== undefined) session.requireSupport(entry.suffix, entry.id)
 
     const started = Date.now()
     const result = await entry.run(session, args)

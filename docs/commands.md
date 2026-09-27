@@ -293,15 +293,46 @@ never replaced without `--overwrite`. `--all` streams every page instead of one;
 
 ```bash
 rawback camera liveview start [--size <off|small|medium>] [--display <on|keep|off>] [--force] [--json]
-rawback camera liveview frame <output> [--json]
+rawback camera liveview frame <output> [--detail] [--json]
 rawback camera liveview stream --output-dir <dir> [--frames <n>] [--duration <s>] [--json]
 rawback camera liveview stop [--json]
 ```
 
+`frame --detail` also reads the frame's incidental information: the AF frames,
+the electronic level (posture, roll and pitch), the zoom rectangle, and the
+YRGB histogram. The terminal shows a summary; `--json` carries all of it under
+`detail`.
+
 `stream` runs until Ctrl-C, `--frames`, or `--duration`, writing numbered JPEGs.
-`--output-dir -` writes raw JPEG bytes to stdout instead and cannot be combined
-with `--json`. `stop` releases every live-view resource and is safe to run when
-the camera is already idle — it is the recovery command after a killed stream.
+A body that serves no multipart stream is read over the chunked `scroll` stream
+instead. `--output-dir -` writes raw JPEG bytes to stdout instead and cannot be
+combined with `--json`. `stop` releases every live-view resource and is safe to
+run when the camera is already idle — it is the recovery command after a killed
+stream.
+
+### `camera rtp`
+
+```bash
+rawback camera rtp start --ip <address> [--force] [--json]
+rawback camera rtp status [--json]
+rawback camera rtp sdp <output> [--overwrite] [--json]
+rawback camera rtp stop [--json]
+```
+
+The camera pushes live view over RTP to `--ip` rather than serving it. `sdp`
+saves the session description a player needs to receive it, for example
+`ffplay -protocol_whitelist file,udp,rtp live.sdp`. `start` confirms first
+unless `--force`; `stop` does not, since it only frees the camera.
+
+### `camera cert`
+
+```bash
+rawback camera cert <output> [--overwrite] [--json]
+```
+
+Saves the camera's root TLS certificate, PEM or DER as the camera serves it,
+and prints the `openssl` command that shows its SHA-256 fingerprint. Compare
+that with the camera's menu before deciding to connect with `--insecure`.
 
 ### `camera events`
 
@@ -338,7 +369,8 @@ it does not know. Object-valued settings take objects —
 `--describe` shows (`sharpnessStrength`, not `sharpness_strength`).
 
 Binary endpoints are not in this catalogue; use `camera contents get`,
-`camera liveview frame`, and `camera liveview stream` instead.
+`camera liveview frame`, `camera liveview stream`, `camera rtp sdp`, and
+`camera cert` instead.
 
 ### `camera interactive`
 

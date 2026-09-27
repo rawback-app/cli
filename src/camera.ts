@@ -2,6 +2,7 @@ import type { ConnectionSnapshot } from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
 import { createCameraFetch } from './camera-fetch.ts'
+import { refuseOverwrite, saveBytes } from './camera-files.ts'
 import {
   buildDiscoveryCache,
   cameraStore,
@@ -290,6 +291,46 @@ export async function runCameraInfo(
     }
     ui.document(cameraInfoDocument({ snapshot, dateTime }))
   })
+}
+
+export interface CameraCertOptions extends CameraTargetOptions {
+  output: string
+  overwrite?: boolean
+}
+
+/**
+ * Saves the camera's root CA certificate (doc 4.5.23), so its fingerprint can
+ * be checked against the camera's menu instead of trusting it blind with
+ * `--insecure`.
+ */
+export async function runCameraCert(
+  options: CameraCertOptions,
+  dependencies: CameraCommandDependencies = {},
+): Promise<void> {
+  const ui = commandOutput(dependencies)
+  await refuseOverwrite(options.output, options.overwrite)
+
+  await withCameraSession(options, dependencies, async (session) => {
+    session.requireSupport('functions/ssl/cacert', 'rawback camera cert')
+    const certificate = await session.client.network.getRootCertificate()
+    await saveBytes(options.output, certificate.data)
+    const format = isPem(certificate.data) ? 'pem' : 'der'
+
+    if (options.json === true) {
+      ui.json({ output: options.output, bytes: certificate.data.byteLength, format })
+      return
+    }
+    ui.success(
+      `Saved the camera's root certificate (${format.toUpperCase()}, ${certificate.data.byteLength} bytes) to ${options.output}.`,
+    )
+    ui.info(
+      `Check its fingerprint with: openssl x509 -in ${options.output}${format === 'der' ? ' -inform der' : ''} -noout -fingerprint -sha256`,
+    )
+  })
+}
+
+function isPem(data: Uint8Array): boolean {
+  return new TextDecoder().decode(data.subarray(0, 64)).trimStart().startsWith('-----BEGIN')
 }
 
 /**

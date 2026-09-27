@@ -11,8 +11,9 @@
 // lists all nine namespaces (the reference lists six, so the rest sorted first).
 //
 // Binary and streaming endpoints are deliberately absent: they belong to the
-// first-class commands (`contents get`, `liveview frame`, `liveview stream`),
-// which can write to a file. This catalogue is a JSON inspector.
+// first-class commands (`contents get`, `liveview frame`, `liveview stream`,
+// `rtp sdp`, `cert`), which can write to a file. This catalogue is a JSON
+// inspector.
 
 import { PICTURE_STYLES } from '@rawback/ccapi-js'
 import type {

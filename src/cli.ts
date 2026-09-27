@@ -1,3 +1,5 @@
+import { isIP } from 'node:net'
+
 import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
@@ -2737,6 +2739,12 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'directory for streamed frames, or - for stdout',
                   type: 'string',
                 })
+                .option('detail', {
+                  default: false,
+                  describe:
+                    'with frame: also read AF frames, histogram, level and zoom from the camera',
+                  type: 'boolean',
+                })
                 .option('frames', { describe: 'stop after this many frames', type: 'number' })
                 .option('duration', { describe: 'stop after this many seconds', type: 'number' })
                 .option('force', {
@@ -2753,6 +2761,9 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   checkCameraTarget(args)
                   if (args.action === 'frame' && args.output === undefined) {
                     throw new Error('rawback camera liveview frame requires an output file')
+                  }
+                  if (args.detail && args.action !== 'frame') {
+                    throw new Error('--detail applies only to rawback camera liveview frame')
                   }
                   if (args.action === 'stream') {
                     if (args.outputDir === undefined) {
@@ -2784,6 +2795,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     liveview.runCameraLiveviewFrame({
                       ...target,
                       output: args.output as string,
+                      detail: args.detail,
                     }),
                   )
                   return
@@ -2884,6 +2896,121 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                       ...(args.timeoutKind !== undefined ? { timeoutKind: args.timeoutKind } : {}),
                     }),
                   )
+              }
+            },
+          )
+          .command(
+            'cert <output>',
+            "save the camera's root TLS certificate",
+            (cert) =>
+              cameraTargetOptions(cert)
+                .positional('output', {
+                  coerce: expandHomePath,
+                  describe: 'destination file',
+                  type: 'string',
+                })
+                .option('overwrite', {
+                  default: false,
+                  describe: 'replace an existing destination file',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraCert } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraCert({
+                    ...cameraTargetArgs(args),
+                    output: args.output as string,
+                    overwrite: args.overwrite,
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'rtp <action> [output]',
+            'stream live view over RTP and save its session description',
+            (rtp) =>
+              cameraTargetOptions(rtp)
+                .positional('action', {
+                  choices: ['start', 'stop', 'status', 'sdp'] as const,
+                  describe: 'RTP action',
+                  type: 'string',
+                })
+                .positional('output', {
+                  coerce: expandHomePath,
+                  describe: 'destination .sdp file, for sdp',
+                  type: 'string',
+                })
+                .option('ip', {
+                  describe: 'address the camera streams to, for start',
+                  type: 'string',
+                })
+                .option('overwrite', {
+                  default: false,
+                  describe: 'replace an existing destination file',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'start without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'start') {
+                    if (args.ip === undefined || isIP(args.ip) === 0) {
+                      throw new Error('rawback camera rtp start requires --ip <address>')
+                    }
+                    return checkMutatingIsNonInteractive(args, 'rawback camera rtp start')
+                  }
+                  if (args.action === 'sdp' && args.output === undefined) {
+                    throw new Error('rawback camera rtp sdp requires an output file')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const rtp = await import('./camera-rtp.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'start':
+                  await runCommand(
+                    () =>
+                      rtp.runCameraRtpStart({
+                        ...target,
+                        ip: args.ip as string,
+                        force: args.force,
+                      }),
+                    'RTP cancelled.',
+                  )
+                  return
+                case 'stop':
+                  await runCommand(() => rtp.runCameraRtpStop(target))
+                  return
+                case 'sdp':
+                  await runCommand(() =>
+                    rtp.runCameraRtpSdp({
+                      ...target,
+                      output: args.output as string,
+                      overwrite: args.overwrite,
+                    }),
+                  )
+                  return
+                default:
+                  await runCommand(() => rtp.runCameraRtpStatus(target))
               }
             },
           )

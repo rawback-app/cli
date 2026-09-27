@@ -1,4 +1,4 @@
-import type { ConnectionSnapshot } from '@rawback/ccapi-js'
+import type { AngleInformation, ConnectionSnapshot, LiveViewIncidental } from '@rawback/ccapi-js'
 
 import { formatBytes } from '../../ui/format.ts'
 import { cell, statusCell, type UiDocument, type UiField } from '../../ui/model.ts'
@@ -497,6 +497,84 @@ export function pathListDocument(
       },
     ],
   }
+}
+
+export interface RtpStatusView {
+  status?: string | undefined
+  ipaddress?: string | undefined
+}
+
+export function rtpStatusDocument(view: RtpStatusView): UiDocument {
+  return {
+    title: 'RTP live view',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          {
+            label: 'Status',
+            value:
+              view.status === undefined
+                ? DASH
+                : cell(view.status === 'start' ? 'streaming' : 'stopped', {
+                    tone: view.status === 'start' ? 'success' : 'neutral',
+                  }),
+          },
+          { label: 'Destination', value: view.ipaddress ?? DASH },
+        ],
+      },
+    ],
+  }
+}
+
+export interface LiveViewDetailView {
+  output: string
+  bytes: number
+  detail: LiveViewIncidental | undefined
+}
+
+export function liveviewDetailDocument(view: LiveViewDetailView): UiDocument {
+  const detail = view.detail
+  const magnification = detail?.zoom?.magnification
+  return {
+    title: 'Live-view frame',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Saved', value: `${view.output} (${formatBytes(view.bytes)})` },
+          {
+            label: 'AF frames',
+            value: detail?.afFrames !== undefined ? String(detail.afFrames.length) : DASH,
+          },
+          {
+            label: 'Level',
+            value: detail?.angleInformation ? levelText(detail.angleInformation) : DASH,
+          },
+          { label: 'Zoom', value: magnification !== undefined ? `${magnification}×` : DASH },
+        ],
+      },
+      {
+        type: 'text',
+        text: 'The histogram, AF frame positions and image rectangles are in --json.',
+        dim: true,
+      },
+    ],
+  }
+}
+
+/** Posture codes from the incidental-information reference (doc ch. 5 §5.2). */
+const POSTURES = ['horizontal', 'grip up', 'grip down', 'undetermined', 'upside down']
+
+/** `rolling`/`pitching` arrive in hundredths of a degree. */
+function levelText(angle: AngleInformation): string {
+  const parts: string[] = []
+  if (angle.cameraPosture !== undefined) {
+    parts.push(POSTURES[angle.cameraPosture] ?? `posture ${angle.cameraPosture}`)
+  }
+  if (angle.rolling !== undefined) parts.push(`roll ${(angle.rolling / 100).toFixed(1)}°`)
+  if (angle.pitching !== undefined) parts.push(`pitch ${(angle.pitching / 100).toFixed(1)}°`)
+  return parts.length > 0 ? parts.join(', ') : '—'
 }
 
 function formatSeconds(seconds: number): string {

@@ -210,6 +210,18 @@ export class CameraSession {
     return this.#suffixes.has(normalizeSuffix(suffix))
   }
 
+  /**
+   * Refuses, before any request, an endpoint the camera does not advertise —
+   * the message `camera api` gives, rather than a bare 404 from the body.
+   */
+  requireSupport(suffix: string, what: string): void {
+    if (this.supports(suffix)) return
+    throw new CameraError(
+      `This camera does not advertise "${suffix}", which ${what} needs. ` +
+        'Run rawback camera api --list to see what it supports.',
+    )
+  }
+
   /** Registers a camera-side release to run during teardown. */
   register(cleanup: () => Promise<void>): void {
     this.#cleanups.push(cleanup)

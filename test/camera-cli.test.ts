@@ -66,7 +66,16 @@ describe('rawback camera help', () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
-    for (const subcommand of ['connect', 'list', 'use', 'forget', 'info', 'status']) {
+    for (const subcommand of [
+      'connect',
+      'list',
+      'use',
+      'forget',
+      'info',
+      'status',
+      'cert',
+      'rtp',
+    ]) {
       expect(result.stdout).toContain(subcommand)
     }
   })
@@ -77,6 +86,9 @@ describe('rawback camera help', () => {
     ['status', ['--camera', '--insecure', '--timeout', '--refresh', '--json']],
     ['list', ['--json']],
     ['forget', ['--force', '--json']],
+    ['cert', ['--overwrite', '--camera', '--json']],
+    ['rtp', ['--ip', '--overwrite', '--force', '--json']],
+    ['liveview', ['--detail', '--frames', '--output-dir']],
   ])('camera %s --help documents its options', async (subcommand, flags) => {
     const result = await runCli('camera', subcommand, '--help')
 
@@ -120,6 +132,38 @@ describe('camera validation happens before any connection', () => {
       /takes a URL or --camera, not both/,
     ],
     [['camera', 'contents', 'list', 'card1', '100CANON', '--order', 'desc'], /--order needs --all/],
+    [['camera', 'rtp', 'start', '--camera', 'http://127.0.0.1:1'], /requires --ip <address>/],
+    [
+      ['camera', 'rtp', 'start', '--ip', 'not-an-ip', '--camera', 'http://127.0.0.1:1'],
+      /requires --ip <address>/,
+    ],
+    [
+      [
+        'camera',
+        'rtp',
+        'start',
+        '--ip',
+        '192.168.0.10',
+        '--json',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--json also needs --force/,
+    ],
+    [['camera', 'rtp', 'sdp', '--camera', 'http://127.0.0.1:1'], /requires an output file/],
+    [
+      [
+        'camera',
+        'liveview',
+        'stream',
+        '--output-dir',
+        'x',
+        '--detail',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--detail applies only to rawback camera liveview frame/,
+    ],
   ])('rejects %p without connecting', async (args, pattern) => {
     const result = await runCli(...args)
 
