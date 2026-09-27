@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { runCameraApi } from '../src/camera-api.ts'
 import {
   parseContentLocator,
   runCameraContentsDelete,
@@ -63,10 +64,13 @@ function saved(version = 'ver140'): StoredCamera {
 }
 
 describe('parseContentLocator', () => {
-  test('reads a ver140 locator with a folder segment', () => {
-    expect(
-      parseContentLocator('/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG'),
-    ).toEqual({ storage: 'card1', folder: 'folder', directory: '100CANON', file: 'IMG_0042.JPG' })
+  test('reads the camera’s own folder from a ver140 locator', () => {
+    expect(parseContentLocator('/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG')).toEqual({
+      storage: 'card1',
+      folder: 'DCIM',
+      directory: '100CANON',
+      file: 'IMG_0042.JPG',
+    })
   })
 
   test('reads an older locator without one', () => {
@@ -109,21 +113,79 @@ describe('camera contents', () => {
     expect(output.json()).toEqual({ storages: ['/ccapi/ver140/contents/card1'] })
   })
 
-  test('a ver140 listing sends the folder segment', async () => {
+  /** A ver140 card: directories under DCIM, movie reels beside them. */
+  const R6_MARK_III_DIRECTORIES = {
+    path: [
+      '/ccapi/ver140/contents/card1/XFVC/100CANON',
+      '/ccapi/ver140/contents/card1/DCIM/100CANON',
+      '/ccapi/ver140/contents/card1/DCIM/101CANON',
+    ],
+  }
+
+  test.each(['100CANON', 'DCIM/100CANON', '/ccapi/ver140/contents/card1/DCIM/100CANON'])(
+    'a ver140 listing of %p goes through the DCIM folder',
+    async (directory) => {
+      const { store } = await temporaryStore()
+      await store.upsert(saved('ver140'), { makeDefault: true })
+      const camera = fakeCamera({
+        apiVersion: 'ver140',
+        paths: { 'ccapi/ver140/contents/card1': R6_MARK_III_DIRECTORIES },
+      })
+      const output = capture()
+
+      await runCameraContentsList(
+        { storage: 'card1', directory, json: true },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      )
+
+      const listings = camera.requests
+        .map((request) => request.url)
+        .filter((url) => url.includes('100CANON'))
+      expect(listings.map((url) => new URL(url).pathname)).toEqual([
+        '/ccapi/ver140/contents/card1/DCIM/100CANON',
+        '/ccapi/ver140/contents/card1/DCIM/100CANON',
+      ])
+      // Listed first, then counted — never both at once.
+      expect(new URL(listings[0] ?? '').searchParams.get('kind')).toBeNull()
+      expect(new URL(listings[1] ?? '').searchParams.get('kind')).toBe('number')
+    },
+  )
+
+  test('refuses a directory locator on another card instead of following it', async () => {
     const { store } = await temporaryStore()
     await store.upsert(saved('ver140'), { makeDefault: true })
     const camera = fakeCamera({ apiVersion: 'ver140' })
     const output = capture()
 
-    await runCameraContentsList(
-      { storage: 'card1', directory: '100CANON', json: true },
-      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
-    )
+    await expect(
+      runCameraApi(
+        {
+          id: 'contents.deleteDirectory',
+          arg: ['storage=card1', 'directory=/ccapi/ver140/contents/card2/DCIM/100CANON'],
+          force: true,
+          json: true,
+        },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      ),
+    ).rejects.toThrow(/is on card2, not card1/)
+    expect(camera.requests.some((request) => request.method === 'DELETE')).toBe(false)
+  })
 
-    // ver140 inserts `folder` as a path segment: contents/<storage>/folder/<directory>
-    expect(
-      camera.requests.some((request) => request.path.includes('contents/card1/folder/100CANON')),
-    ).toBe(true)
+  test('reports a failed directory lookup instead of listing without the folder', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved('ver140'), { makeDefault: true })
+    // The storage listing fails; a folderless `contents/card1/100CANON` would
+    // only 404 for an unrelated reason and hide this one.
+    const camera = fakeCamera({ apiVersion: 'ver140', missing: ['contents/card1'] })
+    const output = capture()
+
+    await expect(
+      runCameraContentsList(
+        { storage: 'card1', directory: '100CANON', json: true },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      ),
+    ).rejects.toThrow()
+    expect(camera.requests.some((request) => request.path.includes('100CANON'))).toBe(false)
   })
 
   test('an older camera omits it', async () => {
@@ -198,7 +260,7 @@ describe('camera contents', () => {
 
     await runCameraContentsGet(
       {
-        locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG',
+        locator: '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG',
         output: target,
         json: true,
       },
@@ -221,7 +283,7 @@ describe('camera contents', () => {
     await expect(
       runCameraContentsGet(
         {
-          locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG',
+          locator: '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG',
           output: target,
           json: true,
         },
@@ -252,7 +314,7 @@ describe('camera contents', () => {
 
     await runCameraContentsGet(
       {
-        locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG',
+        locator: '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG',
         output: directory,
         json: true,
       },
@@ -269,7 +331,7 @@ describe('camera contents', () => {
     const output = capture()
 
     await runCameraContentsDelete(
-      { locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG', json: true },
+      { locator: '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG', json: true },
       {
         store,
         processEnv: {},
@@ -291,7 +353,7 @@ describe('camera contents', () => {
 
     await runCameraContentsDelete(
       {
-        locator: '/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG',
+        locator: '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG',
         force: true,
         json: true,
       },
@@ -300,6 +362,6 @@ describe('camera contents', () => {
 
     expect(output.json().deleted).toBe(true)
     const request = camera.requests.find((entry) => entry.method === 'DELETE')
-    expect(request?.path).toContain('card1/folder/100CANON/IMG_0042.JPG')
+    expect(request?.path).toContain('card1/DCIM/100CANON/IMG_0042.JPG')
   })
 })

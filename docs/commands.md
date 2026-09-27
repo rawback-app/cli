@@ -274,8 +274,11 @@ rawback camera contents delete <locator> [--force] [--json]
 ```
 
 A **locator** is the string the camera returns from `contents list`; pass it back
-verbatim. Newer bodies insert an extra path segment, which the CLI handles for
-you.
+verbatim. Bodies on CCAPI 1.4 (the EOS R6 Mark III, R5 Mark II, R1, …) file every
+directory under a folder — `DCIM` for stills, `XFVC`/`CRM` for movie reels — which
+`contents dirs` prints as part of each path. `list` takes the directory as a bare
+name (`100CANON`, looked up on the card and preferring `DCIM`), as
+`DCIM/100CANON`, or as a locator printed by `dirs`.
 
 `get` streams to disk rather than buffering, so a RAW file costs no memory. Point
 `--output` at a directory to keep the camera's own filename. An existing file is
@@ -303,6 +306,8 @@ rawback camera events watch [--count <n>] [--duration <s>] [--json]
 rawback camera events clear [--force] [--json]
 ```
 
+`poll --wait` holds the request until something changes, in the style the
+camera's CCAPI version takes (`timeout=long` from 1.1, `continue=on` on 1.0).
 `watch` streams changes until Ctrl-C, `--count`, or `--duration`. Every event
 carries `changedKeys`, which lists every key the camera reported, including ones
 the client does not model.

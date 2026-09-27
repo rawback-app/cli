@@ -428,31 +428,6 @@ describe('withCameraSession', () => {
     expect(camera.requested('shooting/liveview/multipart')).toBe(true)
   })
 
-  test('folderSegment tracks the ver140 contents path quirk', async () => {
-    for (const [version, expected] of [
-      ['ver140', 'folder'],
-      ['ver130', undefined],
-    ] as const) {
-      const { store } = await savedCamera({
-        id: `192.168.0.1:8080`,
-        discovery: {
-          apiVersion: version,
-          cachedAt: new Date().toISOString(),
-          supportedAPIs: supportedAPIs(version),
-        },
-      })
-      const camera = fakeCamera({ apiVersion: version })
-
-      const segment = await withCameraSession(
-        {},
-        { store, processEnv: {}, fetch: camera.fetch, ...silent() },
-        async (session) => session.folderSegment,
-      )
-
-      expect(segment).toBe(expected)
-    }
-  })
-
   test('supports() answers from the discovery map', async () => {
     const { store } = await savedCamera({
       discovery: {

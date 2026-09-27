@@ -3,7 +3,11 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { runCameraEventsClear, runCameraEventsWatch } from '../src/camera-events.ts'
+import {
+  runCameraEventsClear,
+  runCameraEventsPoll,
+  runCameraEventsWatch,
+} from '../src/camera-events.ts'
 import { runCameraLiveviewStop, runCameraLiveviewStream } from '../src/camera-liveview.ts'
 import { cameraId, type StoredCamera } from '../src/camera-store.ts'
 import {
@@ -227,6 +231,36 @@ describe('events watch', () => {
 
     const first = JSON.parse(output.lines()[0] as string) as { changedKeys: string[] }
     expect(first.changedKeys).toEqual(['somethingnobodymodels'])
+  })
+})
+
+describe('events poll', () => {
+  test.each([
+    ['ver110', '?timeout=long'],
+    ['ver100', '?continue=on'],
+  ])('--wait on a %s event endpoint holds with %s', async (version, query) => {
+    const { store } = await temporaryStore()
+    await store.upsert(
+      {
+        ...saved(),
+        discovery: {
+          apiVersion: version,
+          cachedAt: new Date().toISOString(),
+          supportedAPIs: supportedAPIs(version),
+        },
+      },
+      { makeDefault: true },
+    )
+    const camera = fakeCamera({ apiVersion: version })
+    const output = capture()
+
+    await runCameraEventsPoll(
+      { wait: true, json: true },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    const poll = camera.requests.find((request) => request.path.endsWith('event/polling'))
+    expect(new URL(poll?.url ?? '').search).toBe(query)
   })
 })
 
