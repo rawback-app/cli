@@ -2639,6 +2639,11 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   if (!Number.isSafeInteger(args.page) || args.page < 1) {
                     throw new Error('--page must be a positive whole number')
                   }
+                  if (args.order !== undefined && args.all !== true) {
+                    throw new Error(
+                      '--order needs --all: the camera orders only a streamed listing',
+                    )
+                  }
                   if (args.action === 'delete') {
                     return checkMutatingIsNonInteractive(args, 'rawback camera contents delete')
                   }

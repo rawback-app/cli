@@ -267,7 +267,7 @@ rather than `0`. `set` writes the value and reads back what the camera accepted.
 ```bash
 rawback camera contents storages [--json]
 rawback camera contents dirs <storage> [--json]
-rawback camera contents list <storage> <directory> [--type <t>] [--order <asc|desc>] [--page <n>] [--all] [--json]
+rawback camera contents list <storage> <directory> [--type <t>] [--page <n> | --all [--order <asc|desc>]] [--json]
 rawback camera contents info <locator> [--json]
 rawback camera contents get <locator> --output <path> [--kind <main|thumbnail|display|embedded>] [--overwrite] [--json]
 rawback camera contents delete <locator> [--force] [--json]
@@ -282,7 +282,8 @@ name (`100CANON`, looked up on the card and preferring `DCIM`), as
 
 `get` streams to disk rather than buffering, so a RAW file costs no memory. Point
 `--output` at a directory to keep the camera's own filename. An existing file is
-never replaced without `--overwrite`. `--all` streams every page instead of one.
+never replaced without `--overwrite`. `--all` streams every page instead of one;
+`--order` applies only to `--all`, because the camera rejects it on a single page.
 
 ### `camera liveview`
 

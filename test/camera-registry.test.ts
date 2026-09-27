@@ -425,6 +425,63 @@ describe('camera api runner', () => {
     expect(camera.requests).toEqual([])
   })
 
+  test('writes GPS given as rational objects under the gps key', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera()
+    const output = capture()
+    const gps = {
+      latitude_ref: 'N',
+      latitude: { degree: [35, 1], minute: [39, 1], second: [2940, 100] },
+      longitude_ref: 'E',
+      longitude: { degree: [139, 1], minute: [44, 1], second: [3000, 100] },
+      altitude_ref: 'P',
+      altitude: [40, 1],
+      timestamp: { hour: [9, 1], minute: [0, 1], second: [0, 1] },
+      mapdatum: 'WGS-84',
+      status: 'A',
+      datestamp: '2026:08:04',
+    }
+
+    await runCameraApi(
+      {
+        id: 'contents.setContentGPS',
+        arg: [
+          'locator=/ccapi/ver140/contents/card1/100CANON/IMG_1.JPG',
+          `gps=${JSON.stringify(gps)}`,
+        ],
+        force: true,
+        json: true,
+      },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    const put = camera.requests.find((request) => request.method === 'PUT')
+    expect(JSON.parse(put?.body ?? '{}')).toEqual({ action: 'gps', gps })
+  })
+
+  test('rejects a GPS block with a malformed rational', () => {
+    const entry = byId('contents.setContentGPS')
+    const session = { client: { contents: { setContentGPS: async () => undefined } } }
+    expect(() =>
+      entry.run(session as never, {
+        locator: 'card1/100CANON/IMG_1.JPG',
+        gps: {
+          latitude_ref: 'N',
+          latitude: { degree: [35, 1] },
+          longitude_ref: 'E',
+          longitude: [139, 1, 0, 1, 0, 1],
+          altitude_ref: 'P',
+          altitude: [0, 1],
+          timestamp: [0, 1, 0, 1, 0, 1],
+          mapdatum: 'WGS-84',
+          status: 'A',
+          datestamp: '2026:08:04',
+        },
+      }),
+    ).toThrow(/gps\.latitude must be \{ degree, minute, second \}/)
+  })
+
   test('an unreliable endpoint warns on stderr before running', async () => {
     const { store } = await temporaryStore()
     await store.upsert(saved(), { makeDefault: true })

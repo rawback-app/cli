@@ -81,8 +81,11 @@ function multipartBody(count: number): { body: Uint8Array; contentType: string }
   }
 }
 
-/** A Chapter-5 binary unit: 0xFF 0x00, type, 4-byte big-endian size, payload, 0xFF 0xFF. */
-function binaryUnit(payload: string, type = 0): number[] {
+/**
+ * A Chapter-5 binary unit: 0xFF 0x00, type, 4-byte big-endian size, payload,
+ * 0xFF 0xFF. Monitoring events arrive as type 0x02; the client skips the rest.
+ */
+function binaryUnit(payload: string, type = 0x02): number[] {
   const bytes = [...new TextEncoder().encode(payload)]
   const size = bytes.length
   return [

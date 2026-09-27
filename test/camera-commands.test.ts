@@ -292,7 +292,7 @@ describe('camera status', () => {
         'devicestatus/temperature': { status: 'normal' },
         'devicestatus/currentstorage': { name: 'card1', path: '/x' },
         'devicestatus/currentdirectory': { name: '100CANON', path: '/x/100CANON' },
-        'shooting/information/recordable': { stillimage: 1832, movieduration: 4210 },
+        'shooting/information/recordable': { recordableshots: 1832, remainingtime: 4210 },
       },
     })
     const output = capture()

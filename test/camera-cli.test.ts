@@ -119,6 +119,7 @@ describe('camera validation happens before any connection', () => {
       ['camera', 'connect', 'http://127.0.0.1:1', '--camera', 'http://127.0.0.1:2'],
       /takes a URL or --camera, not both/,
     ],
+    [['camera', 'contents', 'list', 'card1', '100CANON', '--order', 'desc'], /--order needs --all/],
   ])('rejects %p without connecting', async (args, pattern) => {
     const result = await runCli(...args)
 

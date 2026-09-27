@@ -112,6 +112,18 @@ function argRecord(args: Args, key: string): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((part) => typeof part === 'number')
+}
+
+/** A flat six-number array, or an object whose `members` are each `[N, D]`. */
+function isRational(value: unknown, members: readonly string[]): boolean {
+  if (isNumberArray(value)) return true
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return members.every((member) => isNumberArray(record[member]))
+}
+
 /**
  * The camera requires the full EXIF GPS block (doc 4.7.6) — a partial object is
  * rejected server-side, so it is checked here where the message can name the
@@ -127,18 +139,26 @@ function argGPSInfo(args: Args, key: string): GPSInfo {
     'status',
     'datestamp',
   ] as const
-  const rationals = ['latitude', 'longitude', 'altitude', 'timestamp'] as const
 
   for (const field of strings) {
     if (typeof record[field] !== 'string') {
       throw new CameraError(`${key}.${field} must be a string`)
     }
   }
-  for (const field of rationals) {
-    const value = record[field]
-    if (!Array.isArray(value) || value.some((part) => typeof part !== 'number')) {
-      throw new CameraError(`${key}.${field} must be an array of numbers`)
+  for (const field of ['latitude', 'longitude'] as const) {
+    if (!isRational(record[field], ['degree', 'minute', 'second'])) {
+      throw new CameraError(
+        `${key}.${field} must be { degree, minute, second } rationals or an array of numbers`,
+      )
     }
+  }
+  if (!isRational(record.timestamp, ['hour', 'minute', 'second'])) {
+    throw new CameraError(
+      `${key}.timestamp must be { hour, minute, second } rationals or an array of numbers`,
+    )
+  }
+  if (!isNumberArray(record.altitude)) {
+    throw new CameraError(`${key}.altitude must be an array of numbers`)
   }
   return record as unknown as GPSInfo
 }
@@ -844,7 +864,13 @@ export const REGISTRY: readonly ApiEntry[] = [
     'contents.setContentGPS',
     '4.7.6',
     'PUT',
-    [LOCATOR, JSON_PARAM('gps', '{ "latitude": 35.6, "longitude": 139.7 }')],
+    [
+      LOCATOR,
+      JSON_PARAM(
+        'gps',
+        '{ "latitude_ref": "N", "latitude": { "degree": [35,1], "minute": [39,1], "second": [2940,100] }, … }',
+      ),
+    ],
     (s, a) => s.client.contents.setContentGPS(locatorOf(a), argGPSInfo(a, 'gps')),
     { mutates: true },
   ),
@@ -1366,7 +1392,7 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.liveview.deleteScrollDetail(),
     { mutates: true },
   ),
-  api('liveview.getRTP', '4.11.8', 'GET', [], (s) => s.client.liveview.getRTP()),
+  api('liveview.getRTPStatus', '4.11.8', 'GET', [], (s) => s.client.liveview.getRTPStatus()),
   api(
     'liveview.setRTP',
     '4.11.8',
@@ -1400,8 +1426,8 @@ export const REGISTRY: readonly ApiEntry[] = [
     'liveview.requestAngleInformation',
     '4.11.9',
     'POST',
-    [],
-    (s) => s.client.liveview.requestAngleInformation(),
+    [ENUM('action', ['start', 'stop'])],
+    (s, a) => s.client.liveview.requestAngleInformation(argEnum(a, 'action', ['start', 'stop'])),
     { mutates: true },
   ),
 
