@@ -217,6 +217,38 @@ function argPictureStyleParameters(args: Args, key: string): PictureStyleParamet
   return record as PictureStyleParameters
 }
 
+/**
+ * The network setting objects (doc 4.5.14–4.5.34) are flat records of strings,
+ * with a few string-array members (`commsetting`, `functionsetting`).
+ */
+function argSettingObject(args: Args, key: string): Record<string, string | string[]> {
+  const record = argRecord(args, key)
+  for (const [name, value] of Object.entries(record)) {
+    const valid =
+      typeof value === 'string' ||
+      (Array.isArray(value) && value.every((part) => typeof part === 'string'))
+    if (!valid) throw new CameraError(`${key}.${name} must be a string or an array of strings`)
+  }
+  return record as Record<string, string | string[]>
+}
+
+/** A JSON object whose members are all of one primitive type. */
+function argTypedRecord<T extends 'string' | 'number'>(
+  args: Args,
+  key: string,
+  type: T,
+  members: readonly string[],
+): Record<string, T extends 'string' ? string : number> {
+  const record = argRecord(args, key)
+  for (const [name, value] of Object.entries(record)) {
+    if (!members.includes(name)) {
+      throw new CameraError(`${key}.${name} is not expected. Expected: ${members.join(', ')}`)
+    }
+    if (typeof value !== type) throw new CameraError(`${key}.${name} must be a ${type}`)
+  }
+  return record as Record<string, T extends 'string' ? string : number>
+}
+
 function argPictureStyle(args: Args, key: string): PictureStyleName {
   return argEnum(args, key, PICTURE_STYLES) as PictureStyleName
 }
@@ -287,6 +319,10 @@ function valuePair(
 }
 
 /** Content locators arrive as one opaque string; the folder segment is internal. */
+const USER_PICTURE_STYLES = ['userdef1', 'userdef2', 'userdef3'] as const
+const SOUND_RECORDING_GROUPS = ['mode', 'windfilter', 'attenuator'] as const
+const SOUND_RECORDING_TARGETS = ['intmic', 'extmic', 'acc'] as const
+
 const LOCATOR: Param = {
   name: 'locator',
   kind: 'string',
@@ -671,6 +707,23 @@ export const REGISTRY: readonly ApiEntry[] = [
     return s.client.network.getConnectionSetting(argString(a, 'set'))
   }),
   api(
+    'network.setConnectionSetting',
+    '4.5.15',
+    'PUT',
+    [
+      STR('set'),
+      JSON_PARAM('setting', '{ "commsetting": ["nw01"], "functionsetting": ["mode01"] }'),
+    ],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setConnectionSetting(
+        argString(a, 'set'),
+        argSettingObject(a, 'setting'),
+      )
+    },
+    { mutates: true },
+  ),
+  api(
     'network.deleteConnectionSetting',
     '4.5.15',
     'DELETE',
@@ -690,6 +743,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     return s.client.network.getCommSetting(argString(a, 'nw'))
   }),
   api(
+    'network.setCommSetting',
+    '4.5.17',
+    'PUT',
+    [
+      STR('nw'),
+      JSON_PARAM('setting', '{ "lantype": "wifi", "ssid": "…", "method": "infrastructure" }'),
+    ],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setCommSetting(argString(a, 'nw'), argSettingObject(a, 'setting'))
+    },
+    { mutates: true },
+  ),
+  api(
     'network.deleteCommSetting',
     '4.5.17',
     'DELETE',
@@ -708,6 +775,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     await s.loadNetworkSettingAPIs()
     return s.client.network.getFunctionSetting(argString(a, 'mode'))
   }),
+  api(
+    'network.setFunctionSetting',
+    '4.5.19',
+    'PUT',
+    [STR('mode'), JSON_PARAM('setting', '{ "commfunction": "ccapi" }')],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setFunctionSetting(
+        argString(a, 'mode'),
+        argSettingObject(a, 'setting'),
+      )
+    },
+    { mutates: true },
+  ),
   api(
     'network.deleteFunctionSetting',
     '4.5.19',
@@ -730,6 +811,15 @@ export const REGISTRY: readonly ApiEntry[] = [
   api('network.getWiFiSettings', '4.5.21', 'GET', [], (s) => s.client.network.getWiFiSettings()),
   api('network.getWiFiSetting', '4.5.22', 'GET', [STR('setID')], (s, a) =>
     s.client.network.getWiFiSetting(argString(a, 'setID')),
+  ),
+  api(
+    'network.setWiFiSetting',
+    '4.5.22',
+    'PUT',
+    [STR('setID'), JSON_PARAM('setting', '{ "ssid": "…", "method": "infrastructure" }')],
+    (s, a) =>
+      s.client.network.setWiFiSetting(argString(a, 'setID'), argSettingObject(a, 'setting')),
+    { mutates: true },
   ),
   api(
     'network.deleteWiFiSetting',
@@ -785,6 +875,14 @@ export const REGISTRY: readonly ApiEntry[] = [
   ),
   api('network.getConnectSetting', '4.5.34', 'GET', [], (s) =>
     s.client.network.getConnectSetting(),
+  ),
+  api(
+    'network.setConnectSetting',
+    '4.5.34',
+    'PUT',
+    [JSON_PARAM('setting', '{ "lantype": "wifi", "ssid": "…" }')],
+    (s, a) => s.client.network.setConnectSetting(argSettingObject(a, 'setting')),
+    { mutates: true },
   ),
   api(
     'network.deleteConnectSetting',
@@ -916,6 +1014,14 @@ export const REGISTRY: readonly ApiEntry[] = [
       ),
     ],
     (s, a) => s.client.contents.setContentGPS(locatorOf(a), argGPSInfo(a, 'gps')),
+    { mutates: true },
+  ),
+  api(
+    'contents.setContentXMPDescription',
+    '4.7.6',
+    'PUT',
+    [LOCATOR, STR()],
+    (s, a) => s.client.contents.setContentXMPDescription(locatorOf(a), argString(a, 'value')),
     { mutates: true },
   ),
   api(
@@ -1060,6 +1166,14 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getShootingSettings(),
     { suffix: 'shooting/settings' },
   ),
+  api(
+    'shooting.getShootingSettingsRaw',
+    '4.9.1',
+    'GET',
+    [],
+    (s) => s.client.shooting.getShootingSettingsRaw(),
+    { suffix: 'shooting/settings' },
+  ),
   api('shooting.getSetting', '4.9', 'GET', [STR('name')], (s, a) =>
     s.client.shooting.getSetting(argString(a, 'name')),
   ),
@@ -1134,13 +1248,18 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getWhiteBalance(),
     (s, v) => s.client.shooting.setWhiteBalance(v),
   ),
-  ...valuePair(
-    'shooting',
-    'getWhiteBalanceShift',
-    'setWhiteBalanceShift',
+  // Object-valued: a string PUT is rejected by the camera.
+  api('shooting.getWhiteBalanceShiftSetting', '4.9.14', 'GET', [], (s) =>
+    s.client.shooting.getWhiteBalanceShiftSetting(),
+  ),
+  api(
+    'shooting.setWhiteBalanceShift',
     '4.9.14',
-    (s) => s.client.shooting.getWhiteBalanceShift(),
-    (s, v) => s.client.shooting.setWhiteBalanceShift(v),
+    'PUT',
+    [JSON_PARAM('value', '{ "ba": 0, "mg": 0 }')],
+    (s, a) =>
+      s.client.shooting.setWhiteBalanceShift(argTypedRecord(a, 'value', 'number', ['ba', 'mg'])),
+    { mutates: true },
   ),
   ...valuePair(
     'shooting',
@@ -1222,13 +1341,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getTrackingSetting(),
     (s, v) => s.client.shooting.setTrackingSetting(v),
   ),
-  ...valuePair(
-    'shooting',
-    'getStillImageQuality',
-    'setStillImageQuality',
+  // Object-valued: a string PUT is rejected by the camera.
+  api('shooting.getStillImageQualitySetting', '4.9.25', 'GET', [], (s) =>
+    s.client.shooting.getStillImageQualitySetting(),
+  ),
+  api(
+    'shooting.setStillImageQuality',
     '4.9.25',
-    (s) => s.client.shooting.getStillImageQuality(),
-    (s, v) => s.client.shooting.setStillImageQuality(v),
+    'PUT',
+    [JSON_PARAM('value', '{ "raw": "craw", "jpeg": "large_fine" }')],
+    (s, a) =>
+      s.client.shooting.setStillImageQuality(
+        argTypedRecord(a, 'value', 'string', ['raw', 'jpeg', 'heif']),
+      ),
+    { mutates: true },
   ),
   ...valuePair(
     'shooting',
@@ -1334,6 +1460,17 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getFocusBracketing(),
     (s, v) => s.client.shooting.setFocusBracketing(v),
   ),
+  api('shooting.getFocusBracketingFlashInterval', '4.9.55', 'GET', [], (s) =>
+    s.client.shooting.getFocusBracketingFlashInterval(),
+  ),
+  api(
+    'shooting.setFocusBracketingFlashInterval',
+    '4.9.55',
+    'PUT',
+    [NUM()],
+    (s, a) => s.client.shooting.setFocusBracketingFlashInterval(argNumber(a, 'value')),
+    { mutates: true },
+  ),
   ...valuePair(
     'shooting',
     'getExposureSmoothing',
@@ -1352,11 +1489,64 @@ export const REGISTRY: readonly ApiEntry[] = [
   ),
   ...valuePair(
     'shooting',
+    'getCropDepthComposite',
+    'setCropDepthComposite',
+    '4.9.53',
+    (s) => s.client.shooting.getCropDepthComposite(),
+    (s, v) => s.client.shooting.setCropDepthComposite(v),
+  ),
+  ...valuePair(
+    'shooting',
     'getSoundRecording',
     'setSoundRecording',
     '4.9.63',
     (s) => s.client.shooting.getSoundRecording(),
     (s, v) => s.client.shooting.setSoundRecording(v),
+  ),
+  api(
+    'shooting.getSoundRecordingSetting',
+    '4.9.63',
+    'GET',
+    [ENUM('group', SOUND_RECORDING_GROUPS), ENUM('target', SOUND_RECORDING_TARGETS)],
+    (s, a) =>
+      s.client.shooting.getSoundRecordingSetting(
+        argEnum(a, 'group', SOUND_RECORDING_GROUPS),
+        argEnum(a, 'target', SOUND_RECORDING_TARGETS),
+      ),
+  ),
+  api(
+    'shooting.setSoundRecordingSetting',
+    '4.9.63',
+    'PUT',
+    [ENUM('group', SOUND_RECORDING_GROUPS), ENUM('target', SOUND_RECORDING_TARGETS), STR()],
+    (s, a) =>
+      s.client.shooting.setSoundRecordingSetting(
+        argEnum(a, 'group', SOUND_RECORDING_GROUPS),
+        argEnum(a, 'target', SOUND_RECORDING_TARGETS),
+        argString(a, 'value'),
+      ),
+    { mutates: true },
+  ),
+  api('shooting.getPowerZoomSetting', '4.9.76', 'GET', [], (s) =>
+    s.client.shooting.getPowerZoomSetting(),
+  ),
+  api(
+    'shooting.setPowerZoomSetting',
+    '4.9.76',
+    'PUT',
+    [JSON_PARAM('value', '{ "speed": "slow", "level": 7 }')],
+    (s, a) => {
+      const value = argRecord(a, 'value')
+      for (const [name, member] of Object.entries(value)) {
+        const expected = name === 'speed' ? 'string' : name === 'level' ? 'number' : undefined
+        if (expected === undefined) {
+          throw new CameraError(`value.${name} is not expected. Expected: speed, level`)
+        }
+        if (typeof member !== expected) throw new CameraError(`value.${name} must be a ${expected}`)
+      }
+      return s.client.shooting.setPowerZoomSetting(value as { speed?: string; level?: number })
+    },
+    { mutates: true },
   ),
 
   api(
@@ -1391,6 +1581,25 @@ export const REGISTRY: readonly ApiEntry[] = [
     'DELETE',
     [ENUM('style', PICTURE_STYLES)],
     (s, a) => s.client.shooting.resetPictureStyle(argPictureStyle(a, 'style')),
+    { mutates: true },
+  ),
+  api(
+    'shooting.getPictureStyleBase',
+    '4.9.40',
+    'GET',
+    [ENUM('slot', USER_PICTURE_STYLES)],
+    (s, a) => s.client.shooting.getPictureStyleBase(argEnum(a, 'slot', USER_PICTURE_STYLES)),
+  ),
+  api(
+    'shooting.setPictureStyleBase',
+    '4.9.40',
+    'PUT',
+    [ENUM('slot', USER_PICTURE_STYLES), STR()],
+    (s, a) =>
+      s.client.shooting.setPictureStyleBase(
+        argEnum(a, 'slot', USER_PICTURE_STYLES),
+        argString(a, 'value'),
+      ),
     { mutates: true },
   ),
 

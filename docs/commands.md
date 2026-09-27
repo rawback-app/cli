@@ -330,6 +330,13 @@ parameters before any connection is attempted. `--describe` prints an endpoint
 without calling the camera. Endpoints that change the camera need `--force` in a
 script.
 
+JSON parameters are checked member by member, because the camera ignores a key
+it does not know. Object-valued settings take objects —
+`--arg 'value={"raw":"craw","jpeg":"large_fine"}'` for
+`shooting.setStillImageQuality`, `{"ba":0,"mg":0}` for
+`shooting.setWhiteBalanceShift` — and picture-style parameters use the names
+`--describe` shows (`sharpnessStrength`, not `sharpness_strength`).
+
 Binary endpoints are not in this catalogue; use `camera contents get`,
 `camera liveview frame`, and `camera liveview stream` instead.
 
