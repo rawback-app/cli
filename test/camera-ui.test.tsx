@@ -43,7 +43,9 @@ describe('camera presenters', () => {
       temperature: 'normal',
       unsupported: ['devicestatus/batterylist'],
     }),
-    settings: settingsListDocument([{ name: 'av', value: 'f4.0', ability: ['f2.8', 'f4.0'] }]),
+    settings: settingsListDocument([
+      { name: 'av', value: 'f4.0', ability: ['f2.8', 'f4.0'], range: null },
+    ]),
     setting: settingDocument({
       name: 'colortemperature',
       value: 5200,

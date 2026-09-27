@@ -11,11 +11,17 @@
 // lists all nine namespaces (the reference lists six, so the rest sorted first).
 //
 // Binary and streaming endpoints are deliberately absent: they belong to the
-// first-class commands (`contents get`, `liveview frame`, `liveview stream`),
-// which can write to a file. This catalogue is a JSON inspector.
+// first-class commands (`contents get`, `liveview frame`, `liveview stream`,
+// `rtp sdp`, `cert`), which can write to a file. This catalogue is a JSON
+// inspector.
 
 import { PICTURE_STYLES } from '@rawback/ccapi-js'
-import type { ContentLocator, GPSInfo, PictureStyleName } from '@rawback/ccapi-js'
+import type {
+  ContentLocator,
+  GPSInfo,
+  PictureStyleName,
+  PictureStyleParameters,
+} from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
 import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
@@ -112,6 +118,18 @@ function argRecord(args: Args, key: string): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((part) => typeof part === 'number')
+}
+
+/** A flat six-number array, or an object whose `members` are each `[N, D]`. */
+function isRational(value: unknown, members: readonly string[]): boolean {
+  if (isNumberArray(value)) return true
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return members.every((member) => isNumberArray(record[member]))
+}
+
 /**
  * The camera requires the full EXIF GPS block (doc 4.7.6) — a partial object is
  * rejected server-side, so it is checked here where the message can name the
@@ -127,30 +145,109 @@ function argGPSInfo(args: Args, key: string): GPSInfo {
     'status',
     'datestamp',
   ] as const
-  const rationals = ['latitude', 'longitude', 'altitude', 'timestamp'] as const
 
   for (const field of strings) {
     if (typeof record[field] !== 'string') {
       throw new CameraError(`${key}.${field} must be a string`)
     }
   }
-  for (const field of rationals) {
-    const value = record[field]
-    if (!Array.isArray(value) || value.some((part) => typeof part !== 'number')) {
-      throw new CameraError(`${key}.${field} must be an array of numbers`)
+  for (const field of ['latitude', 'longitude'] as const) {
+    if (!isRational(record[field], ['degree', 'minute', 'second'])) {
+      throw new CameraError(
+        `${key}.${field} must be { degree, minute, second } rationals or an array of numbers`,
+      )
     }
+  }
+  if (!isRational(record.timestamp, ['hour', 'minute', 'second'])) {
+    throw new CameraError(
+      `${key}.timestamp must be { hour, minute, second } rationals or an array of numbers`,
+    )
+  }
+  if (!isNumberArray(record.altitude)) {
+    throw new CameraError(`${key}.altitude must be an array of numbers`)
   }
   return record as unknown as GPSInfo
 }
 
-function argNumberRecord(args: Args, key: string): Record<string, number> {
+const PICTURE_STYLE_NUMBERS = [
+  'sharpnessStrength',
+  'sharpnessFineness',
+  'sharpnessThreshold',
+  'contrast',
+  'saturation',
+  'colorTone',
+] as const
+const PICTURE_STYLE_STRINGS = ['basePictureStyle', 'filter', 'toning'] as const
+
+/** The camera's own spelling of each parameter, for a hint when one is passed. */
+const PICTURE_STYLE_CAMERA_NAMES: Record<string, string> = {
+  sharpness_strength: 'sharpnessStrength',
+  sharpness_fineness: 'sharpnessFineness',
+  sharpness_threshold: 'sharpnessThreshold',
+  colortone: 'colorTone',
+  filtereffect: 'filter',
+  filterEffect: 'filter',
+  toningeffect: 'toning',
+  toningEffect: 'toning',
+  basepicturestyle: 'basePictureStyle',
+}
+
+/**
+ * The library encodes only the fields it knows and drops the rest, so a
+ * misspelt key would be a silent no-op on the camera. Every key is checked
+ * here instead, and the camera's snake_case names point at their spelling.
+ */
+function argPictureStyleParameters(args: Args, key: string): PictureStyleParameters {
   const record = argRecord(args, key)
-  const result: Record<string, number> = {}
+  const numbers: readonly string[] = PICTURE_STYLE_NUMBERS
+  const strings: readonly string[] = PICTURE_STYLE_STRINGS
   for (const [name, value] of Object.entries(record)) {
-    if (typeof value !== 'number') throw new CameraError(`${key}.${name} must be a number`)
-    result[name] = value
+    if (numbers.includes(name)) {
+      if (typeof value !== 'number') throw new CameraError(`${key}.${name} must be a number`)
+    } else if (strings.includes(name)) {
+      if (typeof value !== 'string') throw new CameraError(`${key}.${name} must be a string`)
+    } else {
+      const spelling = PICTURE_STYLE_CAMERA_NAMES[name]
+      throw new CameraError(
+        spelling !== undefined
+          ? `${key}.${name} is spelt ${spelling} here`
+          : `${key}.${name} is not a picture-style parameter. Expected: ${[...numbers, ...strings].join(', ')}`,
+      )
+    }
   }
-  return result
+  return record as PictureStyleParameters
+}
+
+/**
+ * The network setting objects (doc 4.5.14–4.5.34) are flat records of strings,
+ * with a few string-array members (`commsetting`, `functionsetting`).
+ */
+function argSettingObject(args: Args, key: string): Record<string, string | string[]> {
+  const record = argRecord(args, key)
+  for (const [name, value] of Object.entries(record)) {
+    const valid =
+      typeof value === 'string' ||
+      (Array.isArray(value) && value.every((part) => typeof part === 'string'))
+    if (!valid) throw new CameraError(`${key}.${name} must be a string or an array of strings`)
+  }
+  return record as Record<string, string | string[]>
+}
+
+/** A JSON object whose members are all of one primitive type. */
+function argTypedRecord<T extends 'string' | 'number'>(
+  args: Args,
+  key: string,
+  type: T,
+  members: readonly string[],
+): Record<string, T extends 'string' ? string : number> {
+  const record = argRecord(args, key)
+  for (const [name, value] of Object.entries(record)) {
+    if (!members.includes(name)) {
+      throw new CameraError(`${key}.${name} is not expected. Expected: ${members.join(', ')}`)
+    }
+    if (typeof value !== type) throw new CameraError(`${key}.${name} must be a ${type}`)
+  }
+  return record as Record<string, T extends 'string' ? string : number>
 }
 
 function argPictureStyle(args: Args, key: string): PictureStyleName {
@@ -223,6 +320,10 @@ function valuePair(
 }
 
 /** Content locators arrive as one opaque string; the folder segment is internal. */
+const USER_PICTURE_STYLES = ['userdef1', 'userdef2', 'userdef3'] as const
+const SOUND_RECORDING_GROUPS = ['mode', 'windfilter', 'attenuator'] as const
+const SOUND_RECORDING_TARGETS = ['intmic', 'extmic', 'acc'] as const
+
 const LOCATOR: Param = {
   name: 'locator',
   kind: 'string',
@@ -607,6 +708,23 @@ export const REGISTRY: readonly ApiEntry[] = [
     return s.client.network.getConnectionSetting(argString(a, 'set'))
   }),
   api(
+    'network.setConnectionSetting',
+    '4.5.15',
+    'PUT',
+    [
+      STR('set'),
+      JSON_PARAM('setting', '{ "commsetting": ["nw01"], "functionsetting": ["mode01"] }'),
+    ],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setConnectionSetting(
+        argString(a, 'set'),
+        argSettingObject(a, 'setting'),
+      )
+    },
+    { mutates: true },
+  ),
+  api(
     'network.deleteConnectionSetting',
     '4.5.15',
     'DELETE',
@@ -626,6 +744,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     return s.client.network.getCommSetting(argString(a, 'nw'))
   }),
   api(
+    'network.setCommSetting',
+    '4.5.17',
+    'PUT',
+    [
+      STR('nw'),
+      JSON_PARAM('setting', '{ "lantype": "wifi", "ssid": "…", "method": "infrastructure" }'),
+    ],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setCommSetting(argString(a, 'nw'), argSettingObject(a, 'setting'))
+    },
+    { mutates: true },
+  ),
+  api(
     'network.deleteCommSetting',
     '4.5.17',
     'DELETE',
@@ -644,6 +776,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     await s.loadNetworkSettingAPIs()
     return s.client.network.getFunctionSetting(argString(a, 'mode'))
   }),
+  api(
+    'network.setFunctionSetting',
+    '4.5.19',
+    'PUT',
+    [STR('mode'), JSON_PARAM('setting', '{ "commfunction": "ccapi" }')],
+    async (s, a) => {
+      await s.loadNetworkSettingAPIs()
+      return s.client.network.setFunctionSetting(
+        argString(a, 'mode'),
+        argSettingObject(a, 'setting'),
+      )
+    },
+    { mutates: true },
+  ),
   api(
     'network.deleteFunctionSetting',
     '4.5.19',
@@ -666,6 +812,15 @@ export const REGISTRY: readonly ApiEntry[] = [
   api('network.getWiFiSettings', '4.5.21', 'GET', [], (s) => s.client.network.getWiFiSettings()),
   api('network.getWiFiSetting', '4.5.22', 'GET', [STR('setID')], (s, a) =>
     s.client.network.getWiFiSetting(argString(a, 'setID')),
+  ),
+  api(
+    'network.setWiFiSetting',
+    '4.5.22',
+    'PUT',
+    [STR('setID'), JSON_PARAM('setting', '{ "ssid": "…", "method": "infrastructure" }')],
+    (s, a) =>
+      s.client.network.setWiFiSetting(argString(a, 'setID'), argSettingObject(a, 'setting')),
+    { mutates: true },
   ),
   api(
     'network.deleteWiFiSetting',
@@ -721,6 +876,14 @@ export const REGISTRY: readonly ApiEntry[] = [
   ),
   api('network.getConnectSetting', '4.5.34', 'GET', [], (s) =>
     s.client.network.getConnectSetting(),
+  ),
+  api(
+    'network.setConnectSetting',
+    '4.5.34',
+    'PUT',
+    [JSON_PARAM('setting', '{ "lantype": "wifi", "ssid": "…" }')],
+    (s, a) => s.client.network.setConnectSetting(argSettingObject(a, 'setting')),
+    { mutates: true },
   ),
   api(
     'network.deleteConnectSetting',
@@ -844,8 +1007,22 @@ export const REGISTRY: readonly ApiEntry[] = [
     'contents.setContentGPS',
     '4.7.6',
     'PUT',
-    [LOCATOR, JSON_PARAM('gps', '{ "latitude": 35.6, "longitude": 139.7 }')],
+    [
+      LOCATOR,
+      JSON_PARAM(
+        'gps',
+        '{ "latitude_ref": "N", "latitude": { "degree": [35,1], "minute": [39,1], "second": [2940,100] }, … }',
+      ),
+    ],
     (s, a) => s.client.contents.setContentGPS(locatorOf(a), argGPSInfo(a, 'gps')),
+    { mutates: true },
+  ),
+  api(
+    'contents.setContentXMPDescription',
+    '4.7.6',
+    'PUT',
+    [LOCATOR, STR()],
+    (s, a) => s.client.contents.setContentXMPDescription(locatorOf(a), argString(a, 'value')),
     { mutates: true },
   ),
   api(
@@ -990,6 +1167,14 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getShootingSettings(),
     { suffix: 'shooting/settings' },
   ),
+  api(
+    'shooting.getShootingSettingsRaw',
+    '4.9.1',
+    'GET',
+    [],
+    (s) => s.client.shooting.getShootingSettingsRaw(),
+    { suffix: 'shooting/settings' },
+  ),
   api('shooting.getSetting', '4.9', 'GET', [STR('name')], (s, a) =>
     s.client.shooting.getSetting(argString(a, 'name')),
   ),
@@ -1064,13 +1249,18 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getWhiteBalance(),
     (s, v) => s.client.shooting.setWhiteBalance(v),
   ),
-  ...valuePair(
-    'shooting',
-    'getWhiteBalanceShift',
-    'setWhiteBalanceShift',
+  // Object-valued: a string PUT is rejected by the camera.
+  api('shooting.getWhiteBalanceShiftSetting', '4.9.14', 'GET', [], (s) =>
+    s.client.shooting.getWhiteBalanceShiftSetting(),
+  ),
+  api(
+    'shooting.setWhiteBalanceShift',
     '4.9.14',
-    (s) => s.client.shooting.getWhiteBalanceShift(),
-    (s, v) => s.client.shooting.setWhiteBalanceShift(v),
+    'PUT',
+    [JSON_PARAM('value', '{ "ba": 0, "mg": 0 }')],
+    (s, a) =>
+      s.client.shooting.setWhiteBalanceShift(argTypedRecord(a, 'value', 'number', ['ba', 'mg'])),
+    { mutates: true },
   ),
   ...valuePair(
     'shooting',
@@ -1152,13 +1342,20 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getTrackingSetting(),
     (s, v) => s.client.shooting.setTrackingSetting(v),
   ),
-  ...valuePair(
-    'shooting',
-    'getStillImageQuality',
-    'setStillImageQuality',
+  // Object-valued: a string PUT is rejected by the camera.
+  api('shooting.getStillImageQualitySetting', '4.9.25', 'GET', [], (s) =>
+    s.client.shooting.getStillImageQualitySetting(),
+  ),
+  api(
+    'shooting.setStillImageQuality',
     '4.9.25',
-    (s) => s.client.shooting.getStillImageQuality(),
-    (s, v) => s.client.shooting.setStillImageQuality(v),
+    'PUT',
+    [JSON_PARAM('value', '{ "raw": "craw", "jpeg": "large_fine" }')],
+    (s, a) =>
+      s.client.shooting.setStillImageQuality(
+        argTypedRecord(a, 'value', 'string', ['raw', 'jpeg', 'heif']),
+      ),
+    { mutates: true },
   ),
   ...valuePair(
     'shooting',
@@ -1264,6 +1461,17 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.shooting.getFocusBracketing(),
     (s, v) => s.client.shooting.setFocusBracketing(v),
   ),
+  api('shooting.getFocusBracketingFlashInterval', '4.9.55', 'GET', [], (s) =>
+    s.client.shooting.getFocusBracketingFlashInterval(),
+  ),
+  api(
+    'shooting.setFocusBracketingFlashInterval',
+    '4.9.55',
+    'PUT',
+    [NUM()],
+    (s, a) => s.client.shooting.setFocusBracketingFlashInterval(argNumber(a, 'value')),
+    { mutates: true },
+  ),
   ...valuePair(
     'shooting',
     'getExposureSmoothing',
@@ -1282,11 +1490,64 @@ export const REGISTRY: readonly ApiEntry[] = [
   ),
   ...valuePair(
     'shooting',
+    'getCropDepthComposite',
+    'setCropDepthComposite',
+    '4.9.53',
+    (s) => s.client.shooting.getCropDepthComposite(),
+    (s, v) => s.client.shooting.setCropDepthComposite(v),
+  ),
+  ...valuePair(
+    'shooting',
     'getSoundRecording',
     'setSoundRecording',
     '4.9.63',
     (s) => s.client.shooting.getSoundRecording(),
     (s, v) => s.client.shooting.setSoundRecording(v),
+  ),
+  api(
+    'shooting.getSoundRecordingSetting',
+    '4.9.63',
+    'GET',
+    [ENUM('group', SOUND_RECORDING_GROUPS), ENUM('target', SOUND_RECORDING_TARGETS)],
+    (s, a) =>
+      s.client.shooting.getSoundRecordingSetting(
+        argEnum(a, 'group', SOUND_RECORDING_GROUPS),
+        argEnum(a, 'target', SOUND_RECORDING_TARGETS),
+      ),
+  ),
+  api(
+    'shooting.setSoundRecordingSetting',
+    '4.9.63',
+    'PUT',
+    [ENUM('group', SOUND_RECORDING_GROUPS), ENUM('target', SOUND_RECORDING_TARGETS), STR()],
+    (s, a) =>
+      s.client.shooting.setSoundRecordingSetting(
+        argEnum(a, 'group', SOUND_RECORDING_GROUPS),
+        argEnum(a, 'target', SOUND_RECORDING_TARGETS),
+        argString(a, 'value'),
+      ),
+    { mutates: true },
+  ),
+  api('shooting.getPowerZoomSetting', '4.9.76', 'GET', [], (s) =>
+    s.client.shooting.getPowerZoomSetting(),
+  ),
+  api(
+    'shooting.setPowerZoomSetting',
+    '4.9.76',
+    'PUT',
+    [JSON_PARAM('value', '{ "speed": "slow", "level": 7 }')],
+    (s, a) => {
+      const value = argRecord(a, 'value')
+      for (const [name, member] of Object.entries(value)) {
+        const expected = name === 'speed' ? 'string' : name === 'level' ? 'number' : undefined
+        if (expected === undefined) {
+          throw new CameraError(`value.${name} is not expected. Expected: speed, level`)
+        }
+        if (typeof member !== expected) throw new CameraError(`value.${name} must be a ${expected}`)
+      }
+      return s.client.shooting.setPowerZoomSetting(value as { speed?: string; level?: number })
+    },
+    { mutates: true },
   ),
 
   api(
@@ -1306,12 +1567,12 @@ export const REGISTRY: readonly ApiEntry[] = [
     'PUT',
     [
       ENUM('style', PICTURE_STYLES),
-      JSON_PARAM('params', '{ "sharpness_strength": 4, "contrast": 1 } — snake_case keys'),
+      JSON_PARAM('params', '{ "sharpnessStrength": 4, "contrast": 1, "filter": "yellow" }'),
     ],
     (s, a) =>
       s.client.shooting.setPictureStyleDetail(
         argPictureStyle(a, 'style'),
-        argNumberRecord(a, 'params'),
+        argPictureStyleParameters(a, 'params'),
       ),
     { mutates: true },
   ),
@@ -1321,6 +1582,25 @@ export const REGISTRY: readonly ApiEntry[] = [
     'DELETE',
     [ENUM('style', PICTURE_STYLES)],
     (s, a) => s.client.shooting.resetPictureStyle(argPictureStyle(a, 'style')),
+    { mutates: true },
+  ),
+  api(
+    'shooting.getPictureStyleBase',
+    '4.9.40',
+    'GET',
+    [ENUM('slot', USER_PICTURE_STYLES)],
+    (s, a) => s.client.shooting.getPictureStyleBase(argEnum(a, 'slot', USER_PICTURE_STYLES)),
+  ),
+  api(
+    'shooting.setPictureStyleBase',
+    '4.9.40',
+    'PUT',
+    [ENUM('slot', USER_PICTURE_STYLES), STR()],
+    (s, a) =>
+      s.client.shooting.setPictureStyleBase(
+        argEnum(a, 'slot', USER_PICTURE_STYLES),
+        argString(a, 'value'),
+      ),
     { mutates: true },
   ),
 
@@ -1366,7 +1646,7 @@ export const REGISTRY: readonly ApiEntry[] = [
     (s) => s.client.liveview.deleteScrollDetail(),
     { mutates: true },
   ),
-  api('liveview.getRTP', '4.11.8', 'GET', [], (s) => s.client.liveview.getRTP()),
+  api('liveview.getRTPStatus', '4.11.8', 'GET', [], (s) => s.client.liveview.getRTPStatus()),
   api(
     'liveview.setRTP',
     '4.11.8',
@@ -1400,8 +1680,8 @@ export const REGISTRY: readonly ApiEntry[] = [
     'liveview.requestAngleInformation',
     '4.11.9',
     'POST',
-    [],
-    (s) => s.client.liveview.requestAngleInformation(),
+    [ENUM('action', ['start', 'stop'])],
+    (s, a) => s.client.liveview.requestAngleInformation(argEnum(a, 'action', ['start', 'stop'])),
     { mutates: true },
   ),
 
@@ -1434,14 +1714,16 @@ export const REGISTRY: readonly ApiEntry[] = [
     'event.getPolling',
     '4.13.1',
     'GET',
-    [BOOL('continue'), STR('timeout', false)],
-    (s, a) =>
-      s.client.event.getPolling({
-        continue: argBoolean(a, 'continue'),
-        ...(argOptionalString(a, 'timeout') !== undefined
-          ? { timeout: argOptionalString(a, 'timeout') as string }
-          : {}),
-      }),
+    // `hold` rather than `continue`: it long-polls in whichever style the body's
+    // event/polling version takes, where `continue` is rejected from ver110 on.
+    [BOOL('hold'), ENUM('timeout', ['short', 'long'], false)],
+    (s, a) => {
+      const timeout = argOptionalString(a, 'timeout')
+      return s.client.event.getPolling({
+        hold: argBoolean(a, 'hold'),
+        ...(timeout !== undefined ? { timeout: argEnum(a, 'timeout', ['short', 'long']) } : {}),
+      })
+    },
     { suffix: 'event/polling' },
   ),
   api('event.clearPolling', '4.13.1', 'DELETE', [], (s) => s.client.event.clearPolling(), {

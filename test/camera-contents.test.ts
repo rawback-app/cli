@@ -5,14 +5,22 @@ import { join } from 'node:path'
 
 import { runCameraApi } from '../src/camera-api.ts'
 import {
+  gpsInfo,
   parseContentLocator,
+  runCameraCardFormat,
   runCameraContentsDelete,
+  runCameraContentsDirs,
+  runCameraContentsEdit,
   runCameraContentsGet,
+  runCameraContentsInfo,
   runCameraContentsList,
+  runCameraContentsRmdir,
   runCameraContentsStorages,
+  type ContentEdit,
 } from '../src/camera-contents.ts'
 import { cameraId, type StoredCamera } from '../src/camera-store.ts'
 import {
+  DEFAULT_SUFFIXES,
   cleanupTemporaryStores,
   fakeCamera,
   supportedAPIs,
@@ -363,5 +371,298 @@ describe('camera contents', () => {
     expect(output.json().deleted).toBe(true)
     const request = camera.requests.find((entry) => entry.method === 'DELETE')
     expect(request?.path).toContain('card1/DCIM/100CANON/IMG_0042.JPG')
+  })
+})
+
+const LOCATOR = '/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG'
+
+describe('camera contents dirs and info', () => {
+  test('dirs lists the directories on a storage', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      paths: {
+        'ccapi/ver140/contents/card1': { path: ['/ccapi/ver140/contents/card1/DCIM/100CANON'] },
+      },
+    })
+    const output = capture()
+
+    await runCameraContentsDirs(
+      { storage: 'card1', json: true },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    expect(output.json()).toEqual({
+      storage: 'card1',
+      directories: ['/ccapi/ver140/contents/card1/DCIM/100CANON'],
+    })
+  })
+
+  test('info reports the file metadata', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      paths: {
+        'ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG': {
+          filesize: 1024,
+          protect: 'disable',
+          archive: 'disable',
+          rotate: '0',
+          rating: '3',
+          lastmodifieddate: 'Tue, 04 Aug 2026 09:00:00 +0900',
+        },
+      },
+    })
+    const output = capture()
+
+    await runCameraContentsInfo(
+      { locator: LOCATOR, json: true },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    expect(output.json()).toMatchObject({ locator: LOCATOR, fileSize: 1024, rating: '3' })
+    const request = camera.requests.find((entry) => entry.path.endsWith('IMG_0042.JPG'))
+    expect(new URL(request?.url ?? '').searchParams.get('kind')).toBe('info')
+  })
+})
+
+describe('camera contents edits', () => {
+  async function edit(value: ContentEdit, routes: Record<string, unknown> = {}) {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({ paths: routes })
+    const output = capture()
+    await runCameraContentsEdit(
+      { locator: LOCATOR, edit: value, force: true, json: true },
+      {
+        store,
+        processEnv: {},
+        fetch: camera.fetch,
+        now: () => new Date('2026-08-04T09:05:30Z'),
+        ...output.dependencies,
+      },
+    )
+    const put = camera.requests.find((request) => request.method === 'PUT')
+    return {
+      body: JSON.parse(put?.body ?? '{}') as Record<string, unknown>,
+      path: put?.path,
+      json: output.json(),
+    }
+  }
+
+  test.each([
+    [
+      { kind: 'protect', enabled: true },
+      { action: 'protect', value: 'enable' },
+    ],
+    [
+      { kind: 'archive', enabled: false },
+      { action: 'archive', value: 'disable' },
+    ],
+    [
+      { kind: 'rate', rating: '4' },
+      { action: 'rating', value: '4' },
+    ],
+    [
+      { kind: 'rotate', degrees: 90 },
+      { action: 'rotate', value: '90' },
+    ],
+    [
+      { kind: 'xmp', attributes: 'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9' },
+      { action: 'xmp_description', value: 'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9' },
+    ],
+  ] as Array<[ContentEdit, Record<string, unknown>]>)(
+    '%p modifies the file',
+    async (value, body) => {
+      const result = await edit(value)
+
+      expect(result.path).toBe('ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG')
+      expect(result.body).toEqual(body)
+      expect(result.json).toMatchObject({ changed: true, locator: LOCATOR, action: value.kind })
+    },
+  )
+
+  test('geotag writes the full GPS block the camera requires', async () => {
+    const result = await edit({ kind: 'geotag', latitude: 35.658581, longitude: 139.745433 })
+
+    expect(result.body).toEqual({
+      action: 'gps',
+      gps: {
+        latitude_ref: 'N',
+        latitude: { degree: [35, 1], minute: [39, 1], second: [3089, 100] },
+        longitude_ref: 'E',
+        longitude: { degree: [139, 1], minute: [44, 1], second: [4356, 100] },
+        altitude_ref: 'P',
+        altitude: [0, 100],
+        timestamp: { hour: [9, 1], minute: [5, 1], second: [30, 1] },
+        mapdatum: 'WGS-84',
+        status: 'A',
+        datestamp: '2026:08:04',
+      },
+    })
+  })
+
+  test('a declined edit never reaches the camera', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera()
+    const output = capture()
+
+    await runCameraContentsEdit(
+      { locator: LOCATOR, edit: { kind: 'rate', rating: '5' }, json: true },
+      {
+        store,
+        processEnv: {},
+        fetch: camera.fetch,
+        prompts: { confirm: async () => false, password: async () => '' },
+        ...output.dependencies,
+      },
+    )
+
+    expect(camera.requests).toEqual([])
+    expect(output.json()).toEqual({ changed: false, locator: LOCATOR })
+  })
+
+  test('a protected file explains the 409', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      paths: {
+        'ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG': () =>
+          new Response('{"message":"Protected"}', { status: 409 }),
+      },
+    })
+
+    await expect(
+      runCameraContentsEdit(
+        { locator: LOCATOR, edit: { kind: 'rotate', degrees: 90 }, force: true, json: true },
+        { store, processEnv: {}, fetch: camera.fetch, ...capture().dependencies },
+      ),
+    ).rejects.toThrow(/Protected contents cannot be deleted or modified/)
+  })
+})
+
+describe('gpsInfo', () => {
+  test('carries rounding into the minute rather than writing 60 seconds', () => {
+    // 10° 59' 59.999" rounds to 11° 00' 00.00".
+    const gps = gpsInfo(10 + 59 / 60 + 59.999 / 3600, 0, 0, new Date('2026-01-02T03:04:05Z'))
+    expect(gps.latitude).toEqual({ degree: [11, 1], minute: [0, 1], second: [0, 100] })
+  })
+
+  test('names the hemisphere and depth by sign', () => {
+    const gps = gpsInfo(-33.8688, -151.2093, -12.5, new Date('2026-01-02T03:04:05Z'))
+    expect(gps.latitude_ref).toBe('S')
+    expect(gps.longitude_ref).toBe('W')
+    expect(gps.altitude_ref).toBe('M')
+    expect(gps.altitude).toEqual([1250, 100])
+    expect(gps.datestamp).toBe('2026:01:02')
+  })
+})
+
+describe('camera contents rmdir', () => {
+  test('deletes the directory through its ver140 folder', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      paths: {
+        'ccapi/ver140/contents/card1': { path: ['/ccapi/ver140/contents/card1/DCIM/100CANON'] },
+      },
+    })
+    const output = capture()
+
+    await runCameraContentsRmdir(
+      { storage: 'card1', directory: '100CANON', force: true, json: true },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    const request = camera.requests.find((entry) => entry.method === 'DELETE')
+    expect(request?.path).toBe('ccapi/ver140/contents/card1/DCIM/100CANON')
+    expect(output.json()).toEqual({ deleted: true, storage: 'card1', directory: '100CANON' })
+  })
+})
+
+describe('camera card format', () => {
+  async function formatSetup() {
+    const { store } = await temporaryStore()
+    await store.upsert(
+      {
+        ...saved(),
+        discovery: {
+          apiVersion: 'ver140',
+          cachedAt: new Date().toISOString(),
+          supportedAPIs: supportedAPIs('ver140', [...DEFAULT_SUFFIXES, 'functions/cardformat']),
+        },
+      },
+      { makeDefault: true },
+    )
+    const camera = fakeCamera({
+      routes: {
+        contents: { path: ['/ccapi/ver140/contents/card1', '/ccapi/ver140/contents/card2'] },
+      },
+    })
+    const output = capture()
+    return { store, camera, output }
+  }
+
+  const formatted = (camera: ReturnType<typeof fakeCamera>) =>
+    camera.requests.filter(
+      (request) => request.method === 'POST' && request.path.endsWith('functions/cardformat'),
+    )
+
+  test('formats the named card once its name is typed back', async () => {
+    const { store, camera, output } = await formatSetup()
+
+    await runCameraCardFormat(
+      { storage: 'card2' },
+      {
+        store,
+        processEnv: {},
+        fetch: camera.fetch,
+        prompts: {
+          confirm: async () => false,
+          password: async () => '',
+          input: async () => 'card2',
+        },
+        ...output.dependencies,
+      },
+    )
+
+    expect(formatted(camera).map((request) => JSON.parse(request.body ?? '{}'))).toEqual([
+      { name: 'card2' },
+    ])
+  })
+
+  test('a mistyped name leaves the card alone', async () => {
+    const { store, camera, output } = await formatSetup()
+
+    await runCameraCardFormat(
+      { storage: 'card2' },
+      {
+        store,
+        processEnv: {},
+        fetch: camera.fetch,
+        prompts: {
+          confirm: async () => true,
+          password: async () => '',
+          input: async () => 'card1',
+        },
+        ...output.dependencies,
+      },
+    )
+
+    expect(formatted(camera)).toEqual([])
+    expect(output.stdout.join('\n')).toContain('Left card2 untouched')
+  })
+
+  test('refuses a storage the camera does not have, naming the ones it does', async () => {
+    const { store, camera, output } = await formatSetup()
+
+    await expect(
+      runCameraCardFormat(
+        { storage: 'card3', force: true, json: true },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      ),
+    ).rejects.toThrow(/no storage named card3\. It has: card1, card2/)
+    expect(formatted(camera)).toEqual([])
   })
 })

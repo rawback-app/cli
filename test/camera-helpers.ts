@@ -16,7 +16,11 @@ export interface CameraRequest {
 export interface FakeCameraOptions {
   /** Answer the first request with a Digest challenge, as a real camera does. */
   digest?: boolean
-  /** Responses keyed by path suffix (everything after `ccapi/verNNN/`). */
+  /**
+   * Responses keyed by path suffix (everything after `ccapi/verNNN/`). A value
+   * is sent as JSON, unless it is (or a function returns) a `Response`, which is
+   * sent as-is — the form for binary bodies.
+   */
   routes?: Record<string, unknown | (() => unknown)>
   /** Full-path overrides, e.g. `ccapi/ver100/topurlfordev`. */
   paths?: Record<string, unknown | (() => unknown)>
@@ -33,7 +37,7 @@ export interface FakeCamera {
   requested(suffix: string): boolean
 }
 
-const DEFAULT_SUFFIXES = [
+export const DEFAULT_SUFFIXES = [
   'deviceinformation',
   'devicestatus/storage',
   'devicestatus/lens',
@@ -120,14 +124,14 @@ export function fakeCamera(options: FakeCameraOptions = {}): FakeCamera {
     if (path === `ccapi/${version}/topurlfordev` || path.endsWith('/topurlfordev')) {
       return json(options.paths?.[path] ?? supportedAPIs(version))
     }
-    if (options.paths?.[path] !== undefined) return json(resolve(options.paths[path]))
+    if (options.paths?.[path] !== undefined) return respond(resolve(options.paths[path]))
 
     const suffix = suffixOf(path)
     if (suffix !== undefined && options.missing?.includes(suffix)) {
       return new Response('{"message":"Not Found"}', { status: 404 })
     }
     if (suffix !== undefined && options.routes?.[suffix] !== undefined) {
-      return json(resolve(options.routes[suffix]))
+      return respond(resolve(options.routes[suffix]))
     }
     if (suffix !== undefined && defaults[suffix] !== undefined) return json(defaults[suffix])
 
@@ -144,6 +148,10 @@ export function fakeCamera(options: FakeCameraOptions = {}): FakeCamera {
 
 function resolve(value: unknown): unknown {
   return typeof value === 'function' ? (value as () => unknown)() : value
+}
+
+function respond(body: unknown): Response {
+  return body instanceof Response ? body : json(body)
 }
 
 function json(body: unknown): Response {

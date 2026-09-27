@@ -11,6 +11,7 @@ import {
   runCameraUse,
 } from '../src/camera.ts'
 import {
+  DEFAULT_SUFFIXES,
   cleanupTemporaryStores,
   fakeCamera,
   supportedAPIs,
@@ -280,9 +281,39 @@ describe('camera info', () => {
 describe('camera status', () => {
   test('reads every advertised endpoint', async () => {
     const { store } = await temporaryStore()
-    await store.upsert(saved(), { makeDefault: true })
+    await store.upsert(
+      saved({
+        discovery: {
+          ...CACHED,
+          supportedAPIs: supportedAPIs('ver140', [
+            ...DEFAULT_SUFFIXES,
+            'devicestatus/batterylist',
+            'devicestatus/powerzoomstatus',
+          ]),
+        },
+      }),
+      { makeDefault: true },
+    )
+    const powerZoom = {
+      status: true,
+      sw: 'pz',
+      moving: false,
+      location: 'wide',
+      equip: true,
+      battery: true,
+      lock: false,
+      limit: false,
+      temperature: 'normal',
+    }
     const camera = fakeCamera({
       routes: {
+        'devicestatus/batterylist': {
+          batterylist: [
+            { position: 'camera', name: 'LP-E6NH', kind: 'battery', level: '80', quality: 'good' },
+            { position: 'grip01', name: 'LP-E6NH', kind: 'battery', level: '45', quality: 'good' },
+          ],
+        },
+        'devicestatus/powerzoomstatus': powerZoom,
         'devicestatus/battery': {
           name: 'LP-E6NH',
           kind: 'battery',
@@ -292,7 +323,7 @@ describe('camera status', () => {
         'devicestatus/temperature': { status: 'normal' },
         'devicestatus/currentstorage': { name: 'card1', path: '/x' },
         'devicestatus/currentdirectory': { name: '100CANON', path: '/x/100CANON' },
-        'shooting/information/recordable': { stillimage: 1832, movieduration: 4210 },
+        'shooting/information/recordable': { recordableshots: 1832, remainingtime: 4210 },
       },
     })
     const output = capture()
@@ -308,6 +339,12 @@ describe('camera status', () => {
       currentStorage: 'card1',
       currentDirectory: '100CANON',
       recordable: { stillImages: 1832, movieSeconds: 4210 },
+      batteries: [
+        { position: 'camera', name: 'LP-E6NH', kind: 'battery', level: '80', quality: 'good' },
+        { position: 'grip01', name: 'LP-E6NH', kind: 'battery', level: '45', quality: 'good' },
+      ],
+      lens: { name: 'RF24-105mm F4 L IS USM', mounted: true },
+      powerZoom,
       unsupported: [],
     })
   })
@@ -350,7 +387,12 @@ describe('camera status', () => {
       'devicestatus/currentstorage',
       'devicestatus/currentdirectory',
       'shooting/information/recordable',
+      'devicestatus/batterylist',
+      'devicestatus/lens',
+      'devicestatus/powerzoomstatus',
     ])
+    expect(parsed.batteries).toBeNull()
+    expect(parsed.lens).toBeNull()
     // The endpoint it does advertise still came back.
     expect(parsed.battery).toMatchObject({ level: 'half' })
   })

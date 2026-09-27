@@ -304,6 +304,8 @@ rawback camera connect 'http://user:password@192.168.0.1:8080'
 rawback camera info
 rawback camera status --json
 rawback camera shoot --force
+rawback camera clock sync --force
+rawback camera owner set --copyright '© Your Name' --force
 
 # Browse and pull files off the card
 rawback camera contents storages

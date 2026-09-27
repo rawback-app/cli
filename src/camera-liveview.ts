@@ -1,9 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 
 import type { LiveViewCameraDisplay, LiveViewSize } from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
+import { saveBytes } from './camera-files.ts'
 import {
   withCameraSession,
   type CameraCommandDependencies,
@@ -11,6 +12,7 @@ import {
 } from './camera-session.ts'
 import { runCameraStream } from './camera-stream.ts'
 import { commandOutput } from './command.ts'
+import { liveviewDetailDocument } from './features/camera/view.ts'
 
 export interface LiveViewStartOptions extends CameraTargetOptions {
   size?: string
@@ -69,15 +71,53 @@ export async function runCameraLiveviewStop(
   })
 }
 
+export interface LiveViewFrameOptions extends CameraTargetOptions {
+  output: string
+  /** Also read the incidental info: AF frames, histogram, level, zoom. */
+  detail?: boolean
+}
+
 export async function runCameraLiveviewFrame(
-  options: CameraTargetOptions & { output: string },
+  options: LiveViewFrameOptions,
   dependencies: CameraCommandDependencies = {},
 ): Promise<void> {
   const ui = commandOutput(dependencies)
   await withCameraSession(options, dependencies, async (session) => {
+    if (options.detail === true) {
+      session.requireSupport(
+        'shooting/liveview/flipdetail',
+        'rawback camera liveview frame --detail',
+      )
+      const response = await session.client.liveview.getImageDetail({
+        kind: 'both',
+        signal: session.signal,
+      })
+      const units = session.client.liveview.parseDetailBody(response.data)
+      let jpeg: Uint8Array | undefined
+      let detail
+      for (const unit of units) {
+        if (unit.kind === 'image') jpeg = unit.jpeg
+        else if (unit.kind === 'info') detail = unit.info
+      }
+      if (jpeg === undefined) {
+        throw new CameraError(
+          'The camera sent no live-view frame. Start live view first with rawback camera liveview start.',
+        )
+      }
+      await saveBytes(options.output, jpeg)
+
+      if (options.json === true) {
+        ui.json({ output: options.output, bytes: jpeg.byteLength, detail: detail ?? null })
+        return
+      }
+      ui.document(
+        liveviewDetailDocument({ output: options.output, bytes: jpeg.byteLength, detail }),
+      )
+      return
+    }
+
     const frame = await session.client.liveview.getImage({ signal: session.signal })
-    await mkdir(dirname(options.output), { recursive: true })
-    await writeFile(options.output, frame.data)
+    await saveBytes(options.output, frame.data)
 
     if (options.json === true) {
       ui.json({ output: options.output, bytes: frame.data.byteLength })
@@ -113,12 +153,20 @@ export async function runCameraLiveviewStream(
   }
 
   await withCameraSession(options, dependencies, async (session) => {
+    // Bodies that serve no multipart stream still stream over `scroll`: one JPEG
+    // per HTTP chunk, released with a DELETE on the same path.
+    const scroll =
+      !session.supports('shooting/liveview/multipart') &&
+      session.supports('shooting/liveview/scroll')
+
     await session.client.liveview.start({
       liveviewsize: (options.size ?? 'small') as LiveViewSize,
       cameradisplay: (options.display ?? 'keep') as LiveViewCameraDisplay,
     })
     // Registered before the first frame so an immediate Ctrl-C still releases it.
-    session.register(() => session.client.liveview.stopMultipart())
+    session.register(() =>
+      scroll ? session.client.liveview.deleteScroll() : session.client.liveview.stopMultipart(),
+    )
 
     if (!toStdout) await mkdir(options.outputDir as string, { recursive: true })
 
@@ -132,7 +180,10 @@ export async function runCameraLiveviewStream(
         ...(options.frames !== undefined ? { limit: options.frames } : {}),
         ...(options.duration !== undefined ? { durationSeconds: options.duration } : {}),
       },
-      (signal) => session.client.liveview.stream({ signal }),
+      (signal) =>
+        scroll
+          ? session.client.liveview.streamScroll({ signal })
+          : session.client.liveview.stream({ signal }),
       async (frame: Uint8Array, index) => {
         bytes += frame.byteLength
         frames += 1

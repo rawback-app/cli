@@ -118,6 +118,30 @@ describe('registry shape', () => {
 describe('registry drift guard', () => {
   const SENTINEL = 'sentinel-request'
 
+  /** A value each JSON parameter's validator accepts, so the thunk reaches the client. */
+  function syntheticJSON(id: string, name: string): Record<string, unknown> {
+    if (name === 'gps') {
+      return {
+        latitude_ref: 'N',
+        latitude: { degree: [35, 1], minute: [0, 1], second: [0, 1] },
+        longitude_ref: 'E',
+        longitude: [139, 1, 0, 1, 0, 1],
+        altitude_ref: 'P',
+        altitude: [0, 1],
+        timestamp: { hour: [0, 1], minute: [0, 1], second: [0, 1] },
+        mapdatum: 'WGS-84',
+        status: 'A',
+        datestamp: '2026:08:04',
+      }
+    }
+    if (name === 'params') return { sharpnessStrength: 4, filter: 'yellow' }
+    if (name === 'setting') return { ssid: 'x', commsetting: ['nw01'] }
+    if (id === 'shooting.setWhiteBalanceShift') return { ba: 0, mg: 0 }
+    if (id === 'shooting.setStillImageQuality') return { raw: 'craw', jpeg: 'large_fine' }
+    if (id === 'shooting.setPowerZoomSetting') return { speed: 'slow', level: 7 }
+    throw new Error(`no synthetic JSON for ${id} ${name}; add one`)
+  }
+
   function syntheticArgs(entry: ApiEntry): Record<string, unknown> {
     const args: Record<string, unknown> = {}
     for (const param of entry.params) {
@@ -136,21 +160,7 @@ describe('registry drift guard', () => {
           args[param.name] = param.options[0]
           break
         case 'json':
-          args[param.name] =
-            param.name === 'gps'
-              ? {
-                  latitude_ref: 'N',
-                  latitude: [35, 0, 0],
-                  longitude_ref: 'E',
-                  longitude: [139, 0, 0],
-                  altitude_ref: 'P',
-                  altitude: [0, 1],
-                  timestamp: [0, 0, 0],
-                  mapdatum: 'WGS-84',
-                  status: 'A',
-                  datestamp: '2026:08:04',
-                }
-              : { sharpness_strength: 4 }
+          args[param.name] = syntheticJSON(entry.id, param.name)
           break
       }
     }
@@ -197,8 +207,11 @@ describe('registry drift guard', () => {
             // and was callable. The drift we are hunting is the opposite: a
             // renamed or removed method, which surfaces as a TypeError.
             const message = error instanceof Error ? error.message : String(error)
+            // A CameraError means an accessor rejected the synthetic arguments,
+            // so the thunk never reached the client and would hide real drift.
             const drifted =
               error instanceof TypeError ||
+              error instanceof CameraError ||
               /is not a function|undefined is not an object|Cannot read propert/i.test(message)
             if (drifted) failures.push(`${entry.id}: ${message}`)
           }
@@ -320,6 +333,66 @@ describe('parseArgs', () => {
     expect(() => parseArgs(style, ['style=standard', 'params={oops'])).toThrow(/must be JSON/)
   })
 
+  test('picture-style parameters reject a key the library would drop', () => {
+    const style = byId('shooting.setPictureStyleDetail')
+    const session = { client: { shooting: { setPictureStyleDetail: async () => undefined } } }
+    const run = (params: Record<string, unknown>) =>
+      style.run(session as never, { style: 'standard', params })
+
+    expect(() => run({ sharpness_strength: 4 })).toThrow(/spelt sharpnessStrength here/)
+    expect(() => run({ sharpnes: 4 })).toThrow(/not a picture-style parameter.*sharpnessStrength/)
+    expect(() => run({ contrast: 'high' })).toThrow(/params\.contrast must be a number/)
+    expect(() => run({ filter: 2 })).toThrow(/params\.filter must be a string/)
+    expect(run({ sharpnessStrength: 4, filter: 'yellow' })).resolves.toBeUndefined()
+  })
+
+  test('object-valued settings check their members before the camera sees them', () => {
+    const run = (id: string, value: unknown) =>
+      byId(id).run(
+        { client: { shooting: new Proxy({}, { get: () => async () => undefined }) } } as never,
+        {
+          value,
+        },
+      )
+
+    expect(() => run('shooting.setWhiteBalanceShift', { ba: 1, gm: 0 })).toThrow(
+      /value\.gm is not expected\. Expected: ba, mg/,
+    )
+    expect(() => run('shooting.setStillImageQuality', { raw: 1 })).toThrow(
+      /value\.raw must be a string/,
+    )
+    expect(() => run('shooting.setPowerZoomSetting', { level: 'max' })).toThrow(
+      /value\.level must be a number/,
+    )
+  })
+
+  test('network setting objects hold only strings', () => {
+    const entry = byId('network.setWiFiSetting')
+    const session = { client: { network: { setWiFiSetting: async () => ({}) } } }
+    expect(() =>
+      entry.run(session as never, { setID: 'set1', setting: { ssid: 'x', channel: 6 } }),
+    ).toThrow(/setting\.channel must be a string or an array of strings/)
+  })
+
+  test('event polling holds in the portable style', async () => {
+    const polling = byId('event.getPolling')
+    expect(polling.params.map((param) => param.name)).toEqual(['hold', 'timeout'])
+    const calls: unknown[] = []
+    const session = {
+      client: {
+        event: {
+          getPolling: async (options: unknown) => {
+            calls.push(options)
+            return {}
+          },
+        },
+      },
+    }
+    await polling.run(session as never, { hold: true })
+    await polling.run(session as never, { timeout: 'long' })
+    expect(calls).toEqual([{ hold: true }, { hold: false, timeout: 'long' }])
+  })
+
   test('validateArgs enforces the same rule the form must obey', () => {
     expect(() => validateArgs(setting, {})).toThrow(CameraError)
     expect(() => validateArgs(setting, { name: 'av' })).not.toThrow()
@@ -423,6 +496,63 @@ describe('camera api runner', () => {
 
     expect(output.json()).toEqual({ id: 'shooting.setAperture', ran: false })
     expect(camera.requests).toEqual([])
+  })
+
+  test('writes GPS given as rational objects under the gps key', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera()
+    const output = capture()
+    const gps = {
+      latitude_ref: 'N',
+      latitude: { degree: [35, 1], minute: [39, 1], second: [2940, 100] },
+      longitude_ref: 'E',
+      longitude: { degree: [139, 1], minute: [44, 1], second: [3000, 100] },
+      altitude_ref: 'P',
+      altitude: [40, 1],
+      timestamp: { hour: [9, 1], minute: [0, 1], second: [0, 1] },
+      mapdatum: 'WGS-84',
+      status: 'A',
+      datestamp: '2026:08:04',
+    }
+
+    await runCameraApi(
+      {
+        id: 'contents.setContentGPS',
+        arg: [
+          'locator=/ccapi/ver140/contents/card1/100CANON/IMG_1.JPG',
+          `gps=${JSON.stringify(gps)}`,
+        ],
+        force: true,
+        json: true,
+      },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    const put = camera.requests.find((request) => request.method === 'PUT')
+    expect(JSON.parse(put?.body ?? '{}')).toEqual({ action: 'gps', gps })
+  })
+
+  test('rejects a GPS block with a malformed rational', () => {
+    const entry = byId('contents.setContentGPS')
+    const session = { client: { contents: { setContentGPS: async () => undefined } } }
+    expect(() =>
+      entry.run(session as never, {
+        locator: 'card1/100CANON/IMG_1.JPG',
+        gps: {
+          latitude_ref: 'N',
+          latitude: { degree: [35, 1] },
+          longitude_ref: 'E',
+          longitude: [139, 1, 0, 1, 0, 1],
+          altitude_ref: 'P',
+          altitude: [0, 1],
+          timestamp: [0, 1, 0, 1, 0, 1],
+          mapdatum: 'WGS-84',
+          status: 'A',
+          datestamp: '2026:08:04',
+        },
+      }),
+    ).toThrow(/gps\.latitude must be \{ degree, minute, second \}/)
   })
 
   test('an unreliable endpoint warns on stderr before running', async () => {

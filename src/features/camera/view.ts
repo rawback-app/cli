@@ -1,4 +1,10 @@
-import type { ConnectionSnapshot } from '@rawback/ccapi-js'
+import type {
+  AngleInformation,
+  ConnectionSnapshot,
+  DateTime,
+  LiveViewIncidental,
+  PowerZoomStatus,
+} from '@rawback/ccapi-js'
 
 import { formatBytes } from '../../ui/format.ts'
 import { cell, statusCell, type UiDocument, type UiField } from '../../ui/model.ts'
@@ -152,6 +158,10 @@ export interface CameraStatusView {
   currentStorage?: string | undefined
   currentDirectory?: string | undefined
   recordable?: { stillImages?: number | undefined; movieSeconds?: number | undefined } | undefined
+  /** Every battery, including a grip's; `level` is a percentage or `unknown`. */
+  batteries?: Array<{ position: string; name: string; level: string }> | undefined
+  lens?: { name?: string | undefined; mounted?: boolean | undefined } | undefined
+  powerZoom?: PowerZoomStatus | undefined
   unsupported: string[]
 }
 
@@ -174,6 +184,29 @@ export function cameraStatusDocument(view: CameraStatusView): UiDocument {
           : DASH,
     },
   ]
+  // One row per grip battery; the body's own is already the Battery row above.
+  for (const battery of view.batteries ?? []) {
+    if (battery.position === 'camera') continue
+    fields.push({
+      label: `Battery (${battery.position})`,
+      value: `${battery.level === 'unknown' ? 'unknown' : `${battery.level}%`} (${battery.name})`,
+    })
+  }
+  if (view.lens !== undefined) {
+    fields.push({
+      label: 'Lens',
+      value:
+        view.lens.mounted === false || view.lens.name === undefined
+          ? cell('none mounted', { dim: true })
+          : view.lens.name,
+    })
+  }
+  if (view.powerZoom?.equip === true) {
+    fields.push({
+      label: 'Power zoom',
+      value: `${view.powerZoom.sw}, ${view.powerZoom.location}${view.powerZoom.moving ? ', moving' : ''}`,
+    })
+  }
 
   return {
     title: 'Camera status',
@@ -214,6 +247,17 @@ export interface SettingRow {
   name: string
   value: string | null
   ability: string[] | null
+  range: SettingRange | null
+}
+
+export interface SettingRange {
+  min: number | null
+  max: number | null
+  step: number | null
+}
+
+function rangeText(range: SettingRange): string {
+  return range.min === null ? 'locked' : `${range.min}–${range.max} step ${range.step}`
 }
 
 export function settingsListDocument(settings: SettingRow[]): UiDocument {
@@ -234,7 +278,9 @@ export function settingsListDocument(settings: SettingRow[]): UiDocument {
           choices:
             setting.ability && setting.ability.length > 0
               ? cell(setting.ability.join(', '), { dim: true })
-              : DASH,
+              : setting.range
+                ? cell(rangeText(setting.range), { dim: true })
+                : DASH,
         })),
       },
       {
@@ -250,7 +296,7 @@ export interface SettingView {
   name: string
   value: string | number | null
   ability: string[] | null
-  range: { min: number | null; max: number | null; step: number | null } | null
+  range: SettingRange | null
 }
 
 export function settingDocument(setting: SettingView): UiDocument {
@@ -265,9 +311,7 @@ export function settingDocument(setting: SettingView): UiDocument {
     fields.push({
       label: 'Range',
       value:
-        setting.range.min === null
-          ? cell('locked', { tone: 'warning' })
-          : `${setting.range.min}–${setting.range.max} step ${setting.range.step}`,
+        setting.range.min === null ? cell('locked', { tone: 'warning' }) : rangeText(setting.range),
     })
   }
   if (setting.ability && setting.ability.length > 0) {
@@ -484,6 +528,208 @@ export function pathListDocument(
         columns: [{ key: 'path', label, required: true, priority: 1 }],
         rows: paths.map((path) => ({ path })),
       },
+    ],
+  }
+}
+
+export interface RtpStatusView {
+  status?: string | undefined
+  ipaddress?: string | undefined
+}
+
+export function rtpStatusDocument(view: RtpStatusView): UiDocument {
+  return {
+    title: 'RTP live view',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          {
+            label: 'Status',
+            value:
+              view.status === undefined
+                ? DASH
+                : cell(view.status === 'start' ? 'streaming' : 'stopped', {
+                    tone: view.status === 'start' ? 'success' : 'neutral',
+                  }),
+          },
+          { label: 'Destination', value: view.ipaddress ?? DASH },
+        ],
+      },
+    ],
+  }
+}
+
+export interface LiveViewDetailView {
+  output: string
+  bytes: number
+  detail: LiveViewIncidental | undefined
+}
+
+export function liveviewDetailDocument(view: LiveViewDetailView): UiDocument {
+  const detail = view.detail
+  const magnification = detail?.zoom?.magnification
+  return {
+    title: 'Live-view frame',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Saved', value: `${view.output} (${formatBytes(view.bytes)})` },
+          {
+            label: 'AF frames',
+            value: detail?.afFrames !== undefined ? String(detail.afFrames.length) : DASH,
+          },
+          {
+            label: 'Level',
+            value: detail?.angleInformation ? levelText(detail.angleInformation) : DASH,
+          },
+          { label: 'Zoom', value: magnification !== undefined ? `${magnification}×` : DASH },
+        ],
+      },
+      {
+        type: 'text',
+        text: 'The histogram, AF frame positions and image rectangles are in --json.',
+        dim: true,
+      },
+    ],
+  }
+}
+
+/** Posture codes from the incidental-information reference (doc ch. 5 §5.2). */
+const POSTURES = ['horizontal', 'grip up', 'grip down', 'undetermined', 'upside down']
+
+/** `rolling`/`pitching` arrive in hundredths of a degree. */
+function levelText(angle: AngleInformation): string {
+  const parts: string[] = []
+  if (angle.cameraPosture !== undefined) {
+    parts.push(POSTURES[angle.cameraPosture] ?? `posture ${angle.cameraPosture}`)
+  }
+  if (angle.rolling !== undefined) parts.push(`roll ${(angle.rolling / 100).toFixed(1)}°`)
+  if (angle.pitching !== undefined) parts.push(`pitch ${(angle.pitching / 100).toFixed(1)}°`)
+  return parts.length > 0 ? parts.join(', ') : '—'
+}
+
+export interface RecordStatusView {
+  movieMode?: string | undefined
+  movieSeconds?: number | undefined
+}
+
+export function recordStatusDocument(view: RecordStatusView): UiDocument {
+  return {
+    title: 'Movie recording',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          {
+            label: 'Movie mode',
+            value:
+              view.movieMode === undefined
+                ? cell('no control on this body', { dim: true })
+                : statusCell(view.movieMode === 'on', 'on'),
+          },
+          {
+            label: 'Movie time left',
+            value: view.movieSeconds !== undefined ? formatSeconds(view.movieSeconds) : DASH,
+          },
+        ],
+      },
+    ],
+  }
+}
+
+export interface ZoomView {
+  zoom?: { value: number | null; min: number | null; max: number | null; step: number | null }
+  powerZoom?: { value: string | null; ability: string[] }
+  adapter?: PowerZoomStatus
+}
+
+export function zoomDocument(view: ZoomView): UiDocument {
+  const fields: UiField[] = []
+  if (view.zoom !== undefined) {
+    const { value, min, max } = view.zoom
+    fields.push({
+      label: 'Zoom position',
+      value:
+        value === null
+          ? DASH
+          : min !== null && max !== null
+            ? `${value} (${min}–${max})`
+            : String(value),
+    })
+  }
+  if (view.powerZoom !== undefined) {
+    fields.push({ label: 'Power zoom', value: view.powerZoom.value ?? DASH })
+  }
+  if (view.adapter !== undefined) {
+    fields.push(
+      { label: 'Adapter', value: statusCell(view.adapter.status, 'ready') },
+      { label: 'Switch', value: view.adapter.sw },
+      { label: 'Lens position', value: view.adapter.location },
+    )
+  }
+  return {
+    title: 'Zoom',
+    blocks:
+      fields.length > 0
+        ? [{ type: 'fields', fields }]
+        : [{ type: 'text', text: 'This camera advertises no zoom control.', dim: true }],
+  }
+}
+
+export function clockDocument(clock: DateTime): UiDocument {
+  return {
+    title: 'Camera clock',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Date and time', value: clock.datetime || DASH },
+          { label: 'Daylight saving', value: clock.dst ? 'on' : 'off' },
+        ],
+      },
+      {
+        type: 'text',
+        text: "Set it to this computer's time with rawback camera clock sync.",
+        dim: true,
+      },
+    ],
+  }
+}
+
+export interface OwnerView {
+  copyright?: string
+  author?: string
+  'owner-name'?: string
+  nickname?: string
+  unsupported: string[]
+}
+
+export function ownerDocument(view: OwnerView): UiDocument {
+  const value = (text: string | undefined) =>
+    text === undefined ? DASH : text === '' ? cell('not set', { dim: true }) : text
+  return {
+    title: 'Owner details',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Copyright', value: value(view.copyright) },
+          { label: 'Author', value: value(view.author) },
+          { label: 'Owner name', value: value(view['owner-name']) },
+          { label: 'Nickname', value: value(view.nickname) },
+        ],
+      },
+      ...(view.unsupported.length > 0
+        ? [
+            {
+              type: 'text' as const,
+              text: `Not advertised by this camera: ${view.unsupported.join(', ')}`,
+              dim: true,
+            },
+          ]
+        : []),
     ],
   }
 }

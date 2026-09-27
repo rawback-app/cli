@@ -1,11 +1,12 @@
 import { createWriteStream } from 'node:fs'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { Writable } from 'node:stream'
 
-import type { ContentDataKind, ContentType, ContentsOrder } from '@rawback/ccapi-js'
+import type { ContentDataKind, ContentType, ContentsOrder, GPSInfo } from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
+import { isDirectory, refuseOverwrite } from './camera-files.ts'
 import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
 import {
   withCameraSession,
@@ -186,9 +187,7 @@ export async function runCameraContentsGet(
     ? join(options.output, locator.file)
     : options.output
 
-  if (options.overwrite !== true && (await exists(target))) {
-    throw new CameraError(`${target} already exists; pass --overwrite to replace it.`)
-  }
+  await refuseOverwrite(target, options.overwrite)
 
   await withCameraSession(options, dependencies, async (session) => {
     // Streamed rather than buffered: a RAW file is tens of megabytes.
@@ -248,19 +247,238 @@ export async function runCameraContentsDelete(
   })
 }
 
-async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory()
-  } catch {
-    return false
+export type ContentEdit =
+  | { kind: 'protect'; enabled: boolean }
+  | { kind: 'archive'; enabled: boolean }
+  | { kind: 'rate'; rating: string }
+  | { kind: 'rotate'; degrees: number }
+  /** Raw attributes for the file's XMP `rdf:Description` tag (doc 4.7.6, ver130+). */
+  | { kind: 'xmp'; attributes: string }
+  | { kind: 'geotag'; latitude: number; longitude: number; altitude?: number; time?: Date }
+
+export interface ContentsEditOptions extends CameraTargetOptions {
+  locator: string
+  edit: ContentEdit
+  force?: boolean
+}
+
+/** A GPS angle in hundredths of an arcsecond, split into DMS rationals. */
+function angleRational(degrees: number) {
+  const hundredths = Math.round(Math.abs(degrees) * 3600 * 100)
+  return {
+    degree: [Math.floor(hundredths / 360_000), 1],
+    minute: [Math.floor((hundredths % 360_000) / 6000), 1],
+    second: [hundredths % 6000, 100],
   }
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
+/**
+ * The full EXIF GPS block the camera requires (doc 4.7.6) from a plain
+ * position: WGS-84, a fix (`A`), and the UTC time and date of `time`.
+ * Altitude is written as sea level when none is given.
+ */
+export function gpsInfo(
+  latitude: number,
+  longitude: number,
+  altitude = 0,
+  time = new Date(),
+): GPSInfo {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return {
+    latitude_ref: latitude < 0 ? 'S' : 'N',
+    latitude: angleRational(latitude),
+    longitude_ref: longitude < 0 ? 'W' : 'E',
+    longitude: angleRational(longitude),
+    altitude_ref: altitude < 0 ? 'M' : 'P',
+    altitude: [Math.round(Math.abs(altitude) * 100), 100],
+    timestamp: {
+      hour: [time.getUTCHours(), 1],
+      minute: [time.getUTCMinutes(), 1],
+      second: [time.getUTCSeconds(), 1],
+    },
+    mapdatum: 'WGS-84',
+    status: 'A',
+    datestamp: `${time.getUTCFullYear()}:${pad(time.getUTCMonth() + 1)}:${pad(time.getUTCDate())}`,
   }
+}
+
+function editQuestion(file: string, edit: ContentEdit): string {
+  switch (edit.kind) {
+    case 'protect':
+      return `${edit.enabled ? 'Protect' : 'Unprotect'} ${file} on the camera?`
+    case 'archive':
+      return `${edit.enabled ? 'Set' : 'Clear'} the archive flag on ${file}?`
+    case 'rate':
+      return edit.rating === 'off' ? `Clear the rating of ${file}?` : `Rate ${file} ${edit.rating}?`
+    case 'rotate':
+      return `Set the rotation of ${file} to ${edit.degrees}°?`
+    case 'xmp':
+      return `Write XMP attributes into ${file}?`
+    case 'geotag':
+      return `Write the location ${edit.latitude}, ${edit.longitude} into ${file}?`
+  }
+}
+
+function editDone(file: string, edit: ContentEdit): string {
+  switch (edit.kind) {
+    case 'protect':
+      return `${edit.enabled ? 'Protected' : 'Unprotected'} ${file}.`
+    case 'archive':
+      return `${edit.enabled ? 'Set' : 'Cleared'} the archive flag on ${file}.`
+    case 'rate':
+      return edit.rating === 'off'
+        ? `Cleared the rating of ${file}.`
+        : `Rated ${file} ${edit.rating}.`
+    case 'rotate':
+      return `Set the rotation of ${file} to ${edit.degrees}°.`
+    case 'xmp':
+      return `Wrote the XMP attributes into ${file}.`
+    case 'geotag':
+      return `Wrote the location ${edit.latitude}, ${edit.longitude} into ${file}.`
+  }
+}
+
+/** Changes one file's protect, archive, rating, rotation, XMP attributes or location. */
+export async function runCameraContentsEdit(
+  options: ContentsEditOptions,
+  dependencies: CameraCommandDependencies = {},
+): Promise<void> {
+  const ui = commandOutput(dependencies)
+  const locator = parseContentLocator(options.locator)
+  const edit = options.edit
+
+  if (options.force !== true) {
+    const confirmed = await cameraPrompts(dependencies).confirm(editQuestion(locator.file, edit))
+    if (!confirmed) {
+      if (options.json === true) ui.json({ changed: false, locator: options.locator })
+      else ui.info('Left the file as it was.')
+      return
+    }
+  }
+
+  await withCameraSession(options, dependencies, async (session) => {
+    const contents = session.client.contents
+    let value: unknown
+    switch (edit.kind) {
+      case 'protect':
+        await contents.setContentProtect(locator, edit.enabled)
+        value = edit.enabled
+        break
+      case 'archive':
+        await contents.setContentArchive(locator, edit.enabled)
+        value = edit.enabled
+        break
+      case 'rate':
+        await contents.setContentRating(locator, edit.rating)
+        value = edit.rating
+        break
+      case 'rotate':
+        await contents.rotateContent(locator, edit.degrees)
+        value = edit.degrees
+        break
+      case 'xmp':
+        await contents.setContentXMPDescription(locator, edit.attributes)
+        value = edit.attributes
+        break
+      case 'geotag': {
+        const gps = gpsInfo(
+          edit.latitude,
+          edit.longitude,
+          edit.altitude,
+          edit.time ?? (dependencies.now ?? (() => new Date()))(),
+        )
+        await contents.setContentGPS(locator, gps)
+        value = gps
+        break
+      }
+    }
+
+    if (options.json === true) {
+      ui.json({ changed: true, locator: options.locator, action: edit.kind, value })
+      return
+    }
+    ui.success(editDone(locator.file, edit))
+  })
+}
+
+export async function runCameraContentsRmdir(
+  options: CameraTargetOptions & { storage: string; directory: string; force?: boolean },
+  dependencies: CameraCommandDependencies = {},
+): Promise<void> {
+  const ui = commandOutput(dependencies)
+
+  if (options.force !== true) {
+    const confirmed = await cameraPrompts(dependencies).confirm(
+      `Delete the directory ${options.directory} on ${options.storage}, and every file in it? This cannot be undone.`,
+    )
+    if (!confirmed) {
+      if (options.json === true) ui.json({ deleted: false, directory: options.directory })
+      else ui.info('Left the directory on the camera.')
+      return
+    }
+  }
+
+  await withCameraSession(options, dependencies, async (session) => {
+    const directory = await resolveDirectory(session, options.storage, options.directory)
+    await session.client.contents.deleteDirectory(
+      directory.storage,
+      directory.directory,
+      directory.folder,
+    )
+    if (options.json === true) {
+      ui.json({ deleted: true, storage: directory.storage, directory: directory.directory })
+      return
+    }
+    ui.success(`Deleted ${directory.directory} from ${directory.storage}.`)
+  })
+}
+
+/**
+ * Formats a card (doc 4.5.6). The storage is checked against the camera's own
+ * list first, and without `--force` its name must be typed back — a yes/no is
+ * too easy to give for something that erases every file.
+ */
+export async function runCameraCardFormat(
+  options: CameraTargetOptions & { storage: string; force?: boolean },
+  dependencies: CameraCommandDependencies = {},
+): Promise<void> {
+  const ui = commandOutput(dependencies)
+
+  await withCameraSession(options, dependencies, async (session) => {
+    session.requireSupport('functions/cardformat', 'rawback camera card format')
+    const storages = (await session.client.contents.listStorages()).paths.map(
+      (path) => path.split('/').filter(Boolean).pop() ?? path,
+    )
+    if (!storages.includes(options.storage)) {
+      throw new CameraError(
+        storages.length > 0
+          ? `The camera has no storage named ${options.storage}. It has: ${storages.join(', ')}.`
+          : `The camera reports no storage; is a card inserted?`,
+      )
+    }
+
+    if (options.force !== true) {
+      const prompts = cameraPrompts(dependencies)
+      if (prompts.input === undefined) {
+        throw new CameraError(
+          'Formatting a card needs an interactive terminal unless --force is provided.',
+        )
+      }
+      const typed = await prompts.input(
+        `Formatting ${options.storage} erases every file on it. Type ${options.storage} to continue:`,
+      )
+      if (typed.trim() !== options.storage) {
+        if (options.json === true) ui.json({ formatted: false, storage: options.storage })
+        else ui.info(`Left ${options.storage} untouched.`)
+        return
+      }
+    }
+
+    await session.client.settings.formatCard(options.storage)
+    if (options.json === true) {
+      ui.json({ formatted: true, storage: options.storage })
+      return
+    }
+    ui.success(`Formatted ${options.storage}.`)
+  })
 }

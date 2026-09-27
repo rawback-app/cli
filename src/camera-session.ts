@@ -27,6 +27,8 @@ export interface CameraTarget {
 export interface CameraPrompts {
   confirm(message: string): Promise<boolean>
   password(message: string): Promise<string>
+  /** Typed text; only `card format` asks for it, to have the card's name typed back. */
+  input?(message: string): Promise<string>
 }
 
 export interface CameraCommandDependencies extends ReadCommandDependencies {
@@ -208,6 +210,18 @@ export class CameraSession {
   /** Whether the camera advertises an endpoint suffix, from the discovery map. */
   supports(suffix: string): boolean {
     return this.#suffixes.has(normalizeSuffix(suffix))
+  }
+
+  /**
+   * Refuses, before any request, an endpoint the camera does not advertise —
+   * the message `camera api` gives, rather than a bare 404 from the body.
+   */
+  requireSupport(suffix: string, what: string): void {
+    if (this.supports(suffix)) return
+    throw new CameraError(
+      `This camera does not advertise "${suffix}", which ${what} needs. ` +
+        'Run rawback camera api --list to see what it supports.',
+    )
   }
 
   /** Registers a camera-side release to run during teardown. */

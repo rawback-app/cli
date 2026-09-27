@@ -1,3 +1,5 @@
+import { isIP } from 'node:net'
+
 import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
@@ -2547,20 +2549,35 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
           )
           .command(
             'contents <action> [a] [b]',
-            'browse and download photos on the card',
+            'browse, download, and edit photos on the card',
             (contents) =>
               cameraTargetOptions(contents)
                 .positional('action', {
-                  choices: ['storages', 'dirs', 'list', 'info', 'get', 'delete'] as const,
+                  choices: [
+                    'storages',
+                    'dirs',
+                    'list',
+                    'info',
+                    'get',
+                    'delete',
+                    'protect',
+                    'archive',
+                    'rate',
+                    'rotate',
+                    'xmp',
+                    'geotag',
+                    'rmdir',
+                  ] as const,
                   describe: 'contents action',
                   type: 'string',
                 })
                 .positional('a', {
-                  describe: 'storage name (dirs, list) or content locator (info, get, delete)',
+                  describe: 'storage name (dirs, list, rmdir) or content locator (the rest)',
                   type: 'string',
                 })
                 .positional('b', {
-                  describe: 'directory for list: 100CANON, DCIM/100CANON, or a locator from dirs',
+                  describe:
+                    'directory (list, rmdir), on|off (protect, archive), off|1-5 (rate), 0|90|180|270 (rotate), or XMP attributes (xmp)',
                   type: 'string',
                 })
                 .option('type', {
@@ -2609,9 +2626,26 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'replace an existing destination file',
                   type: 'boolean',
                 })
+                .option('lat', {
+                  describe: 'with geotag: latitude in decimal degrees',
+                  type: 'number',
+                })
+                .option('lon', {
+                  describe: 'with geotag: longitude in decimal degrees',
+                  type: 'number',
+                })
+                .option('alt', {
+                  describe: 'with geotag: altitude in metres (default 0)',
+                  type: 'number',
+                })
+                .option('time', {
+                  describe:
+                    'with geotag: when the position was taken, as an ISO 8601 time (default now)',
+                  type: 'string',
+                })
                 .option('force', {
                   default: false,
-                  describe: 'delete without confirmation',
+                  describe: 'change or delete without confirmation',
                   type: 'boolean',
                 })
                 .option('json', {
@@ -2621,17 +2655,55 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 })
                 .check((args) => {
                   checkCameraTarget(args)
-                  if (['dirs', 'list', 'info', 'get', 'delete'].includes(String(args.action))) {
-                    if (args.a === undefined) {
-                      throw new Error(
-                        args.action === 'dirs' || args.action === 'list'
-                          ? `rawback camera contents ${args.action} requires a storage name`
-                          : `rawback camera contents ${args.action} requires a content locator`,
-                      )
-                    }
+                  const command = `rawback camera contents ${args.action}`
+                  if (args.action !== 'storages' && args.a === undefined) {
+                    throw new Error(
+                      ['dirs', 'list', 'rmdir'].includes(String(args.action))
+                        ? `${command} requires a storage name`
+                        : `${command} requires a content locator`,
+                    )
                   }
-                  if (args.action === 'list' && args.b === undefined) {
-                    throw new Error('rawback camera contents list requires a directory name')
+                  if ((args.action === 'list' || args.action === 'rmdir') && args.b === undefined) {
+                    throw new Error(`${command} requires a directory name`)
+                  }
+                  if (
+                    (args.action === 'protect' || args.action === 'archive') &&
+                    args.b !== undefined &&
+                    args.b !== 'on' &&
+                    args.b !== 'off'
+                  ) {
+                    throw new Error(`${command} takes on or off`)
+                  }
+                  if (
+                    args.action === 'rate' &&
+                    !['off', '1', '2', '3', '4', '5'].includes(String(args.b))
+                  ) {
+                    throw new Error(`${command} takes a rating: off or 1-5`)
+                  }
+                  if (
+                    args.action === 'rotate' &&
+                    !['0', '90', '180', '270'].includes(String(args.b))
+                  ) {
+                    throw new Error(`${command} takes 0, 90, 180 or 270`)
+                  }
+                  if (args.action === 'xmp' && args.b === undefined) {
+                    throw new Error(
+                      `${command} requires the XMP attributes, e.g. 'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9'`,
+                    )
+                  }
+                  if (args.action === 'geotag') {
+                    if (args.lat === undefined || !(Math.abs(args.lat) <= 90)) {
+                      throw new Error(`${command} requires --lat between -90 and 90`)
+                    }
+                    if (args.lon === undefined || !(Math.abs(args.lon) <= 180)) {
+                      throw new Error(`${command} requires --lon between -180 and 180`)
+                    }
+                    if (args.alt !== undefined && !Number.isFinite(args.alt)) {
+                      throw new Error('--alt must be a number of metres')
+                    }
+                    if (args.time !== undefined && Number.isNaN(Date.parse(args.time))) {
+                      throw new Error('--time must be an ISO 8601 time, e.g. 2026-08-04T09:00:00Z')
+                    }
                   }
                   if (args.action === 'get' && args.output === undefined) {
                     throw new Error('rawback camera contents get requires --output')
@@ -2639,8 +2711,13 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   if (!Number.isSafeInteger(args.page) || args.page < 1) {
                     throw new Error('--page must be a positive whole number')
                   }
-                  if (args.action === 'delete') {
-                    return checkMutatingIsNonInteractive(args, 'rawback camera contents delete')
+                  if (args.order !== undefined && args.all !== true) {
+                    throw new Error(
+                      '--order needs --all: the camera orders only a streamed listing',
+                    )
+                  }
+                  if (!['storages', 'dirs', 'list', 'info', 'get'].includes(String(args.action))) {
+                    return checkMutatingIsNonInteractive(args, command)
                   }
                   return true
                 }),
@@ -2685,6 +2762,53 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     'Deletion cancelled.',
                   )
                   return
+                case 'rmdir':
+                  await runCommand(
+                    () =>
+                      contents.runCameraContentsRmdir({
+                        ...target,
+                        storage: first,
+                        directory: args.b as string,
+                        force: args.force,
+                      }),
+                    'Deletion cancelled.',
+                  )
+                  return
+                case 'protect':
+                case 'archive':
+                case 'rate':
+                case 'rotate':
+                case 'xmp':
+                case 'geotag': {
+                  const value = args.b
+                  const edit =
+                    args.action === 'protect' || args.action === 'archive'
+                      ? { kind: args.action, enabled: value !== 'off' }
+                      : args.action === 'rate'
+                        ? { kind: args.action, rating: value as string }
+                        : args.action === 'rotate'
+                          ? { kind: args.action, degrees: Number(value) }
+                          : args.action === 'xmp'
+                            ? { kind: args.action, attributes: value as string }
+                            : {
+                                kind: args.action,
+                                latitude: args.lat as number,
+                                longitude: args.lon as number,
+                                ...(args.alt !== undefined ? { altitude: args.alt } : {}),
+                                ...(args.time !== undefined ? { time: new Date(args.time) } : {}),
+                              }
+                  await runCommand(
+                    () =>
+                      contents.runCameraContentsEdit({
+                        ...target,
+                        locator: first,
+                        edit,
+                        force: args.force,
+                      }),
+                    'Left the file as it was.',
+                  )
+                  return
+                }
                 default:
                   await runCommand(() =>
                     contents.runCameraContentsList({
@@ -2732,6 +2856,12 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'directory for streamed frames, or - for stdout',
                   type: 'string',
                 })
+                .option('detail', {
+                  default: false,
+                  describe:
+                    'with frame: also read AF frames, histogram, level and zoom from the camera',
+                  type: 'boolean',
+                })
                 .option('frames', { describe: 'stop after this many frames', type: 'number' })
                 .option('duration', { describe: 'stop after this many seconds', type: 'number' })
                 .option('force', {
@@ -2748,6 +2878,9 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   checkCameraTarget(args)
                   if (args.action === 'frame' && args.output === undefined) {
                     throw new Error('rawback camera liveview frame requires an output file')
+                  }
+                  if (args.detail && args.action !== 'frame') {
+                    throw new Error('--detail applies only to rawback camera liveview frame')
                   }
                   if (args.action === 'stream') {
                     if (args.outputDir === undefined) {
@@ -2779,6 +2912,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     liveview.runCameraLiveviewFrame({
                       ...target,
                       output: args.output as string,
+                      detail: args.detail,
                     }),
                   )
                   return
@@ -2879,6 +3013,411 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                       ...(args.timeoutKind !== undefined ? { timeoutKind: args.timeoutKind } : {}),
                     }),
                   )
+              }
+            },
+          )
+          .command(
+            'record <action>',
+            'start and stop movie recording',
+            (record) =>
+              cameraTargetOptions(record)
+                .positional('action', {
+                  choices: ['start', 'stop', 'status'] as const,
+                  describe: 'recording action',
+                  type: 'string',
+                })
+                .option('movie-mode', {
+                  default: false,
+                  describe: 'with start: switch a body with a movie-mode control into movie mode',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'start or stop without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'status') return true
+                  return checkMutatingIsNonInteractive(args, `rawback camera record ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraRecord } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraRecord({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'start' | 'stop' | 'status',
+                    movieMode: args.movieMode,
+                    force: args.force,
+                  }),
+                'Recording cancelled.',
+              )
+            },
+          )
+          .command(
+            'focus <action>',
+            'autofocus, or move focus near or far',
+            (focus) =>
+              cameraTargetOptions(focus)
+                .positional('action', {
+                  choices: ['af', 'stop', 'near', 'far'] as const,
+                  describe: 'focus action',
+                  type: 'string',
+                })
+                .option('steps', {
+                  choices: [1, 2, 3] as const,
+                  default: 1,
+                  describe: 'with near or far: 1 is the finest step, 3 the coarsest',
+                  type: 'number',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'focus without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  return checkMutatingIsNonInteractive(args, `rawback camera focus ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraFocus } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraFocus({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'af' | 'stop' | 'near' | 'far',
+                    steps: args.steps,
+                    force: args.force,
+                  }),
+                'Focus cancelled.',
+              )
+            },
+          )
+          .command(
+            'zoom [value]',
+            'read the zoom, or zoom to a position or wide|tele|stop',
+            (zoom) =>
+              cameraTargetOptions(zoom)
+                .positional('value', {
+                  describe:
+                    'a zoom position (PowerShot), or wide, tele or stop (Power Zoom Adapter)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'zoom without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.value === undefined) return true
+                  const drive = ['wide', 'tele', 'stop'].includes(args.value)
+                  const position = Number(args.value)
+                  if (!drive && (!Number.isSafeInteger(position) || position < 0)) {
+                    throw new Error(
+                      'rawback camera zoom takes a whole-number position or wide|tele|stop',
+                    )
+                  }
+                  return checkMutatingIsNonInteractive(args, 'rawback camera zoom')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraZoom } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraZoom({
+                    ...cameraTargetArgs(args),
+                    force: args.force,
+                    ...(args.value !== undefined ? { value: args.value } : {}),
+                  }),
+                'Zoom cancelled.',
+              )
+            },
+          )
+          .command(
+            'clock [action]',
+            "read the camera's clock, or sync it to this computer",
+            (clock) =>
+              cameraTargetOptions(clock)
+                .positional('action', {
+                  choices: ['show', 'sync'] as const,
+                  default: 'show',
+                  describe: 'clock action',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'sync without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action !== 'sync') return true
+                  return checkMutatingIsNonInteractive(args, 'rawback camera clock sync')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraClock } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraClock({
+                    ...cameraTargetArgs(args),
+                    sync: args.action === 'sync',
+                    force: args.force,
+                  }),
+                'Clock sync cancelled.',
+              )
+            },
+          )
+          .command(
+            'owner [action] [field]',
+            'read and set the copyright, author, owner name and nickname',
+            (owner) =>
+              cameraTargetOptions(owner)
+                .positional('action', {
+                  choices: ['show', 'set', 'clear'] as const,
+                  default: 'show',
+                  describe: 'owner action',
+                  type: 'string',
+                })
+                .positional('field', {
+                  choices: ['copyright', 'author', 'owner-name', 'nickname'] as const,
+                  describe: 'field to clear, for clear',
+                  type: 'string',
+                })
+                .option('copyright', { describe: 'with set: the copyright notice', type: 'string' })
+                .option('author', { describe: 'with set: the author', type: 'string' })
+                .option('owner-name', { describe: "with set: the owner's name", type: 'string' })
+                .option('nickname', { describe: "with set: the camera's nickname", type: 'string' })
+                .option('force', {
+                  default: false,
+                  describe: 'change without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'show') return true
+                  if (args.action === 'clear' && args.field === undefined) {
+                    throw new Error(
+                      'rawback camera owner clear needs a field: copyright, author, owner-name or nickname',
+                    )
+                  }
+                  if (
+                    args.action === 'set' &&
+                    args.copyright === undefined &&
+                    args.author === undefined &&
+                    args.ownerName === undefined &&
+                    args.nickname === undefined
+                  ) {
+                    throw new Error(
+                      'rawback camera owner set needs --copyright, --author, --owner-name or --nickname',
+                    )
+                  }
+                  return checkMutatingIsNonInteractive(args, `rawback camera owner ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraOwner } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraOwner({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'show' | 'set' | 'clear',
+                    force: args.force,
+                    ...(args.field !== undefined ? { field: args.field } : {}),
+                    values: {
+                      ...(args.copyright !== undefined ? { copyright: args.copyright } : {}),
+                      ...(args.author !== undefined ? { author: args.author } : {}),
+                      ...(args.ownerName !== undefined ? { 'owner-name': args.ownerName } : {}),
+                      ...(args.nickname !== undefined ? { nickname: args.nickname } : {}),
+                    },
+                  }),
+                'Owner change cancelled.',
+              )
+            },
+          )
+          .command(
+            'card <action> <storage>',
+            'format a memory card',
+            (card) =>
+              cameraTargetOptions(card)
+                .positional('action', {
+                  choices: ['format'] as const,
+                  describe: 'card action',
+                  type: 'string',
+                })
+                .positional('storage', {
+                  describe: 'storage name, as contents storages prints it (card1, card2)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'format without typing the storage name back',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  return checkMutatingIsNonInteractive(args, 'rawback camera card format')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraCardFormat } = await import('./camera-contents.ts')
+              await runCommand(
+                () =>
+                  runCameraCardFormat({
+                    ...cameraTargetArgs(args),
+                    storage: args.storage as string,
+                    force: args.force,
+                  }),
+                'Left the card untouched.',
+              )
+            },
+          )
+          .command(
+            'cert <output>',
+            "save the camera's root TLS certificate",
+            (cert) =>
+              cameraTargetOptions(cert)
+                .positional('output', {
+                  coerce: expandHomePath,
+                  describe: 'destination file',
+                  type: 'string',
+                })
+                .option('overwrite', {
+                  default: false,
+                  describe: 'replace an existing destination file',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check(checkCameraTarget),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraCert } = await import('./camera.ts')
+              await runCommand(
+                () =>
+                  runCameraCert({
+                    ...cameraTargetArgs(args),
+                    output: args.output as string,
+                    overwrite: args.overwrite,
+                  }),
+                'Camera command cancelled.',
+              )
+            },
+          )
+          .command(
+            'rtp <action> [output]',
+            'stream live view over RTP and save its session description',
+            (rtp) =>
+              cameraTargetOptions(rtp)
+                .positional('action', {
+                  choices: ['start', 'stop', 'status', 'sdp'] as const,
+                  describe: 'RTP action',
+                  type: 'string',
+                })
+                .positional('output', {
+                  coerce: expandHomePath,
+                  describe: 'destination .sdp file, for sdp',
+                  type: 'string',
+                })
+                .option('ip', {
+                  describe: 'address the camera streams to, for start',
+                  type: 'string',
+                })
+                .option('overwrite', {
+                  default: false,
+                  describe: 'replace an existing destination file',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'start without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'start') {
+                    if (args.ip === undefined || isIP(args.ip) === 0) {
+                      throw new Error('rawback camera rtp start requires --ip <address>')
+                    }
+                    return checkMutatingIsNonInteractive(args, 'rawback camera rtp start')
+                  }
+                  if (args.action === 'sdp' && args.output === undefined) {
+                    throw new Error('rawback camera rtp sdp requires an output file')
+                  }
+                  return true
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const rtp = await import('./camera-rtp.ts')
+              const target = cameraTargetArgs(args)
+              switch (args.action) {
+                case 'start':
+                  await runCommand(
+                    () =>
+                      rtp.runCameraRtpStart({
+                        ...target,
+                        ip: args.ip as string,
+                        force: args.force,
+                      }),
+                    'RTP cancelled.',
+                  )
+                  return
+                case 'stop':
+                  await runCommand(() => rtp.runCameraRtpStop(target))
+                  return
+                case 'sdp':
+                  await runCommand(() =>
+                    rtp.runCameraRtpSdp({
+                      ...target,
+                      output: args.output as string,
+                      overwrite: args.overwrite,
+                    }),
+                  )
+                  return
+                default:
+                  await runCommand(() => rtp.runCameraRtpStatus(target))
               }
             },
           )

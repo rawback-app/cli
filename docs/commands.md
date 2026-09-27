@@ -234,9 +234,11 @@ rawback camera status [--json]
 ```
 
 `info` reports model, firmware, serial, lens, and storage. `status` reports
-battery, temperature, current storage and directory, and remaining capacity.
-Anything the camera does not advertise comes back as `null` and is named in the
-`unsupported` array rather than failing the command.
+battery, temperature, current storage and directory, and remaining capacity,
+plus every battery including a grip's (`batteries`), the mounted lens (`lens`),
+and a Power Zoom Adapter's state (`powerZoom`). Anything the camera does not
+advertise comes back as `null` and is named in the `unsupported` array rather
+than failing the command.
 
 ### `camera shoot`
 
@@ -247,6 +249,63 @@ rawback camera shoot [--af|--no-af] [--manual <half_press|full_press|release>] [
 Releases the shutter. Accumulated events are cleared first, so `addedContents`
 in the response names the file this command produced. Confirms first unless
 `--force`; `--json` requires `--force`, because a script cannot answer a prompt.
+The same rule applies to every command below that changes the camera.
+
+### `camera record`
+
+```bash
+rawback camera record start [--movie-mode] [--force] [--json]
+rawback camera record stop [--force] [--json]
+rawback camera record status [--json]
+```
+
+Starts and stops movie recording. On a body with a movie-mode control, `start`
+refuses while movie mode is off unless `--movie-mode` switches it on first.
+`status` reports movie mode and the recording time left.
+
+### `camera focus`
+
+```bash
+rawback camera focus af|stop [--force] [--json]
+rawback camera focus near|far [--steps <1|2|3>] [--force] [--json]
+```
+
+`af` starts autofocus and `stop` cancels it. `near` and `far` move the focus
+by one step: `1` is the finest, `3` the coarsest.
+
+### `camera zoom`
+
+```bash
+rawback camera zoom [--json]
+rawback camera zoom <position> [--force] [--json]
+rawback camera zoom wide|tele|stop [--force] [--json]
+```
+
+With no value, reports every zoom control the body has: a PowerShot's zoom
+position and range, and a Power Zoom Adapter's action and state. A whole number
+zooms a PowerShot to that position; `wide`, `tele` and `stop` drive the adapter.
+
+### `camera clock`
+
+```bash
+rawback camera clock [show] [--json]
+rawback camera clock sync [--force] [--json]
+```
+
+`sync` sets the camera to this computer's local time and UTC offset, then reads
+the clock back. The offset already includes daylight saving, so the camera's own
+daylight-saving flag is turned off rather than adding a second hour.
+
+### `camera owner`
+
+```bash
+rawback camera owner [show] [--json]
+rawback camera owner set [--copyright <text>] [--author <text>] [--owner-name <text>] [--nickname <text>] [--force] [--json]
+rawback camera owner clear <copyright|author|owner-name|nickname> [--force] [--json]
+```
+
+Reads and sets the details the camera writes into every file it records. `set`
+checks that the camera supports every field it was given before writing any.
 
 ### `camera settings`
 
@@ -255,6 +314,10 @@ rawback camera settings list [--json]
 rawback camera settings get <name> [--json]
 rawback camera settings set <name> <value> [--int] [--force] [--json]
 ```
+
+`list` reports every setting the camera returns, under the camera's own names,
+so any row's name can be passed straight to `get` or `set`. Structured values
+such as `stillimagequality` and `wbshift` print as JSON.
 
 `get` returns `value` plus either `ability` (a list of choices) or `range`
 (`min`, `max`, `step`). Settings whose ability is a range — the colour
@@ -267,10 +330,16 @@ rather than `0`. `set` writes the value and reads back what the camera accepted.
 ```bash
 rawback camera contents storages [--json]
 rawback camera contents dirs <storage> [--json]
-rawback camera contents list <storage> <directory> [--type <t>] [--order <asc|desc>] [--page <n>] [--all] [--json]
+rawback camera contents list <storage> <directory> [--type <t>] [--page <n> | --all [--order <asc|desc>]] [--json]
 rawback camera contents info <locator> [--json]
 rawback camera contents get <locator> --output <path> [--kind <main|thumbnail|display|embedded>] [--overwrite] [--json]
 rawback camera contents delete <locator> [--force] [--json]
+rawback camera contents protect|archive <locator> [on|off] [--force] [--json]
+rawback camera contents rate <locator> <off|1-5> [--force] [--json]
+rawback camera contents rotate <locator> <0|90|180|270> [--force] [--json]
+rawback camera contents xmp <locator> <attributes> [--force] [--json]
+rawback camera contents geotag <locator> --lat <deg> --lon <deg> [--alt <m>] [--time <iso>] [--force] [--json]
+rawback camera contents rmdir <storage> <directory> [--force] [--json]
 ```
 
 A **locator** is the string the camera returns from `contents list`; pass it back
@@ -282,21 +351,71 @@ name (`100CANON`, looked up on the card and preferring `DCIM`), as
 
 `get` streams to disk rather than buffering, so a RAW file costs no memory. Point
 `--output` at a directory to keep the camera's own filename. An existing file is
-never replaced without `--overwrite`. `--all` streams every page instead of one.
+never replaced without `--overwrite`. `--all` streams every page instead of one;
+`--order` applies only to `--all`, because the camera rejects it on a single page.
+
+The editing actions change one file on the card and confirm first unless
+`--force`. `protect` and `archive` default to `on`. `xmp` inserts raw
+attributes into the file's XMP `rdf:Description` tag, for example
+`'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9'`. `geotag` writes the full
+EXIF GPS block the camera requires from decimal degrees: WGS-84, the UTC time
+and date of `--time` (default now), and sea level unless `--alt` is given. A
+protected file refuses every change until it is unprotected. `rmdir` deletes a
+directory and every file in it.
+
+### `camera card`
+
+```bash
+rawback camera card format <storage> [--force] [--json]
+```
+
+Formats a card, erasing every file on it. The storage name is checked against
+the camera's own list first, and without `--force` it has to be typed back.
 
 ### `camera liveview`
 
 ```bash
 rawback camera liveview start [--size <off|small|medium>] [--display <on|keep|off>] [--force] [--json]
-rawback camera liveview frame <output> [--json]
+rawback camera liveview frame <output> [--detail] [--json]
 rawback camera liveview stream --output-dir <dir> [--frames <n>] [--duration <s>] [--json]
 rawback camera liveview stop [--json]
 ```
 
+`frame --detail` also reads the frame's incidental information: the AF frames,
+the electronic level (posture, roll and pitch), the zoom rectangle, and the
+YRGB histogram. The terminal shows a summary; `--json` carries all of it under
+`detail`.
+
 `stream` runs until Ctrl-C, `--frames`, or `--duration`, writing numbered JPEGs.
-`--output-dir -` writes raw JPEG bytes to stdout instead and cannot be combined
-with `--json`. `stop` releases every live-view resource and is safe to run when
-the camera is already idle — it is the recovery command after a killed stream.
+A body that serves no multipart stream is read over the chunked `scroll` stream
+instead. `--output-dir -` writes raw JPEG bytes to stdout instead and cannot be
+combined with `--json`. `stop` releases every live-view resource and is safe to
+run when the camera is already idle — it is the recovery command after a killed
+stream.
+
+### `camera rtp`
+
+```bash
+rawback camera rtp start --ip <address> [--force] [--json]
+rawback camera rtp status [--json]
+rawback camera rtp sdp <output> [--overwrite] [--json]
+rawback camera rtp stop [--json]
+```
+
+The camera pushes live view over RTP to `--ip` rather than serving it. `sdp`
+saves the session description a player needs to receive it, for example
+`ffplay -protocol_whitelist file,udp,rtp live.sdp`. `start` confirms first
+unless `--force`; `stop` does not, since it only frees the camera.
+
+### `camera cert`
+
+```bash
+rawback camera cert <output> [--overwrite] [--json]
+```
+
+Saves the camera's root TLS certificate, PEM or DER as the camera serves it,
+and prints the `openssl` command that shows its SHA-256 fingerprint. Compare
+that with the camera's menu before deciding to connect with `--insecure`.
 
 ### `camera events`
 
@@ -325,8 +444,16 @@ parameters before any connection is attempted. `--describe` prints an endpoint
 without calling the camera. Endpoints that change the camera need `--force` in a
 script.
 
+JSON parameters are checked member by member, because the camera ignores a key
+it does not know. Object-valued settings take objects —
+`--arg 'value={"raw":"craw","jpeg":"large_fine"}'` for
+`shooting.setStillImageQuality`, `{"ba":0,"mg":0}` for
+`shooting.setWhiteBalanceShift` — and picture-style parameters use the names
+`--describe` shows (`sharpnessStrength`, not `sharpness_strength`).
+
 Binary endpoints are not in this catalogue; use `camera contents get`,
-`camera liveview frame`, and `camera liveview stream` instead.
+`camera liveview frame`, `camera liveview stream`, `camera rtp sdp`, and
+`camera cert` instead.
 
 ### `camera interactive`
 

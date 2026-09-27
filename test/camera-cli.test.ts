@@ -66,7 +66,22 @@ describe('rawback camera help', () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
-    for (const subcommand of ['connect', 'list', 'use', 'forget', 'info', 'status']) {
+    for (const subcommand of [
+      'connect',
+      'list',
+      'use',
+      'forget',
+      'info',
+      'status',
+      'cert',
+      'rtp',
+      'record',
+      'focus',
+      'zoom',
+      'clock',
+      'owner',
+      'card',
+    ]) {
       expect(result.stdout).toContain(subcommand)
     }
   })
@@ -77,6 +92,14 @@ describe('rawback camera help', () => {
     ['status', ['--camera', '--insecure', '--timeout', '--refresh', '--json']],
     ['list', ['--json']],
     ['forget', ['--force', '--json']],
+    ['cert', ['--overwrite', '--camera', '--json']],
+    ['rtp', ['--ip', '--overwrite', '--force', '--json']],
+    ['liveview', ['--detail', '--frames', '--output-dir']],
+    ['record', ['--movie-mode', '--force', '--json']],
+    ['contents', ['--lat', '--lon', '--alt', '--time', '--force']],
+    ['card', ['--force', '--json']],
+    ['focus', ['--steps', '--force', '--json']],
+    ['owner', ['--copyright', '--author', '--owner-name', '--nickname', '--force']],
   ])('camera %s --help documents its options', async (subcommand, flags) => {
     const result = await runCli('camera', subcommand, '--help')
 
@@ -119,6 +142,134 @@ describe('camera validation happens before any connection', () => {
       ['camera', 'connect', 'http://127.0.0.1:1', '--camera', 'http://127.0.0.1:2'],
       /takes a URL or --camera, not both/,
     ],
+    [['camera', 'contents', 'list', 'card1', '100CANON', '--order', 'desc'], /--order needs --all/],
+    [['camera', 'rtp', 'start', '--camera', 'http://127.0.0.1:1'], /requires --ip <address>/],
+    [
+      ['camera', 'rtp', 'start', '--ip', 'not-an-ip', '--camera', 'http://127.0.0.1:1'],
+      /requires --ip <address>/,
+    ],
+    [
+      [
+        'camera',
+        'rtp',
+        'start',
+        '--ip',
+        '192.168.0.10',
+        '--json',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--json also needs --force/,
+    ],
+    [['camera', 'owner', 'set', '--camera', 'http://127.0.0.1:1'], /owner set needs --copyright/],
+    [['camera', 'owner', 'clear', '--camera', 'http://127.0.0.1:1'], /owner clear needs a field/],
+    [['camera', 'zoom', '1.5', '--camera', 'http://127.0.0.1:1'], /whole-number position/],
+    [
+      ['camera', 'record', 'start', '--json', '--camera', 'http://127.0.0.1:1'],
+      /record start --json also needs --force/,
+    ],
+    [
+      ['camera', 'clock', 'sync', '--json', '--camera', 'http://127.0.0.1:1'],
+      /clock sync --json also needs --force/,
+    ],
+    [
+      ['camera', 'focus', 'near', '--steps', '4', '--camera', 'http://127.0.0.1:1'],
+      /Invalid values/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'rate',
+        'card1/100CANON/IMG_1.JPG',
+        '7',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes a rating: off or 1-5/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'rotate',
+        'card1/100CANON/IMG_1.JPG',
+        '45',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes 0, 90, 180 or 270/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'protect',
+        'card1/100CANON/IMG_1.JPG',
+        'maybe',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes on or off/,
+    ],
+    [
+      ['camera', 'contents', 'xmp', 'card1/100CANON/IMG_1.JPG', '--camera', 'http://127.0.0.1:1'],
+      /requires the XMP attributes/,
+    ],
+    [
+      ['camera', 'contents', 'rmdir', 'card1', '--camera', 'http://127.0.0.1:1'],
+      /requires a directory name/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'geotag',
+        'card1/100CANON/IMG_1.JPG',
+        '--lat',
+        '95',
+        '--lon',
+        '0',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--lat between -90 and 90/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'geotag',
+        'card1/100CANON/IMG_1.JPG',
+        '--lat',
+        '35',
+        '--lon',
+        '139',
+        '--time',
+        'soon',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--time must be an ISO 8601 time/,
+    ],
+    [
+      ['camera', 'card', 'format', 'card1', '--json', '--camera', 'http://127.0.0.1:1'],
+      /card format --json also needs --force/,
+    ],
+    [['camera', 'rtp', 'sdp', '--camera', 'http://127.0.0.1:1'], /requires an output file/],
+    [
+      [
+        'camera',
+        'liveview',
+        'stream',
+        '--output-dir',
+        'x',
+        '--detail',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--detail applies only to rawback camera liveview frame/,
+    ],
   ])('rejects %p without connecting', async (args, pattern) => {
     const result = await runCli(...args)
 
@@ -143,6 +294,23 @@ describe('local camera commands work with no camera present', () => {
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toEqual({ default: null, cameras: [] })
+  })
+
+  test('a JSON document larger than a pipe buffer arrives whole', async () => {
+    // The catalogue listing is well over 64 KiB. Once Ink has loaded, Bun's
+    // console.log makes one write to a shell pipe and drops whatever the pipe
+    // buffer did not take, so `rawback … --json | jq` read truncated JSON.
+    // Bun.spawnSync's own pipe does not reproduce it; a kernel pipe does.
+    const home = await emptyHome()
+    const result = Bun.spawnSync(
+      ['sh', '-c', `"${process.execPath}" run "${entrypoint}" camera api --list --json | cat`],
+      { env: { ...process.env, HOME: home, RAWBACK_CAMERA_URL: '' }, stdout: 'pipe' },
+    )
+    const stdout = result.stdout.toString()
+
+    expect(stdout.length).toBeGreaterThan(65536)
+    const parsed = JSON.parse(stdout) as { count: number; endpoints: unknown[] }
+    expect(parsed.endpoints).toHaveLength(parsed.count)
   })
 
   test('a command with no target explains how to set one', async () => {
