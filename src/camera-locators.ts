@@ -38,6 +38,11 @@ export function parseContentLocator(locator: string): ContentLocator {
  * name is looked up on the storage — preferring `DCIM`, where stills live —
  * and passed through unchanged when the listing has no folders (ver130 and
  * earlier) or does not contain it.
+ *
+ * `storage` is always the one the user chose: a locator naming another card is
+ * refused rather than followed, since `deleteDirectory` acts on whatever this
+ * returns. A failed lookup is reported as itself — a busy or unreachable
+ * camera must not turn into a folderless request that 404s for another reason.
  */
 export async function resolveDirectory(
   session: CameraSession,
@@ -46,14 +51,22 @@ export async function resolveDirectory(
 ): Promise<DirectoryLocator> {
   const trimmed = directory.trim().replace(/^\/+|\/+$/g, '')
   if (trimmed.includes('contents/')) {
+    let located: DirectoryLocator
     try {
-      return parseDirectoryLocator(trimmed)
+      located = parseDirectoryLocator(trimmed)
     } catch {
       throw new CameraError(
         `Not a directory locator: ${JSON.stringify(directory)}. ` +
           'Use one printed by rawback camera contents dirs.',
       )
     }
+    if (located.storage !== storage) {
+      throw new CameraError(
+        `${JSON.stringify(directory)} is on ${located.storage}, not ${storage}. ` +
+          'Pass the storage the locator names, or a directory name.',
+      )
+    }
+    return located
   }
 
   const parts = trimmed.split('/').filter((part) => part.length > 0)
@@ -69,9 +82,7 @@ export async function resolveDirectory(
   }
 
   const name = parts[0] as string
-  const { paths } = await session.client.contents
-    .listDirectories(storage)
-    .catch(() => ({ paths: [] as string[] }))
+  const { paths } = await session.client.contents.listDirectories(storage)
   const matches = paths.flatMap((path) => {
     try {
       const located = parseDirectoryLocator(path)

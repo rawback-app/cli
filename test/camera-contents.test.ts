@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { runCameraApi } from '../src/camera-api.ts'
 import {
   parseContentLocator,
   runCameraContentsDelete,
@@ -149,6 +150,43 @@ describe('camera contents', () => {
       expect(new URL(listings[1] ?? '').searchParams.get('kind')).toBe('number')
     },
   )
+
+  test('refuses a directory locator on another card instead of following it', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved('ver140'), { makeDefault: true })
+    const camera = fakeCamera({ apiVersion: 'ver140' })
+    const output = capture()
+
+    await expect(
+      runCameraApi(
+        {
+          id: 'contents.deleteDirectory',
+          arg: ['storage=card1', 'directory=/ccapi/ver140/contents/card2/DCIM/100CANON'],
+          force: true,
+          json: true,
+        },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      ),
+    ).rejects.toThrow(/is on card2, not card1/)
+    expect(camera.requests.some((request) => request.method === 'DELETE')).toBe(false)
+  })
+
+  test('reports a failed directory lookup instead of listing without the folder', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved('ver140'), { makeDefault: true })
+    // The storage listing fails; a folderless `contents/card1/100CANON` would
+    // only 404 for an unrelated reason and hide this one.
+    const camera = fakeCamera({ apiVersion: 'ver140', missing: ['contents/card1'] })
+    const output = capture()
+
+    await expect(
+      runCameraContentsList(
+        { storage: 'card1', directory: '100CANON', json: true },
+        { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+      ),
+    ).rejects.toThrow()
+    expect(camera.requests.some((request) => request.path.includes('100CANON'))).toBe(false)
+  })
 
   test('an older camera omits it', async () => {
     const { store } = await temporaryStore()
