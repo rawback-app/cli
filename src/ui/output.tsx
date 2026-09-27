@@ -42,8 +42,12 @@ export class CommandOutput {
   readonly #stderr: (message: string) => void
 
   constructor(options: CommandOutputOptions = {}) {
-    this.#stdout = options.stdout ?? ((message) => console.log(message))
-    this.#stderr = options.stderr ?? ((message) => console.error(message))
+    // Through the streams, not console.log: once Ink has loaded, Bun's
+    // console.log makes a single write to a pipe and drops whatever the pipe
+    // buffer did not take, which cut `--json` output off at 64 KiB. A stream
+    // write is queued and drained before the process exits.
+    this.#stdout = options.stdout ?? ((message) => process.stdout.write(`${message}\n`))
+    this.#stderr = options.stderr ?? ((message) => process.stderr.write(`${message}\n`))
     this.columns = Math.max(40, options.columns ?? process.stdout.columns ?? 80)
     this.interactive =
       options.interactive ??

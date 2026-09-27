@@ -146,6 +146,23 @@ describe('local camera commands work with no camera present', () => {
     expect(JSON.parse(result.stdout)).toEqual({ default: null, cameras: [] })
   })
 
+  test('a JSON document larger than a pipe buffer arrives whole', async () => {
+    // The catalogue listing is well over 64 KiB. Once Ink has loaded, Bun's
+    // console.log makes one write to a shell pipe and drops whatever the pipe
+    // buffer did not take, so `rawback … --json | jq` read truncated JSON.
+    // Bun.spawnSync's own pipe does not reproduce it; a kernel pipe does.
+    const home = await emptyHome()
+    const result = Bun.spawnSync(
+      ['sh', '-c', `"${process.execPath}" run "${entrypoint}" camera api --list --json | cat`],
+      { env: { ...process.env, HOME: home, RAWBACK_CAMERA_URL: '' }, stdout: 'pipe' },
+    )
+    const stdout = result.stdout.toString()
+
+    expect(stdout.length).toBeGreaterThan(65536)
+    const parsed = JSON.parse(stdout) as { count: number; endpoints: unknown[] }
+    expect(parsed.endpoints).toHaveLength(parsed.count)
+  })
+
   test('a command with no target explains how to set one', async () => {
     const result = await runCli('camera', 'info')
 
