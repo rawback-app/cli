@@ -37,14 +37,14 @@ concurrency:
 jobs:
   release-snapshot:
     name: GoReleaser snapshot
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     # The before hooks download sidecars from third-party hosts, so a stalled
     # request must not be allowed to burn an hour of runner time.
     timeout-minutes: 20
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0
 
