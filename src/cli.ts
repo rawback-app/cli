@@ -2549,20 +2549,35 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
           )
           .command(
             'contents <action> [a] [b]',
-            'browse and download photos on the card',
+            'browse, download, and edit photos on the card',
             (contents) =>
               cameraTargetOptions(contents)
                 .positional('action', {
-                  choices: ['storages', 'dirs', 'list', 'info', 'get', 'delete'] as const,
+                  choices: [
+                    'storages',
+                    'dirs',
+                    'list',
+                    'info',
+                    'get',
+                    'delete',
+                    'protect',
+                    'archive',
+                    'rate',
+                    'rotate',
+                    'xmp',
+                    'geotag',
+                    'rmdir',
+                  ] as const,
                   describe: 'contents action',
                   type: 'string',
                 })
                 .positional('a', {
-                  describe: 'storage name (dirs, list) or content locator (info, get, delete)',
+                  describe: 'storage name (dirs, list, rmdir) or content locator (the rest)',
                   type: 'string',
                 })
                 .positional('b', {
-                  describe: 'directory for list: 100CANON, DCIM/100CANON, or a locator from dirs',
+                  describe:
+                    'directory (list, rmdir), on|off (protect, archive), off|1-5 (rate), 0|90|180|270 (rotate), or XMP attributes (xmp)',
                   type: 'string',
                 })
                 .option('type', {
@@ -2611,9 +2626,26 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'replace an existing destination file',
                   type: 'boolean',
                 })
+                .option('lat', {
+                  describe: 'with geotag: latitude in decimal degrees',
+                  type: 'number',
+                })
+                .option('lon', {
+                  describe: 'with geotag: longitude in decimal degrees',
+                  type: 'number',
+                })
+                .option('alt', {
+                  describe: 'with geotag: altitude in metres (default 0)',
+                  type: 'number',
+                })
+                .option('time', {
+                  describe:
+                    'with geotag: when the position was taken, as an ISO 8601 time (default now)',
+                  type: 'string',
+                })
                 .option('force', {
                   default: false,
-                  describe: 'delete without confirmation',
+                  describe: 'change or delete without confirmation',
                   type: 'boolean',
                 })
                 .option('json', {
@@ -2623,17 +2655,55 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                 })
                 .check((args) => {
                   checkCameraTarget(args)
-                  if (['dirs', 'list', 'info', 'get', 'delete'].includes(String(args.action))) {
-                    if (args.a === undefined) {
-                      throw new Error(
-                        args.action === 'dirs' || args.action === 'list'
-                          ? `rawback camera contents ${args.action} requires a storage name`
-                          : `rawback camera contents ${args.action} requires a content locator`,
-                      )
-                    }
+                  const command = `rawback camera contents ${args.action}`
+                  if (args.action !== 'storages' && args.a === undefined) {
+                    throw new Error(
+                      ['dirs', 'list', 'rmdir'].includes(String(args.action))
+                        ? `${command} requires a storage name`
+                        : `${command} requires a content locator`,
+                    )
                   }
-                  if (args.action === 'list' && args.b === undefined) {
-                    throw new Error('rawback camera contents list requires a directory name')
+                  if ((args.action === 'list' || args.action === 'rmdir') && args.b === undefined) {
+                    throw new Error(`${command} requires a directory name`)
+                  }
+                  if (
+                    (args.action === 'protect' || args.action === 'archive') &&
+                    args.b !== undefined &&
+                    args.b !== 'on' &&
+                    args.b !== 'off'
+                  ) {
+                    throw new Error(`${command} takes on or off`)
+                  }
+                  if (
+                    args.action === 'rate' &&
+                    !['off', '1', '2', '3', '4', '5'].includes(String(args.b))
+                  ) {
+                    throw new Error(`${command} takes a rating: off or 1-5`)
+                  }
+                  if (
+                    args.action === 'rotate' &&
+                    !['0', '90', '180', '270'].includes(String(args.b))
+                  ) {
+                    throw new Error(`${command} takes 0, 90, 180 or 270`)
+                  }
+                  if (args.action === 'xmp' && args.b === undefined) {
+                    throw new Error(
+                      `${command} requires the XMP attributes, e.g. 'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9'`,
+                    )
+                  }
+                  if (args.action === 'geotag') {
+                    if (args.lat === undefined || !(Math.abs(args.lat) <= 90)) {
+                      throw new Error(`${command} requires --lat between -90 and 90`)
+                    }
+                    if (args.lon === undefined || !(Math.abs(args.lon) <= 180)) {
+                      throw new Error(`${command} requires --lon between -180 and 180`)
+                    }
+                    if (args.alt !== undefined && !Number.isFinite(args.alt)) {
+                      throw new Error('--alt must be a number of metres')
+                    }
+                    if (args.time !== undefined && Number.isNaN(Date.parse(args.time))) {
+                      throw new Error('--time must be an ISO 8601 time, e.g. 2026-08-04T09:00:00Z')
+                    }
                   }
                   if (args.action === 'get' && args.output === undefined) {
                     throw new Error('rawback camera contents get requires --output')
@@ -2646,8 +2716,8 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                       '--order needs --all: the camera orders only a streamed listing',
                     )
                   }
-                  if (args.action === 'delete') {
-                    return checkMutatingIsNonInteractive(args, 'rawback camera contents delete')
+                  if (!['storages', 'dirs', 'list', 'info', 'get'].includes(String(args.action))) {
+                    return checkMutatingIsNonInteractive(args, command)
                   }
                   return true
                 }),
@@ -2692,6 +2762,53 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     'Deletion cancelled.',
                   )
                   return
+                case 'rmdir':
+                  await runCommand(
+                    () =>
+                      contents.runCameraContentsRmdir({
+                        ...target,
+                        storage: first,
+                        directory: args.b as string,
+                        force: args.force,
+                      }),
+                    'Deletion cancelled.',
+                  )
+                  return
+                case 'protect':
+                case 'archive':
+                case 'rate':
+                case 'rotate':
+                case 'xmp':
+                case 'geotag': {
+                  const value = args.b
+                  const edit =
+                    args.action === 'protect' || args.action === 'archive'
+                      ? { kind: args.action, enabled: value !== 'off' }
+                      : args.action === 'rate'
+                        ? { kind: args.action, rating: value as string }
+                        : args.action === 'rotate'
+                          ? { kind: args.action, degrees: Number(value) }
+                          : args.action === 'xmp'
+                            ? { kind: args.action, attributes: value as string }
+                            : {
+                                kind: args.action,
+                                latitude: args.lat as number,
+                                longitude: args.lon as number,
+                                ...(args.alt !== undefined ? { altitude: args.alt } : {}),
+                                ...(args.time !== undefined ? { time: new Date(args.time) } : {}),
+                              }
+                  await runCommand(
+                    () =>
+                      contents.runCameraContentsEdit({
+                        ...target,
+                        locator: first,
+                        edit,
+                        force: args.force,
+                      }),
+                    'Left the file as it was.',
+                  )
+                  return
+                }
                 default:
                   await runCommand(() =>
                     contents.runCameraContentsList({
@@ -3144,6 +3261,48 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                     },
                   }),
                 'Owner change cancelled.',
+              )
+            },
+          )
+          .command(
+            'card <action> <storage>',
+            'format a memory card',
+            (card) =>
+              cameraTargetOptions(card)
+                .positional('action', {
+                  choices: ['format'] as const,
+                  describe: 'card action',
+                  type: 'string',
+                })
+                .positional('storage', {
+                  describe: 'storage name, as contents storages prints it (card1, card2)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'format without typing the storage name back',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  return checkMutatingIsNonInteractive(args, 'rawback camera card format')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraCardFormat } = await import('./camera-contents.ts')
+              await runCommand(
+                () =>
+                  runCameraCardFormat({
+                    ...cameraTargetArgs(args),
+                    storage: args.storage as string,
+                    force: args.force,
+                  }),
+                'Left the card untouched.',
               )
             },
           )

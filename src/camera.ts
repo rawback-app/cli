@@ -44,6 +44,11 @@ function defaultPrompts() {
       const { password } = await import('@inquirer/prompts')
       return password({ mask: true, message })
     },
+    async input(message: string): Promise<string> {
+      ensureInteractive('This command needs an interactive terminal unless --force is provided.')
+      const { input } = await import('@inquirer/prompts')
+      return input({ message })
+    },
   }
 }
 

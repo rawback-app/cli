@@ -80,6 +80,7 @@ describe('rawback camera help', () => {
       'zoom',
       'clock',
       'owner',
+      'card',
     ]) {
       expect(result.stdout).toContain(subcommand)
     }
@@ -95,6 +96,8 @@ describe('rawback camera help', () => {
     ['rtp', ['--ip', '--overwrite', '--force', '--json']],
     ['liveview', ['--detail', '--frames', '--output-dir']],
     ['record', ['--movie-mode', '--force', '--json']],
+    ['contents', ['--lat', '--lon', '--alt', '--time', '--force']],
+    ['card', ['--force', '--json']],
     ['focus', ['--steps', '--force', '--json']],
     ['owner', ['--copyright', '--author', '--owner-name', '--nickname', '--force']],
   ])('camera %s --help documents its options', async (subcommand, flags) => {
@@ -172,6 +175,86 @@ describe('camera validation happens before any connection', () => {
     [
       ['camera', 'focus', 'near', '--steps', '4', '--camera', 'http://127.0.0.1:1'],
       /Invalid values/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'rate',
+        'card1/100CANON/IMG_1.JPG',
+        '7',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes a rating: off or 1-5/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'rotate',
+        'card1/100CANON/IMG_1.JPG',
+        '45',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes 0, 90, 180 or 270/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'protect',
+        'card1/100CANON/IMG_1.JPG',
+        'maybe',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /takes on or off/,
+    ],
+    [
+      ['camera', 'contents', 'xmp', 'card1/100CANON/IMG_1.JPG', '--camera', 'http://127.0.0.1:1'],
+      /requires the XMP attributes/,
+    ],
+    [
+      ['camera', 'contents', 'rmdir', 'card1', '--camera', 'http://127.0.0.1:1'],
+      /requires a directory name/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'geotag',
+        'card1/100CANON/IMG_1.JPG',
+        '--lat',
+        '95',
+        '--lon',
+        '0',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--lat between -90 and 90/,
+    ],
+    [
+      [
+        'camera',
+        'contents',
+        'geotag',
+        'card1/100CANON/IMG_1.JPG',
+        '--lat',
+        '35',
+        '--lon',
+        '139',
+        '--time',
+        'soon',
+        '--camera',
+        'http://127.0.0.1:1',
+      ],
+      /--time must be an ISO 8601 time/,
+    ],
+    [
+      ['camera', 'card', 'format', 'card1', '--json', '--camera', 'http://127.0.0.1:1'],
+      /card format --json also needs --force/,
     ],
     [['camera', 'rtp', 'sdp', '--camera', 'http://127.0.0.1:1'], /requires an output file/],
     [

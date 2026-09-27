@@ -27,6 +27,8 @@ export interface CameraTarget {
 export interface CameraPrompts {
   confirm(message: string): Promise<boolean>
   password(message: string): Promise<string>
+  /** Typed text; only `card format` asks for it, to have the card's name typed back. */
+  input?(message: string): Promise<string>
 }
 
 export interface CameraCommandDependencies extends ReadCommandDependencies {

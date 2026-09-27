@@ -334,6 +334,12 @@ rawback camera contents list <storage> <directory> [--type <t>] [--page <n> | --
 rawback camera contents info <locator> [--json]
 rawback camera contents get <locator> --output <path> [--kind <main|thumbnail|display|embedded>] [--overwrite] [--json]
 rawback camera contents delete <locator> [--force] [--json]
+rawback camera contents protect|archive <locator> [on|off] [--force] [--json]
+rawback camera contents rate <locator> <off|1-5> [--force] [--json]
+rawback camera contents rotate <locator> <0|90|180|270> [--force] [--json]
+rawback camera contents xmp <locator> <attributes> [--force] [--json]
+rawback camera contents geotag <locator> --lat <deg> --lon <deg> [--alt <m>] [--time <iso>] [--force] [--json]
+rawback camera contents rmdir <storage> <directory> [--force] [--json]
 ```
 
 A **locator** is the string the camera returns from `contents list`; pass it back
@@ -347,6 +353,24 @@ name (`100CANON`, looked up on the card and preferring `DCIM`), as
 `--output` at a directory to keep the camera's own filename. An existing file is
 never replaced without `--overwrite`. `--all` streams every page instead of one;
 `--order` applies only to `--all`, because the camera rejects it on a single page.
+
+The editing actions change one file on the card and confirm first unless
+`--force`. `protect` and `archive` default to `on`. `xmp` inserts raw
+attributes into the file's XMP `rdf:Description` tag, for example
+`'xmlns:C=http://canon.com/camera/1.0/ C:Yaw=261.9'`. `geotag` writes the full
+EXIF GPS block the camera requires from decimal degrees: WGS-84, the UTC time
+and date of `--time` (default now), and sea level unless `--alt` is given. A
+protected file refuses every change until it is unprotected. `rmdir` deletes a
+directory and every file in it.
+
+### `camera card`
+
+```bash
+rawback camera card format <storage> [--force] [--json]
+```
+
+Formats a card, erasing every file on it. The storage name is checked against
+the camera's own list first, and without `--force` it has to be typed back.
 
 ### `camera liveview`
 
