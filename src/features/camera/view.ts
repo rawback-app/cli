@@ -1,4 +1,10 @@
-import type { AngleInformation, ConnectionSnapshot, LiveViewIncidental } from '@rawback/ccapi-js'
+import type {
+  AngleInformation,
+  ConnectionSnapshot,
+  DateTime,
+  LiveViewIncidental,
+  PowerZoomStatus,
+} from '@rawback/ccapi-js'
 
 import { formatBytes } from '../../ui/format.ts'
 import { cell, statusCell, type UiDocument, type UiField } from '../../ui/model.ts'
@@ -152,6 +158,10 @@ export interface CameraStatusView {
   currentStorage?: string | undefined
   currentDirectory?: string | undefined
   recordable?: { stillImages?: number | undefined; movieSeconds?: number | undefined } | undefined
+  /** Every battery, including a grip's; `level` is a percentage or `unknown`. */
+  batteries?: Array<{ position: string; name: string; level: string }> | undefined
+  lens?: { name?: string | undefined; mounted?: boolean | undefined } | undefined
+  powerZoom?: PowerZoomStatus | undefined
   unsupported: string[]
 }
 
@@ -174,6 +184,29 @@ export function cameraStatusDocument(view: CameraStatusView): UiDocument {
           : DASH,
     },
   ]
+  // One row per grip battery; the body's own is already the Battery row above.
+  for (const battery of view.batteries ?? []) {
+    if (battery.position === 'camera') continue
+    fields.push({
+      label: `Battery (${battery.position})`,
+      value: `${battery.level === 'unknown' ? 'unknown' : `${battery.level}%`} (${battery.name})`,
+    })
+  }
+  if (view.lens !== undefined) {
+    fields.push({
+      label: 'Lens',
+      value:
+        view.lens.mounted === false || view.lens.name === undefined
+          ? cell('none mounted', { dim: true })
+          : view.lens.name,
+    })
+  }
+  if (view.powerZoom?.equip === true) {
+    fields.push({
+      label: 'Power zoom',
+      value: `${view.powerZoom.sw}, ${view.powerZoom.location}${view.powerZoom.moving ? ', moving' : ''}`,
+    })
+  }
 
   return {
     title: 'Camera status',
@@ -575,6 +608,130 @@ function levelText(angle: AngleInformation): string {
   if (angle.rolling !== undefined) parts.push(`roll ${(angle.rolling / 100).toFixed(1)}°`)
   if (angle.pitching !== undefined) parts.push(`pitch ${(angle.pitching / 100).toFixed(1)}°`)
   return parts.length > 0 ? parts.join(', ') : '—'
+}
+
+export interface RecordStatusView {
+  movieMode?: string | undefined
+  movieSeconds?: number | undefined
+}
+
+export function recordStatusDocument(view: RecordStatusView): UiDocument {
+  return {
+    title: 'Movie recording',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          {
+            label: 'Movie mode',
+            value:
+              view.movieMode === undefined
+                ? cell('no control on this body', { dim: true })
+                : statusCell(view.movieMode === 'on', 'on'),
+          },
+          {
+            label: 'Movie time left',
+            value: view.movieSeconds !== undefined ? formatSeconds(view.movieSeconds) : DASH,
+          },
+        ],
+      },
+    ],
+  }
+}
+
+export interface ZoomView {
+  zoom?: { value: number | null; min: number | null; max: number | null; step: number | null }
+  powerZoom?: { value: string | null; ability: string[] }
+  adapter?: PowerZoomStatus
+}
+
+export function zoomDocument(view: ZoomView): UiDocument {
+  const fields: UiField[] = []
+  if (view.zoom !== undefined) {
+    const { value, min, max } = view.zoom
+    fields.push({
+      label: 'Zoom position',
+      value:
+        value === null
+          ? DASH
+          : min !== null && max !== null
+            ? `${value} (${min}–${max})`
+            : String(value),
+    })
+  }
+  if (view.powerZoom !== undefined) {
+    fields.push({ label: 'Power zoom', value: view.powerZoom.value ?? DASH })
+  }
+  if (view.adapter !== undefined) {
+    fields.push(
+      { label: 'Adapter', value: statusCell(view.adapter.status, 'ready') },
+      { label: 'Switch', value: view.adapter.sw },
+      { label: 'Lens position', value: view.adapter.location },
+    )
+  }
+  return {
+    title: 'Zoom',
+    blocks:
+      fields.length > 0
+        ? [{ type: 'fields', fields }]
+        : [{ type: 'text', text: 'This camera advertises no zoom control.', dim: true }],
+  }
+}
+
+export function clockDocument(clock: DateTime): UiDocument {
+  return {
+    title: 'Camera clock',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Date and time', value: clock.datetime || DASH },
+          { label: 'Daylight saving', value: clock.dst ? 'on' : 'off' },
+        ],
+      },
+      {
+        type: 'text',
+        text: "Set it to this computer's time with rawback camera clock sync.",
+        dim: true,
+      },
+    ],
+  }
+}
+
+export interface OwnerView {
+  copyright?: string
+  author?: string
+  'owner-name'?: string
+  nickname?: string
+  unsupported: string[]
+}
+
+export function ownerDocument(view: OwnerView): UiDocument {
+  const value = (text: string | undefined) =>
+    text === undefined ? DASH : text === '' ? cell('not set', { dim: true }) : text
+  return {
+    title: 'Owner details',
+    blocks: [
+      {
+        type: 'fields',
+        fields: [
+          { label: 'Copyright', value: value(view.copyright) },
+          { label: 'Author', value: value(view.author) },
+          { label: 'Owner name', value: value(view['owner-name']) },
+          { label: 'Nickname', value: value(view.nickname) },
+        ],
+      },
+      ...(view.unsupported.length > 0
+        ? [
+            {
+              type: 'text' as const,
+              text: `Not advertised by this camera: ${view.unsupported.join(', ')}`,
+              dim: true,
+            },
+          ]
+        : []),
+    ],
+  }
 }
 
 function formatSeconds(seconds: number): string {

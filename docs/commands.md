@@ -234,9 +234,11 @@ rawback camera status [--json]
 ```
 
 `info` reports model, firmware, serial, lens, and storage. `status` reports
-battery, temperature, current storage and directory, and remaining capacity.
-Anything the camera does not advertise comes back as `null` and is named in the
-`unsupported` array rather than failing the command.
+battery, temperature, current storage and directory, and remaining capacity,
+plus every battery including a grip's (`batteries`), the mounted lens (`lens`),
+and a Power Zoom Adapter's state (`powerZoom`). Anything the camera does not
+advertise comes back as `null` and is named in the `unsupported` array rather
+than failing the command.
 
 ### `camera shoot`
 
@@ -247,6 +249,63 @@ rawback camera shoot [--af|--no-af] [--manual <half_press|full_press|release>] [
 Releases the shutter. Accumulated events are cleared first, so `addedContents`
 in the response names the file this command produced. Confirms first unless
 `--force`; `--json` requires `--force`, because a script cannot answer a prompt.
+The same rule applies to every command below that changes the camera.
+
+### `camera record`
+
+```bash
+rawback camera record start [--movie-mode] [--force] [--json]
+rawback camera record stop [--force] [--json]
+rawback camera record status [--json]
+```
+
+Starts and stops movie recording. On a body with a movie-mode control, `start`
+refuses while movie mode is off unless `--movie-mode` switches it on first.
+`status` reports movie mode and the recording time left.
+
+### `camera focus`
+
+```bash
+rawback camera focus af|stop [--force] [--json]
+rawback camera focus near|far [--steps <1|2|3>] [--force] [--json]
+```
+
+`af` starts autofocus and `stop` cancels it. `near` and `far` move the focus
+by one step: `1` is the finest, `3` the coarsest.
+
+### `camera zoom`
+
+```bash
+rawback camera zoom [--json]
+rawback camera zoom <position> [--force] [--json]
+rawback camera zoom wide|tele|stop [--force] [--json]
+```
+
+With no value, reports every zoom control the body has: a PowerShot's zoom
+position and range, and a Power Zoom Adapter's action and state. A whole number
+zooms a PowerShot to that position; `wide`, `tele` and `stop` drive the adapter.
+
+### `camera clock`
+
+```bash
+rawback camera clock [show] [--json]
+rawback camera clock sync [--force] [--json]
+```
+
+`sync` sets the camera to this computer's local time and UTC offset, then reads
+the clock back. The offset already includes daylight saving, so the camera's own
+daylight-saving flag is turned off rather than adding a second hour.
+
+### `camera owner`
+
+```bash
+rawback camera owner [show] [--json]
+rawback camera owner set [--copyright <text>] [--author <text>] [--owner-name <text>] [--nickname <text>] [--force] [--json]
+rawback camera owner clear <copyright|author|owner-name|nickname> [--force] [--json]
+```
+
+Reads and sets the details the camera writes into every file it records. `set`
+checks that the camera supports every field it was given before writing any.
 
 ### `camera settings`
 

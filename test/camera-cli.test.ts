@@ -75,6 +75,11 @@ describe('rawback camera help', () => {
       'status',
       'cert',
       'rtp',
+      'record',
+      'focus',
+      'zoom',
+      'clock',
+      'owner',
     ]) {
       expect(result.stdout).toContain(subcommand)
     }
@@ -89,6 +94,9 @@ describe('rawback camera help', () => {
     ['cert', ['--overwrite', '--camera', '--json']],
     ['rtp', ['--ip', '--overwrite', '--force', '--json']],
     ['liveview', ['--detail', '--frames', '--output-dir']],
+    ['record', ['--movie-mode', '--force', '--json']],
+    ['focus', ['--steps', '--force', '--json']],
+    ['owner', ['--copyright', '--author', '--owner-name', '--nickname', '--force']],
   ])('camera %s --help documents its options', async (subcommand, flags) => {
     const result = await runCli('camera', subcommand, '--help')
 
@@ -149,6 +157,21 @@ describe('camera validation happens before any connection', () => {
         'http://127.0.0.1:1',
       ],
       /--json also needs --force/,
+    ],
+    [['camera', 'owner', 'set', '--camera', 'http://127.0.0.1:1'], /owner set needs --copyright/],
+    [['camera', 'owner', 'clear', '--camera', 'http://127.0.0.1:1'], /owner clear needs a field/],
+    [['camera', 'zoom', '1.5', '--camera', 'http://127.0.0.1:1'], /whole-number position/],
+    [
+      ['camera', 'record', 'start', '--json', '--camera', 'http://127.0.0.1:1'],
+      /record start --json also needs --force/,
+    ],
+    [
+      ['camera', 'clock', 'sync', '--json', '--camera', 'http://127.0.0.1:1'],
+      /clock sync --json also needs --force/,
+    ],
+    [
+      ['camera', 'focus', 'near', '--steps', '4', '--camera', 'http://127.0.0.1:1'],
+      /Invalid values/,
     ],
     [['camera', 'rtp', 'sdp', '--camera', 'http://127.0.0.1:1'], /requires an output file/],
     [

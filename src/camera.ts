@@ -364,6 +364,15 @@ export async function runCameraStatus(
     const recordable = await optional(session, 'shooting/information/recordable', unsupported, () =>
       session.client.shooting.getRecordable(),
     )
+    const batteries = await optional(session, 'devicestatus/batterylist', unsupported, () =>
+      session.client.status.getBatteryList(),
+    )
+    const lens = await optional(session, 'devicestatus/lens', unsupported, () =>
+      session.client.getLens(),
+    )
+    const powerZoom = await optional(session, 'devicestatus/powerzoomstatus', unsupported, () =>
+      session.client.status.getPowerZoomStatus(),
+    )
 
     if (options.json === true) {
       ui.json({
@@ -377,6 +386,10 @@ export async function runCameraStatus(
               movieSeconds: recordable.movieDuration ?? null,
             }
           : null,
+        // Additive: every grip battery, the mounted lens, the power-zoom adapter.
+        batteries: batteries ?? null,
+        lens: lens ? { name: lens.name ?? null, mounted: lens.mount ?? null } : null,
+        powerZoom: powerZoom ?? null,
         unsupported,
       })
       return
@@ -385,6 +398,9 @@ export async function runCameraStatus(
     const view: CameraStatusView = {
       unsupported,
       ...(battery !== undefined ? { battery } : {}),
+      ...(batteries !== undefined ? { batteries } : {}),
+      ...(lens !== undefined ? { lens: { name: lens.name, mounted: lens.mount } } : {}),
+      ...(powerZoom !== undefined ? { powerZoom } : {}),
       ...(temperature !== undefined ? { temperature: temperature.status } : {}),
       ...(currentStorage !== undefined ? { currentStorage: currentStorage.name } : {}),
       ...(currentDirectory !== undefined ? { currentDirectory: currentDirectory.name } : {}),

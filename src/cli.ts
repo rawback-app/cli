@@ -2900,6 +2900,254 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
             },
           )
           .command(
+            'record <action>',
+            'start and stop movie recording',
+            (record) =>
+              cameraTargetOptions(record)
+                .positional('action', {
+                  choices: ['start', 'stop', 'status'] as const,
+                  describe: 'recording action',
+                  type: 'string',
+                })
+                .option('movie-mode', {
+                  default: false,
+                  describe: 'with start: switch a body with a movie-mode control into movie mode',
+                  type: 'boolean',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'start or stop without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'status') return true
+                  return checkMutatingIsNonInteractive(args, `rawback camera record ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraRecord } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraRecord({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'start' | 'stop' | 'status',
+                    movieMode: args.movieMode,
+                    force: args.force,
+                  }),
+                'Recording cancelled.',
+              )
+            },
+          )
+          .command(
+            'focus <action>',
+            'autofocus, or move focus near or far',
+            (focus) =>
+              cameraTargetOptions(focus)
+                .positional('action', {
+                  choices: ['af', 'stop', 'near', 'far'] as const,
+                  describe: 'focus action',
+                  type: 'string',
+                })
+                .option('steps', {
+                  choices: [1, 2, 3] as const,
+                  default: 1,
+                  describe: 'with near or far: 1 is the finest step, 3 the coarsest',
+                  type: 'number',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'focus without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  return checkMutatingIsNonInteractive(args, `rawback camera focus ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraFocus } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraFocus({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'af' | 'stop' | 'near' | 'far',
+                    steps: args.steps,
+                    force: args.force,
+                  }),
+                'Focus cancelled.',
+              )
+            },
+          )
+          .command(
+            'zoom [value]',
+            'read the zoom, or zoom to a position or wide|tele|stop',
+            (zoom) =>
+              cameraTargetOptions(zoom)
+                .positional('value', {
+                  describe:
+                    'a zoom position (PowerShot), or wide, tele or stop (Power Zoom Adapter)',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'zoom without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.value === undefined) return true
+                  const drive = ['wide', 'tele', 'stop'].includes(args.value)
+                  const position = Number(args.value)
+                  if (!drive && (!Number.isSafeInteger(position) || position < 0)) {
+                    throw new Error(
+                      'rawback camera zoom takes a whole-number position or wide|tele|stop',
+                    )
+                  }
+                  return checkMutatingIsNonInteractive(args, 'rawback camera zoom')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraZoom } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraZoom({
+                    ...cameraTargetArgs(args),
+                    force: args.force,
+                    ...(args.value !== undefined ? { value: args.value } : {}),
+                  }),
+                'Zoom cancelled.',
+              )
+            },
+          )
+          .command(
+            'clock [action]',
+            "read the camera's clock, or sync it to this computer",
+            (clock) =>
+              cameraTargetOptions(clock)
+                .positional('action', {
+                  choices: ['show', 'sync'] as const,
+                  default: 'show',
+                  describe: 'clock action',
+                  type: 'string',
+                })
+                .option('force', {
+                  default: false,
+                  describe: 'sync without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action !== 'sync') return true
+                  return checkMutatingIsNonInteractive(args, 'rawback camera clock sync')
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraClock } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraClock({
+                    ...cameraTargetArgs(args),
+                    sync: args.action === 'sync',
+                    force: args.force,
+                  }),
+                'Clock sync cancelled.',
+              )
+            },
+          )
+          .command(
+            'owner [action] [field]',
+            'read and set the copyright, author, owner name and nickname',
+            (owner) =>
+              cameraTargetOptions(owner)
+                .positional('action', {
+                  choices: ['show', 'set', 'clear'] as const,
+                  default: 'show',
+                  describe: 'owner action',
+                  type: 'string',
+                })
+                .positional('field', {
+                  choices: ['copyright', 'author', 'owner-name', 'nickname'] as const,
+                  describe: 'field to clear, for clear',
+                  type: 'string',
+                })
+                .option('copyright', { describe: 'with set: the copyright notice', type: 'string' })
+                .option('author', { describe: 'with set: the author', type: 'string' })
+                .option('owner-name', { describe: "with set: the owner's name", type: 'string' })
+                .option('nickname', { describe: "with set: the camera's nickname", type: 'string' })
+                .option('force', {
+                  default: false,
+                  describe: 'change without confirmation',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                })
+                .check((args) => {
+                  checkCameraTarget(args)
+                  if (args.action === 'show') return true
+                  if (args.action === 'clear' && args.field === undefined) {
+                    throw new Error(
+                      'rawback camera owner clear needs a field: copyright, author, owner-name or nickname',
+                    )
+                  }
+                  if (
+                    args.action === 'set' &&
+                    args.copyright === undefined &&
+                    args.author === undefined &&
+                    args.ownerName === undefined &&
+                    args.nickname === undefined
+                  ) {
+                    throw new Error(
+                      'rawback camera owner set needs --copyright, --author, --owner-name or --nickname',
+                    )
+                  }
+                  return checkMutatingIsNonInteractive(args, `rawback camera owner ${args.action}`)
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runCameraOwner } = await import('./camera-control.ts')
+              await runCommand(
+                () =>
+                  runCameraOwner({
+                    ...cameraTargetArgs(args),
+                    action: args.action as 'show' | 'set' | 'clear',
+                    force: args.force,
+                    ...(args.field !== undefined ? { field: args.field } : {}),
+                    values: {
+                      ...(args.copyright !== undefined ? { copyright: args.copyright } : {}),
+                      ...(args.author !== undefined ? { author: args.author } : {}),
+                      ...(args.ownerName !== undefined ? { 'owner-name': args.ownerName } : {}),
+                      ...(args.nickname !== undefined ? { nickname: args.nickname } : {}),
+                    },
+                  }),
+                'Owner change cancelled.',
+              )
+            },
+          )
+          .command(
             'cert <output>',
             "save the camera's root TLS certificate",
             (cert) =>
