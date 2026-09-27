@@ -33,7 +33,9 @@ export async function runCameraEventsPoll(
   await withCameraSession(options, dependencies, async (session) => {
     const event = await session.client.event.getPolling({
       signal: session.signal,
-      ...(options.wait === true ? { continue: true } : {}),
+      // `hold` long-polls in the style the body's event/polling version takes:
+      // `continue=on` on ver100, `timeout=long` from ver110 on.
+      ...(options.wait === true ? { hold: true } : {}),
       ...(options.timeoutKind !== undefined ? { timeout: options.timeoutKind } : {}),
     })
 

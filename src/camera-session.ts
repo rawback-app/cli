@@ -16,9 +16,6 @@ import type { CommandOutput } from './ui/output.tsx'
 /** A cached discovery map older than this is re-read rather than trusted. */
 const DISCOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-/** ver140 nests contents under an extra `folder` segment; earlier versions do not. */
-const FOLDER_SEGMENT_VERSION = 'ver140'
-
 export interface CameraTarget {
   host: string
   port: number
@@ -194,11 +191,6 @@ export class CameraSession {
 
   get signal(): AbortSignal {
     return this.#abort.signal
-  }
-
-  /** ver140 inserts a `folder` segment into contents paths; earlier versions do not. */
-  get folderSegment(): string | undefined {
-    return this.#apiVersion >= FOLDER_SEGMENT_VERSION ? 'folder' : undefined
   }
 
   get errorContext(): CameraErrorContext {

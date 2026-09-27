@@ -3,13 +3,13 @@ import { mkdir, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { Writable } from 'node:stream'
 
-import type { ContentDataKind, ContentLocator, ContentType, ContentsOrder } from '@rawback/ccapi-js'
+import type { ContentDataKind, ContentType, ContentsOrder } from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
+import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
 import {
   withCameraSession,
   type CameraCommandDependencies,
-  type CameraSession,
   type CameraTargetOptions,
 } from './camera-session.ts'
 import { cameraPrompts } from './camera.ts'
@@ -20,37 +20,10 @@ import {
   type ContentsListRow,
 } from './features/camera/view.ts'
 
-/**
- * Locators are the strings the camera itself returns, so the ver140 `folder`
- * segment never has to reach the user. Splitting after `/contents/` gives
- * `storage/folder/directory/file` on ver140 and `storage/directory/file` below
- * it — the same rule the desktop app uses.
- */
-export function parseContentLocator(locator: string): ContentLocator {
-  const trimmed = locator.trim().replace(/\/+$/, '')
-  const afterContents = trimmed.split('/contents/')[1] ?? trimmed.replace(/^\/+/, '')
-  const segments = afterContents.split('/').filter((segment) => segment.length > 0)
+export { parseContentLocator } from './camera-locators.ts'
 
-  if (segments.length === 4) {
-    const [storage, folder, directory, file] = segments as [string, string, string, string]
-    return { storage, folder, directory, file }
-  }
-  if (segments.length === 3) {
-    const [storage, directory, file] = segments as [string, string, string]
-    return { storage, directory, file }
-  }
-  throw new CameraError(
-    `Not a content locator: ${JSON.stringify(locator)}. ` +
-      'Use one printed by rawback camera contents list.',
-  )
-}
-
-function listOptions(
-  session: CameraSession,
-  options: { type?: string; order?: string; page?: number },
-) {
+function listOptions(options: { type?: string; order?: string; page?: number }) {
   return {
-    ...(session.folderSegment !== undefined ? { folder: session.folderSegment } : {}),
     ...(options.type !== undefined && options.type !== 'all'
       ? { type: options.type as ContentType }
       : {}),
@@ -110,13 +83,15 @@ export async function runCameraContentsList(
 ): Promise<void> {
   const ui = commandOutput(dependencies)
   await withCameraSession(options, dependencies, async (session) => {
+    const directory = await resolveDirectory(session, options.storage, options.directory)
+    const where = { ...listOptions(options), ...folderOption(directory) }
     if (options.all === true) {
       // The chunked form streams the whole listing rather than one page.
       const locators: string[] = []
       for await (const page of session.client.contents.streamContents(
-        options.storage,
-        options.directory,
-        listOptions(session, options),
+        directory.storage,
+        directory.directory,
+        where,
       )) {
         locators.push(...page)
       }
@@ -129,15 +104,16 @@ export async function runCameraContentsList(
     }
 
     const page = options.page ?? 1
-    const [listing, counts] = await Promise.all([
-      session.client.contents.listContents(options.storage, options.directory, {
-        ...listOptions(session, options),
-        page,
-      }),
-      session.client.contents
-        .getContentsNumber(options.storage, options.directory, listOptions(session, options))
-        .catch(() => undefined),
-    ])
+    // One after the other: a body serves one contents request at a time and
+    // answers `503` to a second that overlaps it.
+    const listing = await session.client.contents.listContents(
+      directory.storage,
+      directory.directory,
+      { ...where, page },
+    )
+    const counts = await session.client.contents
+      .getContentsNumber(directory.storage, directory.directory, where)
+      .catch(() => undefined)
 
     if (options.json === true) {
       ui.json({

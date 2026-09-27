@@ -5,8 +5,8 @@
 // diverge.
 //
 // Ported from the reference TUI in the @rawback/ccapi-js repo, with three
-// changes: `run` takes the CameraSession (so contents entries can default the
-// ver140 `folder` segment and entries can be gated on `supports()`), every
+// changes: `run` takes the CameraSession (so contents entries can look up a
+// directory's ver140 folder and entries can be gated on `supports()`), every
 // unsafe cast is replaced by a validating accessor, and the namespace order
 // lists all nine namespaces (the reference lists six, so the rest sorted first).
 //
@@ -18,6 +18,7 @@ import { PICTURE_STYLES } from '@rawback/ccapi-js'
 import type { ContentLocator, GPSInfo, PictureStyleName } from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
+import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
 import type { CameraSession } from './camera-session.ts'
 
 export type Args = Record<string, unknown>
@@ -230,22 +231,12 @@ const LOCATOR: Param = {
 }
 
 function locatorOf(args: Args): ContentLocator {
-  const raw = argString(args, 'locator')
-  const afterContents = raw.split('/contents/')[1] ?? raw.replace(/^\/+/, '')
-  const segments = afterContents.split('/').filter((segment) => segment.length > 0)
-  if (segments.length === 4) {
-    const [storage, folder, directory, file] = segments as [string, string, string, string]
-    return { storage, folder, directory, file }
-  }
-  if (segments.length === 3) {
-    const [storage, directory, file] = segments as [string, string, string]
-    return { storage, directory, file }
-  }
-  throw new CameraError(`Not a content locator: ${JSON.stringify(raw)}`)
+  return parseContentLocator(argString(args, 'locator'))
 }
 
-function folderOptions(session: CameraSession) {
-  return session.folderSegment !== undefined ? { folder: session.folderSegment } : {}
+/** A directory argument with its ver140 folder resolved — see `resolveDirectory`. */
+function directoryOf(session: CameraSession, args: Args) {
+  return resolveDirectory(session, argString(args, 'storage'), argString(args, 'directory'))
 }
 
 // ── catalogue ────────────────────────────────────────────────────────────────
@@ -769,18 +760,27 @@ export const REGISTRY: readonly ApiEntry[] = [
     '4.7.3',
     'GET',
     [STR('storage'), STR('directory'), NUM('page', false)],
-    (s, a) =>
-      s.client.contents.listContents(argString(a, 'storage'), argString(a, 'directory'), {
-        ...folderOptions(s),
+    async (s, a) => {
+      const directory = await directoryOf(s, a)
+      return s.client.contents.listContents(directory.storage, directory.directory, {
+        ...folderOption(directory),
         ...(a.page !== undefined ? { page: argNumber(a, 'page') } : {}),
-      }),
+      })
+    },
   ),
-  api('contents.getContentsNumber', '4.7.3', 'GET', [STR('storage'), STR('directory')], (s, a) =>
-    s.client.contents.getContentsNumber(
-      argString(a, 'storage'),
-      argString(a, 'directory'),
-      folderOptions(s),
-    ),
+  api(
+    'contents.getContentsNumber',
+    '4.7.3',
+    'GET',
+    [STR('storage'), STR('directory')],
+    async (s, a) => {
+      const directory = await directoryOf(s, a)
+      return s.client.contents.getContentsNumber(
+        directory.storage,
+        directory.directory,
+        folderOption(directory),
+      )
+    },
   ),
   api('contents.getContentInfo', '4.7.5', 'GET', [LOCATOR], (s, a) =>
     s.client.contents.getContentInfo(locatorOf(a)),
@@ -790,12 +790,14 @@ export const REGISTRY: readonly ApiEntry[] = [
     '4.7.4',
     'DELETE',
     [STR('storage'), STR('directory')],
-    (s, a) =>
-      s.client.contents.deleteDirectory(
-        argString(a, 'storage'),
-        argString(a, 'directory'),
-        s.folderSegment,
-      ),
+    async (s, a) => {
+      const directory = await directoryOf(s, a)
+      return s.client.contents.deleteDirectory(
+        directory.storage,
+        directory.directory,
+        directory.folder,
+      )
+    },
     { mutates: true },
   ),
   api(

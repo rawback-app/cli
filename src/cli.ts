@@ -2559,7 +2559,10 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'storage name (dirs, list) or content locator (info, get, delete)',
                   type: 'string',
                 })
-                .positional('b', { describe: 'directory name, for list', type: 'string' })
+                .positional('b', {
+                  describe: 'directory for list: 100CANON, DCIM/100CANON, or a locator from dirs',
+                  type: 'string',
+                })
                 .option('type', {
                   choices: [
                     'all',

@@ -387,7 +387,7 @@ describe('camera shoot', () => {
     const camera = fakeCamera({
       routes: {
         'event/polling': {
-          addedcontents: ['/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG'],
+          addedcontents: ['/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG'],
         },
       },
     })
@@ -402,7 +402,7 @@ describe('camera shoot', () => {
       released: true,
       af: true,
       mode: 'auto',
-      addedContents: ['/ccapi/ver140/contents/card1/folder/100CANON/IMG_0042.JPG'],
+      addedContents: ['/ccapi/ver140/contents/card1/DCIM/100CANON/IMG_0042.JPG'],
     })
     // Events are cleared first so addedContents reflects only this shot.
     const shutter = camera.requests.filter((request) =>
