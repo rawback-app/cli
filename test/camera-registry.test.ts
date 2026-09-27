@@ -150,7 +150,7 @@ describe('registry drift guard', () => {
                   status: 'A',
                   datestamp: '2026:08:04',
                 }
-              : { sharpness_strength: 4 }
+              : { sharpnessStrength: 4 }
           break
       }
     }
@@ -318,6 +318,38 @@ describe('parseArgs', () => {
       contrast: 1,
     })
     expect(() => parseArgs(style, ['style=standard', 'params={oops'])).toThrow(/must be JSON/)
+  })
+
+  test('picture-style parameters reject a key the library would drop', () => {
+    const style = byId('shooting.setPictureStyleDetail')
+    const session = { client: { shooting: { setPictureStyleDetail: async () => undefined } } }
+    const run = (params: Record<string, unknown>) =>
+      style.run(session as never, { style: 'standard', params })
+
+    expect(() => run({ sharpness_strength: 4 })).toThrow(/spelt sharpnessStrength here/)
+    expect(() => run({ sharpnes: 4 })).toThrow(/not a picture-style parameter.*sharpnessStrength/)
+    expect(() => run({ contrast: 'high' })).toThrow(/params\.contrast must be a number/)
+    expect(() => run({ filter: 2 })).toThrow(/params\.filter must be a string/)
+    expect(run({ sharpnessStrength: 4, filter: 'yellow' })).resolves.toBeUndefined()
+  })
+
+  test('event polling holds in the portable style', async () => {
+    const polling = byId('event.getPolling')
+    expect(polling.params.map((param) => param.name)).toEqual(['hold', 'timeout'])
+    const calls: unknown[] = []
+    const session = {
+      client: {
+        event: {
+          getPolling: async (options: unknown) => {
+            calls.push(options)
+            return {}
+          },
+        },
+      },
+    }
+    await polling.run(session as never, { hold: true })
+    await polling.run(session as never, { timeout: 'long' })
+    expect(calls).toEqual([{ hold: true }, { hold: false, timeout: 'long' }])
   })
 
   test('validateArgs enforces the same rule the form must obey', () => {

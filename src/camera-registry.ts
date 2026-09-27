@@ -15,7 +15,12 @@
 // which can write to a file. This catalogue is a JSON inspector.
 
 import { PICTURE_STYLES } from '@rawback/ccapi-js'
-import type { ContentLocator, GPSInfo, PictureStyleName } from '@rawback/ccapi-js'
+import type {
+  ContentLocator,
+  GPSInfo,
+  PictureStyleName,
+  PictureStyleParameters,
+} from '@rawback/ccapi-js'
 
 import { CameraError } from './camera-errors.ts'
 import { folderOption, parseContentLocator, resolveDirectory } from './camera-locators.ts'
@@ -163,14 +168,53 @@ function argGPSInfo(args: Args, key: string): GPSInfo {
   return record as unknown as GPSInfo
 }
 
-function argNumberRecord(args: Args, key: string): Record<string, number> {
+const PICTURE_STYLE_NUMBERS = [
+  'sharpnessStrength',
+  'sharpnessFineness',
+  'sharpnessThreshold',
+  'contrast',
+  'saturation',
+  'colorTone',
+] as const
+const PICTURE_STYLE_STRINGS = ['basePictureStyle', 'filter', 'toning'] as const
+
+/** The camera's own spelling of each parameter, for a hint when one is passed. */
+const PICTURE_STYLE_CAMERA_NAMES: Record<string, string> = {
+  sharpness_strength: 'sharpnessStrength',
+  sharpness_fineness: 'sharpnessFineness',
+  sharpness_threshold: 'sharpnessThreshold',
+  colortone: 'colorTone',
+  filtereffect: 'filter',
+  filterEffect: 'filter',
+  toningeffect: 'toning',
+  toningEffect: 'toning',
+  basepicturestyle: 'basePictureStyle',
+}
+
+/**
+ * The library encodes only the fields it knows and drops the rest, so a
+ * misspelt key would be a silent no-op on the camera. Every key is checked
+ * here instead, and the camera's snake_case names point at their spelling.
+ */
+function argPictureStyleParameters(args: Args, key: string): PictureStyleParameters {
   const record = argRecord(args, key)
-  const result: Record<string, number> = {}
+  const numbers: readonly string[] = PICTURE_STYLE_NUMBERS
+  const strings: readonly string[] = PICTURE_STYLE_STRINGS
   for (const [name, value] of Object.entries(record)) {
-    if (typeof value !== 'number') throw new CameraError(`${key}.${name} must be a number`)
-    result[name] = value
+    if (numbers.includes(name)) {
+      if (typeof value !== 'number') throw new CameraError(`${key}.${name} must be a number`)
+    } else if (strings.includes(name)) {
+      if (typeof value !== 'string') throw new CameraError(`${key}.${name} must be a string`)
+    } else {
+      const spelling = PICTURE_STYLE_CAMERA_NAMES[name]
+      throw new CameraError(
+        spelling !== undefined
+          ? `${key}.${name} is spelt ${spelling} here`
+          : `${key}.${name} is not a picture-style parameter. Expected: ${[...numbers, ...strings].join(', ')}`,
+      )
+    }
   }
-  return result
+  return record as PictureStyleParameters
 }
 
 function argPictureStyle(args: Args, key: string): PictureStyleName {
@@ -1332,12 +1376,12 @@ export const REGISTRY: readonly ApiEntry[] = [
     'PUT',
     [
       ENUM('style', PICTURE_STYLES),
-      JSON_PARAM('params', '{ "sharpness_strength": 4, "contrast": 1 } — snake_case keys'),
+      JSON_PARAM('params', '{ "sharpnessStrength": 4, "contrast": 1, "filter": "yellow" }'),
     ],
     (s, a) =>
       s.client.shooting.setPictureStyleDetail(
         argPictureStyle(a, 'style'),
-        argNumberRecord(a, 'params'),
+        argPictureStyleParameters(a, 'params'),
       ),
     { mutates: true },
   ),
@@ -1460,14 +1504,16 @@ export const REGISTRY: readonly ApiEntry[] = [
     'event.getPolling',
     '4.13.1',
     'GET',
-    [BOOL('continue'), STR('timeout', false)],
-    (s, a) =>
-      s.client.event.getPolling({
-        continue: argBoolean(a, 'continue'),
-        ...(argOptionalString(a, 'timeout') !== undefined
-          ? { timeout: argOptionalString(a, 'timeout') as string }
-          : {}),
-      }),
+    // `hold` rather than `continue`: it long-polls in whichever style the body's
+    // event/polling version takes, where `continue` is rejected from ver110 on.
+    [BOOL('hold'), ENUM('timeout', ['short', 'long'], false)],
+    (s, a) => {
+      const timeout = argOptionalString(a, 'timeout')
+      return s.client.event.getPolling({
+        hold: argBoolean(a, 'hold'),
+        ...(timeout !== undefined ? { timeout: argEnum(a, 'timeout', ['short', 'long']) } : {}),
+      })
+    },
     { suffix: 'event/polling' },
   ),
   api('event.clearPolling', '4.13.1', 'DELETE', [], (s) => s.client.event.clearPolling(), {

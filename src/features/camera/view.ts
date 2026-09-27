@@ -214,6 +214,17 @@ export interface SettingRow {
   name: string
   value: string | null
   ability: string[] | null
+  range: SettingRange | null
+}
+
+export interface SettingRange {
+  min: number | null
+  max: number | null
+  step: number | null
+}
+
+function rangeText(range: SettingRange): string {
+  return range.min === null ? 'locked' : `${range.min}–${range.max} step ${range.step}`
 }
 
 export function settingsListDocument(settings: SettingRow[]): UiDocument {
@@ -234,7 +245,9 @@ export function settingsListDocument(settings: SettingRow[]): UiDocument {
           choices:
             setting.ability && setting.ability.length > 0
               ? cell(setting.ability.join(', '), { dim: true })
-              : DASH,
+              : setting.range
+                ? cell(rangeText(setting.range), { dim: true })
+                : DASH,
         })),
       },
       {
@@ -250,7 +263,7 @@ export interface SettingView {
   name: string
   value: string | number | null
   ability: string[] | null
-  range: { min: number | null; max: number | null; step: number | null } | null
+  range: SettingRange | null
 }
 
 export function settingDocument(setting: SettingView): UiDocument {
@@ -265,9 +278,7 @@ export function settingDocument(setting: SettingView): UiDocument {
     fields.push({
       label: 'Range',
       value:
-        setting.range.min === null
-          ? cell('locked', { tone: 'warning' })
-          : `${setting.range.min}–${setting.range.max} step ${setting.range.step}`,
+        setting.range.min === null ? cell('locked', { tone: 'warning' }) : rangeText(setting.range),
     })
   }
   if (setting.ability && setting.ability.length > 0) {

@@ -69,8 +69,51 @@ describe('camera settings', () => {
 
     expect(output.json()).toEqual({
       settings: [
-        { name: 'av', value: 'f4.0', ability: ['f2.8', 'f4.0'] },
-        { name: 'tv', value: '1/125', ability: ['1/60', '1/125'] },
+        { name: 'av', value: 'f4.0', ability: ['f2.8', 'f4.0'], range: null },
+        { name: 'tv', value: '1/125', ability: ['1/60', '1/125'], range: null },
+      ],
+    })
+  })
+
+  test('list names each setting as get and set accept it, including unmodelled ones', async () => {
+    const { store } = await temporaryStore()
+    await store.upsert(saved(), { makeDefault: true })
+    const camera = fakeCamera({
+      routes: {
+        'shooting/settings': {
+          shootingmode: { value: 'm', ability: ['m', 'av'] },
+          colortemperature: { value: 5200, ability: { min: 2500, max: 10000, step: 100 } },
+          stillimagequality: {
+            value: { raw: 'craw', jpeg: 'large_fine' },
+            ability: [{ raw: ['craw'], jpeg: ['large_fine'] }],
+          },
+          nobodymodelsthis: { value: 'on', ability: ['on', 'off'] },
+        },
+      },
+    })
+    const output = capture()
+
+    await runCameraSettingsList(
+      { json: true },
+      { store, processEnv: {}, fetch: camera.fetch, ...output.dependencies },
+    )
+
+    expect(output.json()).toEqual({
+      settings: [
+        {
+          name: 'colortemperature',
+          value: '5200',
+          ability: null,
+          range: { min: 2500, max: 10000, step: 100 },
+        },
+        { name: 'nobodymodelsthis', value: 'on', ability: ['on', 'off'], range: null },
+        { name: 'shootingmode', value: 'm', ability: ['m', 'av'], range: null },
+        {
+          name: 'stillimagequality',
+          value: '{"raw":"craw","jpeg":"large_fine"}',
+          ability: ['{"raw":["craw"],"jpeg":["large_fine"]}'],
+          range: null,
+        },
       ],
     })
   })

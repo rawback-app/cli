@@ -7,7 +7,7 @@ import {
 } from './camera-session.ts'
 import { cameraPrompts } from './camera.ts'
 import { commandOutput } from './command.ts'
-import { settingDocument, settingsListDocument } from './features/camera/view.ts'
+import { settingDocument, settingsListDocument, type SettingRow } from './features/camera/view.ts'
 
 /**
  * Settings whose `ability` is a `{ min, max, step }` range rather than a value
@@ -32,7 +32,7 @@ export interface CameraSettingView {
   name: string
   value: string | number | null
   ability: string[] | null
-  range: { min: number | null; max: number | null; step: number | null } | null
+  range: SettingRow['range']
 }
 
 async function readSetting(session: CameraSession, name: string): Promise<CameraSettingView> {
@@ -53,27 +53,52 @@ async function readSetting(session: CameraSession, name: string): Promise<Camera
   return { name, value: setting.value, ability: setting.ability ?? null, range: null }
 }
 
+/** Strings pass through; structured values (`stillimagequality`, `wbshift`) print as JSON. */
+function display(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function rangeOf(ability: unknown): SettingRow['range'] {
+  if (typeof ability !== 'object' || ability === null || Array.isArray(ability)) return null
+  const { min, max, step } = ability as Record<string, unknown>
+  if (typeof min !== 'number' && typeof max !== 'number') return null
+  return {
+    min: typeof min === 'number' ? min : null,
+    max: typeof max === 'number' ? max : null,
+    step: typeof step === 'number' ? step : null,
+  }
+}
+
+/** One aggregate entry, shaped like the GET of its own endpoint: `{ value, ability }`. */
+function listRow(name: string, setting: unknown): SettingRow {
+  const entry =
+    typeof setting === 'object' && !Array.isArray(setting)
+      ? (setting as { value?: unknown; ability?: unknown })
+      : { value: setting }
+  const value = entry.value
+  return {
+    name,
+    value: value === undefined || value === null ? null : display(value),
+    ability: Array.isArray(entry.ability) ? entry.ability.map(display) : null,
+    range: rangeOf(entry.ability),
+  }
+}
+
 export async function runCameraSettingsList(
   options: CameraTargetOptions = {},
   dependencies: CameraCommandDependencies = {},
 ): Promise<void> {
   const ui = commandOutput(dependencies)
   await withCameraSession(options, dependencies, async (session) => {
-    const settings = await session.client.shooting.getShootingSettings()
+    // The undecoded aggregate, not `getShootingSettings()`: that one renames
+    // keys to camelCase (`shootingMode`), which `settings get`/`set` would then
+    // send as a path the camera does not have, and it drops every setting it
+    // does not model. Keyed by the camera's own names, every row round-trips.
+    const settings = await session.client.shooting.getShootingSettingsRaw()
 
-    // The decoder returns camelCase members; report them under the names
-    // `settings get`/`set` accept, which are the camera's own.
     const rows = Object.entries(settings)
-      .filter(([, setting]) => setting !== undefined)
-      .map(([name, setting]) => {
-        const value = (setting as { value?: unknown }).value
-        const ability = (setting as { ability?: unknown }).ability
-        return {
-          name,
-          value: value === undefined || value === null ? null : String(value),
-          ability: Array.isArray(ability) ? ability.map(String) : null,
-        }
-      })
+      .filter(([, setting]) => setting !== undefined && setting !== null)
+      .map(([name, setting]) => listRow(name, setting))
       .sort((left, right) => left.name.localeCompare(right.name))
 
     if (options.json === true) {

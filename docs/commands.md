@@ -256,6 +256,10 @@ rawback camera settings get <name> [--json]
 rawback camera settings set <name> <value> [--int] [--force] [--json]
 ```
 
+`list` reports every setting the camera returns, under the camera's own names,
+so any row's name can be passed straight to `get` or `set`. Structured values
+such as `stillimagequality` and `wbshift` print as JSON.
+
 `get` returns `value` plus either `ability` (a list of choices) or `range`
 (`min`, `max`, `step`). Settings whose ability is a range — the colour
 temperatures, focus-bracketing shot count and increment, and sound-recording
