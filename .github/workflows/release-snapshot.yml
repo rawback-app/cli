@@ -37,7 +37,7 @@ concurrency:
 jobs:
   release-snapshot:
     name: GoReleaser snapshot
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     # The before hooks download sidecars from third-party hosts, so a stalled
     # request must not be allowed to burn an hour of runner time.
     timeout-minutes: 20
