@@ -17,11 +17,11 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
-        uses: useblacksmith/checkout@v1
+        uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -66,13 +66,17 @@ jobs:
       matrix:
         include:
           - name: Linux x86-64
-            runner: blacksmith-2vcpu-ubuntu-2404
+            runner: ubuntu-24.04
+            arch: x64
           - name: Linux arm64
-            runner: blacksmith-2vcpu-ubuntu-2404-arm
+            runner: ubuntu-24.04-arm
+            arch: arm64
           - name: macOS x86-64
-            runner: blacksmith-6vcpu-macos-latest
+            runner: macos-15-intel
+            arch: x64
           - name: macOS arm64
-            runner: blacksmith-6vcpu-macos-latest
+            runner: macos-15
+            arch: arm64
 
     steps:
       - name: Checkout code
@@ -85,6 +89,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Verify native runner architecture
+        run: test "$(bun -p 'process.arch')" = "${{ matrix.arch }}"
 
       - name: Test platform installer
         run: bun test test/install.test.ts

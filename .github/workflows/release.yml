@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -25,7 +25,7 @@ jobs:
 
       - name: Checkout release commit
         if: ${{ steps.release.outputs.release_created }}
-        uses: useblacksmith/checkout@v1
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ steps.release.outputs.tag_name }}
