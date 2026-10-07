@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.16](https://github.com/rawback-app/cli/compare/v1.0.15...v1.0.16) (2026-10-07)
+
+
+### Features
+
+* **camera:** close the gap between @rawback/ccapi-js and rawback camera ([#87](https://github.com/rawback-app/cli/issues/87)) ([4604fbc](https://github.com/rawback-app/cli/commit/4604fbcd5b640e424c0e9eea16ccbf35da2d31b1))
+* **google:** add import google and export google commands ([#90](https://github.com/rawback-app/cli/issues/90)) ([6255151](https://github.com/rawback-app/cli/commit/6255151770cb88c883c4f86f4dc0a279c70348ff))
+* location search, photo permission and spots commands ([#84](https://github.com/rawback-app/cli/issues/84)) ([e03b55e](https://github.com/rawback-app/cli/commit/e03b55e9fd4a583480d47d28573c4c36c91c5d20))
+
+
+### Bug Fixes
+
+* **camera:** read the ver140 folder from the card instead of guessing it ([#86](https://github.com/rawback-app/cli/issues/86)) ([7a9c7fd](https://github.com/rawback-app/cli/commit/7a9c7fd46b48098a98d925229a66d36a26e7803c))
+
+
+### Continuous Integration
+
+* remove persistent caches and retain Blacksmith 2-vCPU runners ([#89](https://github.com/rawback-app/cli/issues/89)) ([b28c3a5](https://github.com/rawback-app/cli/commit/b28c3a580fd7b1f1d7fdb942a86b3086ff8076a0))
+
 ## [1.0.15](https://github.com/rawback-app/cli/compare/v1.0.14...v1.0.15) (2026-09-23)
 
 
