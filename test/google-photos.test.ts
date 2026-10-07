@@ -482,6 +482,28 @@ describe('rawback import google', () => {
     expect(h.operations().at(-1)).toBe('DeleteGooglePhotosPickerSession')
   })
 
+  test('keeps the picker session when Ctrl-C lands while the import starts', async () => {
+    let h: Harness | undefined
+    h = await harness(
+      importReplies({
+        ImportGooglePhotos: [
+          () => {
+            h?.interrupt()
+            throw new DOMException('This operation was aborted', 'AbortError')
+          },
+        ],
+      }),
+    )
+    const error = await runGoogleImport({ yes: true }, h.deps).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(CommandInterruptedError)
+    expect((error as Error).message).toBe(
+      "Stopped while starting the import; it may have started anyway. See 'rawback google jobs'.",
+    )
+    // The server may already be importing from it.
+    expect(h.operations()).not.toContain('DeleteGooglePhotosPickerSession')
+  })
+
   test('stops watching on Ctrl-C, reporting the job it leaves running', async () => {
     let h: Harness | undefined
     h = await harness(
@@ -792,6 +814,35 @@ describe('rawback export google', () => {
       'This selection has 3 photos; one export sends at most 2.',
     )
     expect(h.prompts).toEqual([])
+
+    // A dry run fails the same way, rather than passing a selection the real run refuses.
+    const dry = await harness(
+      exportReplies({ GooglePhotosStatus: [status({ maxExportItems: 2 })] }),
+    )
+    await expect(runGoogleExport({ dryRun: true }, dry.deps)).rejects.toThrow(
+      'This selection has 3 photos; one export sends at most 2.',
+    )
+  })
+
+  test('says an export interrupted while starting may have started', async () => {
+    let h: Harness | undefined
+    h = await harness(
+      exportReplies({
+        ExportToGooglePhotos: [
+          () => {
+            h?.interrupt()
+            throw new DOMException('This operation was aborted', 'AbortError')
+          },
+        ],
+      }),
+    )
+    const error = await runGoogleExport({ yes: true, libraryOnly: true }, h.deps).catch(
+      (thrown: unknown) => thrown,
+    )
+    expect(error).toBeInstanceOf(CommandInterruptedError)
+    expect((error as Error).message).toBe(
+      "Stopped while starting the export; it may have started anyway. See 'rawback google jobs'.",
+    )
   })
 
   test('reconnects for the export permission first', async () => {

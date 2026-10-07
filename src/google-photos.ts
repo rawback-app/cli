@@ -131,6 +131,11 @@ async function stage<T>(signal: AbortSignal, message: string, run: () => Promise
   }
 }
 
+/** Ctrl-C while the server was starting a job: it may have started anyway. */
+function startInterrupted(kind: 'import' | 'export'): string {
+  return `Stopped while starting the ${kind}; it may have started anyway. See 'rawback google jobs'.`
+}
+
 function defaultOnInterrupt(handler: () => void): () => void {
   let count = 0
   const listener = () => {
@@ -551,7 +556,9 @@ export async function runGoogleImport(
 
         let job: GooglePhotosJobSummary
         try {
-          job = await google.startImport(session.id, { signal })
+          job = await stage(signal, startInterrupted('import'), () =>
+            google.startImport(session.id, { signal }),
+          )
         } catch (error) {
           // Only a refusal leaves the session unused; after a dropped
           // connection the import may have started, and needs it.
@@ -784,6 +791,13 @@ export async function runGoogleExport(
       }
       if (!json) ui.document(exportPreviewDocument(view))
 
+      // Checked before --dry-run returns, since a dry run is how a selection
+      // is checked: it must fail exactly as the real run would.
+      if (preview.count > status.maxExportItems) {
+        throw new Error(
+          `This selection has ${plural(preview.count, 'photo')}; one export sends at most ${formatCount(status.maxExportItems)}. Narrow it with --from/--to, --album or --image.`,
+        )
+      }
       if (options.dryRun) {
         if (json) output(null, false)
         return
@@ -799,11 +813,6 @@ export async function runGoogleExport(
         if (json) output(null, false)
         return
       }
-      if (preview.count > status.maxExportItems) {
-        throw new Error(
-          `This selection has ${plural(preview.count, 'photo')}; one export sends at most ${formatCount(status.maxExportItems)}. Narrow it with --from/--to, --album or --image.`,
-        )
-      }
       if (!options.yes) {
         const destination = albumTitle ? ` album "${albumTitle}"` : ''
         const confirmed = await prompts.confirm(
@@ -816,7 +825,9 @@ export async function runGoogleExport(
         }
       }
 
-      const job = await google.startExport(plan.input, { signal })
+      const job = await stage(signal, startInterrupted('export'), () =>
+        google.startExport(plan.input, { signal }),
+      )
       const report = (current: GooglePhotosJobSummary, finished: boolean) => {
         if (json) output(current, finished)
         else ui.document(jobDocument(current, jobHints(current)))
