@@ -1191,7 +1191,8 @@ non-interactive use. JSON reports `{ "deleted": <boolean>, "id": <share-id> }`.
 
 ## `rawback uploads`
 
-Lists FTP and SFTP upload sessions:
+Lists upload sessions: FTP and SFTP uploads, app uploads, and Google Photos
+imports (source `GOOGLE PHOTOS`):
 
 ```bash
 rawback uploads [options]
@@ -1203,6 +1204,167 @@ rawback uploads [options]
 | `--page <number>`      | Positive result page                          | `1`     |
 | `--page-size <number>` | Results per page, from 1 through 100          | `20`    |
 | `--json`               | Print an `uploads` and `pageInfo` JSON object | `false` |
+
+## `rawback import google`
+
+Imports photos you pick in Google Photos:
+
+```bash
+rawback import google [--yes] [--no-wait] [--json]
+```
+
+1. Checks the Google Photos link. Without a linked account, with one Google no
+   longer accepts, or with one that never granted the import permission, it
+   prints an authorization link on standard error, opens it in the browser, and
+   waits until Google's consent screen is done (at most ten minutes). Nothing is
+   stored locally: the grant lives on the server.
+2. Opens Google Photos' own picker the same way and waits until you select
+   Done. One pick holds up to 2,000 items.
+3. Shows how many photos were picked and how many videos will be skipped, then
+   asks to confirm.
+4. Starts the import and shows its progress until it finishes.
+
+The import runs on the server through the same pipeline as an SFTP upload: it
+appears in [`rawback uploads`](#rawback-uploads), and photos already in your
+library (same filename and capture time) are skipped. Videos are not imported.
+Google withholds location metadata from downloads, so imported photos arrive
+without GPS. Only one import runs at a time; a running one is reported with its
+job ID before the picker opens.
+
+| Option      | Description                                               | Default |
+| ----------- | --------------------------------------------------------- | ------- |
+| `--yes`     | Import what you pick without asking to confirm            | `false` |
+| `--no-wait` | Print the started job and exit instead of watching it     | waits   |
+| `--json`    | Print `{ "picked", "job", "finished" }`; requires `--yes` | `false` |
+
+Without `--yes` the command needs an interactive terminal, and says so before
+anything opens. Declining, or Ctrl-C while the picker is open, ends the picker
+session and imports nothing. Ctrl-C while the import is being watched stops
+watching and exits `130`; the import keeps running on the server and can be
+followed with `rawback google job <id> --watch`. The command exits `1` when
+the job fails, is cancelled, or finishes with failed items.
+
+`picked` is `{ "total", "photos", "videos" }`. `job` is the job as
+[`rawback google jobs`](#rawback-google-jobs) reports it, and `finished` is
+`false` under `--no-wait` or when watching was interrupted.
+
+## `rawback export google`
+
+Exports library photos to Google Photos:
+
+```bash
+rawback export google [selection] [options]
+```
+
+Choose at most one selection; without one, every photo is exported.
+
+| Selection                      | Exports                                                               |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `--all`                        | Every photo (the default)                                             |
+| `--from <date>`, `--to <date>` | Photos captured — or, without a capture time, uploaded — in the range |
+| `--album <id>`                 | Photos in these albums; repeat or comma-separate, up to 100           |
+| `--image <id>`                 | These photos; repeat or comma-separate                                |
+| `--images-file <path>`         | Photo IDs from a file, one per line (`-` reads standard input)        |
+
+Dates are `YYYY-MM-DD`, which covers that whole UTC day, or an RFC3339
+timestamp. Either bound may be omitted. `--image` and `--images-file` combine.
+
+| Option                  | Description                                                                                    | Default    |
+| ----------------------- | ---------------------------------------------------------------------------------------------- | ---------- |
+| `--include-secret`      | Also export photos a secret album hides from the library                                       | `false`    |
+| `--include-archived`    | Also export archived photos                                                                    | `false`    |
+| `--no-skip-exported`    | Send photos an earlier export already sent to this Google account                              | skips them |
+| `--album-title <title>` | Google Photos album to add the photos to, created on first use and reused after                | `Rawback`  |
+| `--no-album`            | Add the photos to the Google Photos library only                                               | —          |
+| `--file <file>`         | `original` (the stored file, RAW included) or `fullsize` (a full-resolution AVIF for RAW/HEIC) | `original` |
+| `--dry-run`             | Show the count, size, and already-exported photos, and stop                                    | `false`    |
+| `--yes`                 | Export without asking to confirm                                                               | `false`    |
+| `--no-wait`             | Print the started job and exit instead of watching it                                          | waits      |
+| `--json`                | Print `{ "dryRun", "input", "preview", "job", "finished" }`; requires `--yes` or `--dry-run`   | `false`    |
+
+The command validates the selection before any request, connects the Google
+account the same way `rawback import google` does when it cannot export yet,
+then previews the selection and asks to confirm. `--dry-run` needs no linked
+account. One export sends at most 50,000 photos, and only one export runs at a
+time. `fullsize` sends the AVIF rendition kept for RAW and HEIC originals, which
+Google Photos always opens; other photos still send their original.
+
+`input` is the selection exactly as sent to the server, `preview` is
+`{ "count", "totalBytes", "alreadyExported" }`, and `job` is `null` for a dry
+run or when nothing matched. Interruption, `--no-wait` and exit codes behave as
+for `rawback import google`.
+
+## `rawback google`
+
+Manages the Google Photos link and its transfers. `import google` and
+`export google` connect on their own; these commands are for everything around
+them.
+
+```bash
+rawback google status [--json]
+rawback google connect [--json]
+rawback google disconnect [--yes] [--json]
+rawback google jobs [--kind import|export] [--limit <n>] [--offset <n>] [--json]
+rawback google job <id> [--items <status>] [--limit <n>] [--offset <n>] [--watch] [--json]
+rawback google cancel <id> [--json]
+```
+
+### `google status`
+
+Shows whether the server offers Google Photos, the linked account and what it
+may do (import, export), the running import and export, and the limits. A server
+without the feature is reported, not treated as an error. JSON:
+`{ "available", "account", "activeImport", "activeExport", "maxPickerItems", "maxExportItems" }`.
+
+### `google connect`
+
+Links a Google account, or repairs one Google no longer accepts or that is
+missing a permission, by printing an authorization link on standard error and
+opening it. An account that already works is left alone; to switch Google
+accounts, disconnect first. JSON: `{ "account", "connected" }`.
+
+### `google disconnect`
+
+Revokes Rawback's access at Google and cancels running imports and exports.
+Asks to confirm unless `--yes` is given; `--json` requires `--yes`. JSON:
+`{ "disconnected" }`.
+
+### `google jobs`
+
+Lists imports and exports, newest first.
+
+| Option         | Description                      | Default |
+| -------------- | -------------------------------- | ------- |
+| `--kind`       | `import` or `export`             | both    |
+| `--limit <n>`  | Jobs to show, from 1 through 100 | `20`    |
+| `--offset <n>` | Jobs to skip                     | `0`     |
+| `--json`       | Print `{ "jobs": [...] }`        | `false` |
+
+Each job carries `id`, `kind`, `status` (`pending`, `running`, `completed`,
+`failed`, `cancelled`), `totalItems`, `doneItems`, `skippedItems`,
+`failedItems`, `transferredBytes`, `albumTitle`, `albumUrl`, `exportFile`,
+`error`, `pausedUntil` (set while the job waits out Google's request quota; it
+stays `running`), `createdAt`, `startedAt`, `completedAt`, and `upload` (the
+import's upload session).
+
+### `google job <id>`
+
+Shows one job and a page of its items, each with its status, file, size, the
+library photo, the Google Photos link for an export, and the reason for a skip
+or failure (`duplicate`, `unsupported_type`, `already_exported`, …).
+
+| Option             | Description                                                        | Default |
+| ------------------ | ------------------------------------------------------------------ | ------- |
+| `--items <status>` | Only `pending`, `done`, `skipped`, or `failed` items               | all     |
+| `--limit <n>`      | Items to show, from 1 through 200                                  | `50`    |
+| `--offset <n>`     | Items to skip                                                      | `0`     |
+| `--watch`          | Follow the job until it finishes; exits `1` if it does not succeed | `false` |
+| `--json`           | Print `{ "job" }` with an `items` array                            | `false` |
+
+### `google cancel <id>`
+
+Stops a running import or export and prints the job. A job that already finished
+is left as it is. JSON: `{ "job" }`.
 
 ## `rawback usage`
 
@@ -1336,7 +1498,8 @@ standard error, so raising the verbosity with `-v` cannot disturb a script
 parsing `--json`.
 
 The CLI exits with status `0` on success, `1` for validation, API, filesystem, or
-upload failures, and `130` when an interactive prompt is cancelled. Scripts
+upload failures, and `130` when an interactive prompt is cancelled or Ctrl-C
+stops a command that is waiting on a browser or a server-side transfer. Scripts
 should check the exit status before consuming output.
 
 ## Article languages

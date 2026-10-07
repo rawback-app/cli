@@ -79,6 +79,11 @@ export class CommandOutput {
     this.#stdout(value)
   }
 
+  /** Undecorated text on stderr, e.g. a link that must stay copyable under `--json`. */
+  rawError(value: string): void {
+    this.#stderr(value)
+  }
+
   success(message: string): void {
     this.document(noticeDocument(message, 'success'))
   }

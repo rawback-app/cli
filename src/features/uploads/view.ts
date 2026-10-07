@@ -6,6 +6,11 @@ import { cell, type UiDocument } from '../../ui/model.ts'
 type UploadSession = UploadSessionsQuery['uploads']['edges'][number]
 type PageInfo = UploadSessionsQuery['uploads']['pageInfo']
 
+/** Source kinds are short codes shown in capitals; the multi-word ones read better spelled out. */
+export function uploadSourceLabel(kind: UploadSession['sourceKind']): string {
+  return kind === 'google_photos' ? 'GOOGLE PHOTOS' : kind.toUpperCase()
+}
+
 export function uploadSessionListDocument(
   uploads: UploadSession[],
   pageInfo: PageInfo,
@@ -37,7 +42,7 @@ export function uploadSessionListDocument(
                   ? 'success'
                   : 'neutral',
           }),
-          source: upload.sourceKind.toUpperCase(),
+          source: uploadSourceLabel(upload.sourceKind),
           credential: upload.credential?.name ?? cell('—', { dim: true }),
           files: String(upload.processedFiles) + '/' + String(upload.totalFiles),
           failed:
