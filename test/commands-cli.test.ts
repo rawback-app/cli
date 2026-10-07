@@ -557,3 +557,187 @@ describe('logs commands', () => {
     expect(() => JSON.parse(result.stdout.toString())).not.toThrow()
   })
 })
+
+describe('Google Photos commands', () => {
+  // Each case spawns the CLI, which takes most of a second.
+  const SPAWN_TIMEOUT_MS = 30_000
+
+  test(
+    'are listed in the top-level help',
+    () => {
+      const result = runCli('--help')
+      expect(result.exitCode).toBe(0)
+      for (const command of ['rawback import', 'rawback export', 'rawback google']) {
+        expect(result.stdout).toContain(command)
+      }
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'document import google',
+    () => {
+      const result = runCli('import', 'google', '--help')
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('rawback import google [options]')
+      expect(result.stdout.replace(/\s+/g, ' ')).toContain('photos arrive without GPS')
+      for (const flag of ['--yes', '--wait', '--no-wait', '--json']) {
+        expect(result.stdout).toContain(flag)
+      }
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'document export google',
+    () => {
+      const result = runCli('export', 'google', '--help')
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('rawback export google [selection] [options]')
+      for (const flag of [
+        '--all',
+        '--from',
+        '--to',
+        '--album',
+        '--image',
+        '--images-file',
+        '--include-secret',
+        '--include-archived',
+        '--no-skip-exported',
+        '--album-title',
+        '--no-album',
+        '--file',
+        '--dry-run',
+        '--yes',
+        '--no-wait',
+        '--json',
+      ]) {
+        expect(result.stdout).toContain(flag)
+      }
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'group the connection and job commands under google',
+    () => {
+      const result = runCli('google', '--help')
+      expect(result.exitCode).toBe(0)
+      for (const command of [
+        'rawback google status',
+        'rawback google connect',
+        'rawback google disconnect',
+        'rawback google jobs',
+        'rawback google job <id>',
+        'rawback google cancel <id>',
+      ]) {
+        expect(result.stdout).toContain(command)
+      }
+
+      const bare = runCli('google')
+      expect(bare.exitCode).toBe(1)
+      expect(bare.stderr).toContain('Choose a google command')
+      expect(runCli('import').stderr).toContain('Choose where to import from: google')
+      expect(runCli('export').stderr).toContain('Choose where to export to: google')
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  // Every one of these must fail before credentials are read, and before a
+  // browser window would open.
+  test(
+    'need --yes when they cannot prompt',
+    () => {
+      const notTty = runCli('import', 'google')
+      expect(notTty.exitCode).toBe(1)
+      expect(notTty.stderr).toContain('needs an interactive terminal unless --yes is provided')
+      expect(notTty.stderr).not.toContain('Authentication credentials')
+
+      const importJson = runCli('import', 'google', '--json')
+      expect(importJson.exitCode).toBe(1)
+      expect(importJson.stdout).toBe('')
+      expect(importJson.stderr).toContain('rawback import google --json also needs --yes')
+
+      const exportJson = runCli('export', 'google', '--json')
+      expect(exportJson.exitCode).toBe(1)
+      expect(exportJson.stderr).toContain('--json also needs --yes (or --dry-run)')
+
+      const disconnect = runCli('google', 'disconnect', '--json')
+      expect(disconnect.exitCode).toBe(1)
+      expect(disconnect.stderr).toContain('rawback google disconnect --json also needs --yes')
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'reject conflicting or malformed export selections before authentication',
+    () => {
+      const cases: Array<[string[], string]> = [
+        [['--all', '--album', '3'], 'Choose one selection, not --all and --album'],
+        [['--from', '2024-01-01', '--image', '5'], 'not --from/--to and --image/--images-file'],
+        [['--from', '2024-13-01'], '--from must be a valid YYYY-MM-DD date or RFC3339 timestamp'],
+        [['--from', '2024-05-01', '--to', '2024-04-01'], '--from must not be later than --to'],
+        [['--album', 'abc'], '--album must contain only positive integers'],
+        [
+          ['--no-album', '--album-title', 'Trips'],
+          '--album-title and --no-album cannot be combined',
+        ],
+        [['--file', 'raw'], 'Invalid values'],
+      ]
+      for (const [flags, message] of cases) {
+        const result = runCli('export', 'google', '--yes', ...flags)
+        expect(result.exitCode).toBe(1)
+        expect(result.stderr).toContain(message)
+        expect(result.stderr).not.toContain('Authentication credentials')
+      }
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'accept a valid selection and only then need credentials',
+    () => {
+      for (const flags of [
+        ['--dry-run', '--json'],
+        ['--dry-run', '--no-album', '--album', '3,4'],
+        ['--yes', '--from', '2024-01-01', '--no-skip-exported', '--file', 'fullsize', '--no-wait'],
+      ]) {
+        const result = runCli('export', 'google', ...flags)
+        expect(result.exitCode).toBe(1)
+        expect(result.stdout).toBe('')
+        expect(result.stderr).toContain('Authentication credentials are missing')
+      }
+      const importYes = runCli('import', 'google', '--yes', '--no-wait')
+      expect(importYes.exitCode).toBe(1)
+      expect(importYes.stderr).toContain('Authentication credentials are missing')
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+
+  test(
+    'validate job options before authentication',
+    () => {
+      const limit = runCli('google', 'jobs', '--limit', '0')
+      expect(limit.exitCode).toBe(1)
+      expect(limit.stderr).toContain('--limit must be an integer between 1 and 100')
+      expect(limit.stderr).not.toContain('Authentication credentials')
+
+      const kind = runCli('google', 'jobs', '--kind', 'sync')
+      expect(kind.exitCode).toBe(1)
+      expect(kind.stderr).toContain('Invalid values')
+
+      const id = runCli('google', 'job', 'abc')
+      expect(id.exitCode).toBe(1)
+      expect(id.stderr).toContain('Job ID must be a positive integer')
+
+      const items = runCli('google', 'job', '3', '--items', 'lost')
+      expect(items.exitCode).toBe(1)
+      expect(items.stderr).toContain('Invalid values')
+
+      const cancel = runCli('google', 'cancel', '0')
+      expect(cancel.exitCode).toBe(1)
+      expect(cancel.stderr).toContain('Job ID must be a positive integer')
+    },
+    SPAWN_TIMEOUT_MS,
+  )
+})

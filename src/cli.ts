@@ -34,6 +34,14 @@ async function runCommand(
       process.exitCode = 130
       return
     }
+    // Ctrl-C while a command waits on something outside it (a browser, a
+    // server-side job): the message says what was left behind. Matched by
+    // name so the module that throws it stays out of the startup path.
+    if (error instanceof Error && error.name === 'CommandInterruptedError') {
+      output.warning(error.message)
+      process.exitCode = 130
+      return
+    }
     output.error(describeError(error))
     process.exitCode = 1
   }
@@ -128,6 +136,44 @@ function checkMutatingIsNonInteractive(
     throw new Error(`${command} needs an interactive terminal unless --force is provided`)
   }
   return true
+}
+
+/**
+ * A command that asks before it acts needs a terminal to ask on, or `--yes`.
+ * Checked before any network call, so a script finds out before a browser
+ * window opens rather than after.
+ */
+function checkConfirmable(
+  args: { dryRun?: boolean | undefined; json?: boolean | undefined; yes?: boolean | undefined },
+  command: string,
+  dryRunnable = false,
+): true {
+  if (args.yes === true || args.dryRun === true) return true
+  const alternative = dryRunnable ? ' (or --dry-run)' : ''
+  if (args.json === true) {
+    throw new Error(`${command} --json also needs --yes${alternative}, because it cannot prompt`)
+  }
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(`${command} needs an interactive terminal unless --yes is provided`)
+  }
+  return true
+}
+
+/**
+ * `--no-album` reaches yargs as a `false` among the `--album` IDs, because it
+ * negates the option of that name. Split it back out.
+ */
+function albumSelection(values: ReadonlyArray<string | number | boolean> | undefined): {
+  albums: string[]
+  libraryOnly: boolean
+} {
+  const albums: string[] = []
+  let libraryOnly = false
+  for (const value of values ?? []) {
+    if (value === false) libraryOnly = true
+    else if (value !== true) albums.push(String(value))
+  }
+  return { albums, libraryOnly }
 }
 
 function albumMetadataOptions<T>(command: Argv<T>) {
@@ -2141,6 +2187,350 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
           .demandCommand(
             1,
             'Choose a shares command: list, get, archive, unarchive, enable, disable, delete, recipients, or link',
+          )
+          .strict(),
+      () => {},
+    )
+    .command(
+      'import',
+      'import photos from another service',
+      (command) =>
+        command
+          .command(
+            'google',
+            'import photos you pick in Google Photos',
+            (google) =>
+              google
+                .usage(
+                  "$0 import google [options]\n\nConnects your Google account if needed, opens Google Photos' own picker, and imports what you pick through the same pipeline as an SFTP upload. Videos and photos already in your library are skipped, and photos arrive without GPS because Google withholds location from downloads.",
+                )
+                .option('yes', {
+                  default: false,
+                  describe: 'import what you pick without asking to confirm',
+                  type: 'boolean',
+                })
+                .option('wait', {
+                  default: true,
+                  describe:
+                    'watch the import until it finishes; --no-wait prints the started job and exits',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON; needs --yes',
+                  type: 'boolean',
+                })
+                .check((args) => checkConfirmable(args, 'rawback import google')),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleImport } = await import('./google-photos.ts')
+              await runCommand(
+                () => runGoogleImport({ json: args.json, wait: args.wait, yes: args.yes }),
+                'Google Photos import cancelled.',
+              )
+            },
+          )
+          .demandCommand(1, 'Choose where to import from: google')
+          .strict(),
+      () => {},
+    )
+    .command(
+      'export',
+      'export photos to another service',
+      (command) =>
+        command
+          .command(
+            'google',
+            'export library photos to Google Photos',
+            (google) =>
+              google
+                .usage(
+                  '$0 export google [selection] [options]\n\nExports photos to your Google Photos library, by default into an album named "Rawback". Choose at most one selection, --all (the default), --from/--to, --album, or --image/--images-file. Connects your Google account first if needed.',
+                )
+                .option('all', {
+                  default: false,
+                  describe: 'export every photo (the default without another selection)',
+                  type: 'boolean',
+                })
+                .option('from', {
+                  describe:
+                    'photos captured (or, without a capture time, uploaded) on or after this date: YYYY-MM-DD (a UTC day) or RFC3339',
+                  type: 'string',
+                })
+                .option('to', {
+                  describe:
+                    'photos captured on or before this date: YYYY-MM-DD (a UTC day) or RFC3339',
+                  type: 'string',
+                })
+                .option('album', {
+                  array: true,
+                  describe: 'photos in this album ID (repeat or comma-separate, up to 100)',
+                  type: 'string',
+                })
+                .option('image', {
+                  array: true,
+                  describe: 'this photo ID (repeat or comma-separate)',
+                  type: 'string',
+                })
+                .option('images-file', {
+                  coerce: expandHomePath,
+                  describe: 'file of photo IDs, one per line; - reads standard input',
+                  type: 'string',
+                })
+                .option('include-secret', {
+                  default: false,
+                  describe: 'also export photos a secret album hides from the library',
+                  type: 'boolean',
+                })
+                .option('include-archived', {
+                  default: false,
+                  describe: 'also export archived photos',
+                  type: 'boolean',
+                })
+                .option('skip-exported', {
+                  default: true,
+                  describe:
+                    'leave out photos already exported to this Google account; --no-skip-exported sends them again',
+                  type: 'boolean',
+                })
+                .option('album-title', {
+                  describe:
+                    'Google Photos album to add the photos to, created once and reused (default "Rawback"); --no-album adds them to the library only',
+                  type: 'string',
+                })
+                .option('file', {
+                  choices: ['original', 'fullsize'] as const,
+                  default: 'original' as const,
+                  describe:
+                    'original: the stored file, RAW included; fullsize: the full-resolution AVIF kept for RAW and HEIC, which Google Photos always opens',
+                  type: 'string',
+                })
+                .option('dry-run', {
+                  default: false,
+                  describe: 'show what would be exported, and stop',
+                  type: 'boolean',
+                })
+                .option('yes', {
+                  default: false,
+                  describe: 'export without asking to confirm',
+                  type: 'boolean',
+                })
+                .option('wait', {
+                  default: true,
+                  describe:
+                    'watch the export until it finishes; --no-wait prints the started job and exits',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON; needs --yes or --dry-run',
+                  type: 'boolean',
+                })
+                .check((args) => checkConfirmable(args, 'rawback export google', true)),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleExport } = await import('./google-photos.ts')
+              const { albums, libraryOnly } = albumSelection(
+                args.album as ReadonlyArray<string | boolean> | undefined,
+              )
+              await runCommand(
+                () =>
+                  runGoogleExport({
+                    all: args.all,
+                    albums,
+                    dryRun: args.dryRun,
+                    file: args.file,
+                    includeArchived: args.includeArchived,
+                    includeSecret: args.includeSecret,
+                    json: args.json,
+                    libraryOnly,
+                    skipExported: args.skipExported,
+                    wait: args.wait,
+                    yes: args.yes,
+                    ...(args.from !== undefined ? { from: args.from } : {}),
+                    ...(args.to !== undefined ? { to: args.to } : {}),
+                    ...(args.image !== undefined ? { images: args.image } : {}),
+                    ...(args.imagesFile !== undefined ? { imagesFile: args.imagesFile } : {}),
+                    ...(args.albumTitle !== undefined ? { albumTitle: args.albumTitle } : {}),
+                  }),
+                'Google Photos export cancelled.',
+              )
+            },
+          )
+          .demandCommand(1, 'Choose where to export to: google')
+          .strict(),
+      () => {},
+    )
+    .command(
+      'google',
+      'manage the Google Photos connection and transfers',
+      (command) =>
+        command
+          .command(
+            'status',
+            'show the connected Google account and running transfers',
+            (status) =>
+              status.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleStatus } = await import('./google-photos.ts')
+              await runCommand(() => runGoogleStatus({ json: args.json }))
+            },
+          )
+          .command(
+            'connect',
+            'link a Google account, or reconnect one Google stopped accepting',
+            (connect) =>
+              connect.option('json', {
+                default: false,
+                describe: 'output machine-readable JSON',
+                type: 'boolean',
+              }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleConnect } = await import('./google-photos.ts')
+              await runCommand(() => runGoogleConnect({ json: args.json }))
+            },
+          )
+          .command(
+            'disconnect',
+            "revoke Rawback's Google Photos access and cancel running transfers",
+            (disconnect) =>
+              disconnect
+                .option('yes', {
+                  default: false,
+                  describe: 'disconnect without asking to confirm',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON; needs --yes',
+                  type: 'boolean',
+                })
+                .check((args) => checkConfirmable(args, 'rawback google disconnect')),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleDisconnect } = await import('./google-photos.ts')
+              await runCommand(
+                () => runGoogleDisconnect({ json: args.json, yes: args.yes }),
+                'Google Photos stays connected.',
+              )
+            },
+          )
+          .command(
+            'jobs',
+            'list Google Photos imports and exports, newest first',
+            (jobs) =>
+              jobs
+                .option('kind', {
+                  choices: ['import', 'export'] as const,
+                  describe: 'only imports or only exports',
+                  type: 'string',
+                })
+                .option('limit', {
+                  default: 20,
+                  describe: 'jobs to show (1-100)',
+                  type: 'number',
+                })
+                .option('offset', {
+                  default: 0,
+                  describe: 'jobs to skip',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleJobs } = await import('./google-photos.ts')
+              await runCommand(() =>
+                runGoogleJobs({
+                  json: args.json,
+                  limit: args.limit,
+                  offset: args.offset,
+                  ...(args.kind !== undefined ? { kind: args.kind } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'job <id>',
+            'show one import or export and its items',
+            (job) =>
+              job
+                .positional('id', {
+                  describe: 'job ID from rawback google jobs',
+                  type: 'number',
+                })
+                .option('items', {
+                  choices: ['pending', 'done', 'skipped', 'failed'] as const,
+                  describe: 'only items in this state',
+                  type: 'string',
+                })
+                .option('limit', {
+                  default: 50,
+                  describe: 'items to show (1-200)',
+                  type: 'number',
+                })
+                .option('offset', {
+                  default: 0,
+                  describe: 'items to skip',
+                  type: 'number',
+                })
+                .option('watch', {
+                  default: false,
+                  describe: 'follow the job until it finishes; exits nonzero if it fails',
+                  type: 'boolean',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleJob } = await import('./google-photos.ts')
+              await runCommand(() =>
+                runGoogleJob({
+                  id: args.id as number,
+                  json: args.json,
+                  limit: args.limit,
+                  offset: args.offset,
+                  watch: args.watch,
+                  ...(args.items !== undefined ? { items: args.items } : {}),
+                }),
+              )
+            },
+          )
+          .command(
+            'cancel <id>',
+            'stop a running import or export',
+            (cancel) =>
+              cancel
+                .positional('id', {
+                  describe: 'job ID from rawback google jobs',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runGoogleCancel } = await import('./google-photos.ts')
+              await runCommand(() => runGoogleCancel({ id: args.id as number, json: args.json }))
+            },
+          )
+          .demandCommand(
+            1,
+            'Choose a google command: status, connect, disconnect, jobs, job, or cancel',
           )
           .strict(),
       () => {},

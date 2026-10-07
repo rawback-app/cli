@@ -18,6 +18,7 @@ in a browser.
 - List and inspect daily AI-generated dream recaps, including their contributing photos.
 - Browse content shared with you and manage your outgoing share links.
 - Control a Canon camera over CCAPI: shoot, change settings, browse and download the card, and stream live view.
+- Import photos you pick in Google Photos, and export library photos, albums, or a date range to Google Photos.
 - Manage the SFTP credentials associated with your account.
 - Inspect the shared local configuration without exposing its SFTP password.
 - Inspect upload sessions, storage usage, AI credits, and pricing.
@@ -290,6 +291,35 @@ Transcription runs asynchronously and requires server enablement and a running
 task worker. The web video page shows its status, text, and an SRT download.
 See [video setup and recovery](docs/configuration.md#video-uploads-and-transcription)
 for local-server configuration and recovery limits.
+
+## Google Photos
+
+Import what you pick in Google Photos, or send library photos the other way.
+Both connect your Google account in the browser the first time:
+
+```bash
+rawback import google                         # pick in Google's picker, confirm, import
+rawback export google --dry-run               # how many photos, how large, already sent
+rawback export google --from 2024-06-01 --to 2024-06-30
+rawback export google --album 12 --album-title "Iceland"
+rawback export google --images-file ids.txt --file fullsize --yes --no-wait
+rawback google status                         # linked account and running transfers
+rawback google jobs                           # history; follow one with google job <id> --watch
+rawback google cancel 40
+rawback google disconnect
+```
+
+Imports run on the server through the same pipeline as an SFTP upload, so they
+appear in `rawback uploads`. Videos and photos already in your library are
+skipped, and imported photos arrive without GPS because Google withholds
+location from downloads. Exports go into a Google Photos album named
+"Rawback" unless you pass `--album-title` or `--no-album`, and photos an
+earlier export already sent are skipped unless you pass `--no-skip-exported`.
+Under `--json`, links, prompts and progress go to standard error; pass `--yes`,
+because the command cannot ask for confirmation. Ctrl-C while a transfer is
+being watched stops watching — the job keeps running on the server. See
+[the command reference](docs/commands.md#rawback-import-google) for every
+option.
 
 ## Camera control
 
