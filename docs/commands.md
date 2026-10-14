@@ -727,11 +727,23 @@ disk on demand, so a very large file is never held in memory.
 rawback videos list [options]
 ```
 
-| Option                 | Description                   | Default |
-| ---------------------- | ----------------------------- | ------- |
-| `--page <number>`      | Page number                   | `1`     |
-| `--page-size <number>` | Items per page, 1 through 100 | `24`    |
-| `--json`               | Output machine-readable JSON  | `false` |
+| Option                 | Description                                                                                       | Default |
+| ---------------------- | ------------------------------------------------------------------------------------------------- | ------- |
+| `--page <number>`      | Page number                                                                                       | `1`     |
+| `--page-size <number>` | Items per page, 1 through 100                                                                     | `24`    |
+| `--hashtag <tag>`      | Only videos carrying any of these hashtags, case-insensitive; repeat or comma-separate            | —       |
+| `--search <text>`      | Match titles and descriptions in either language, hashtags, file names and transcripts (2+ chars) | —       |
+| `--json`               | Output machine-readable JSON                                                                      | `false` |
+
+### `videos get`
+
+```bash
+rawback videos get <id> [--json]
+```
+
+Shows one video: its title and description in English and, when set, Chinese,
+its hashtags, links, uploaded subtitles, audio attachments, file details and
+playback URL. `view` is an alias. `--json` prints `{ "video": ... }`.
 
 ### `videos upload`
 
@@ -795,11 +807,60 @@ transcription enablement and recovery limits, see
 ### `videos update`
 
 ```bash
-rawback videos update --id <id> [--title <title>] [--description <text>]
+rawback videos update --id <id> [options]
+rawback videos update --id 7 --title-zh "海港清晨" --hashtag travel,旅行
+rawback videos update --id 7 --link "https://example.com/notes|Notes|笔记"
 ```
 
-At least one of `--title` or `--description` is required. Passing an empty
-description clears it.
+English is a video's default language; the Chinese title and description are
+optional and shown to people using Rawback in Chinese.
+
+| Option                    | Description                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `--title <title>`         | English (default) title; cannot be empty                                      |
+| `--description <text>`    | English description; an empty value clears it                                 |
+| `--title-zh <title>`      | Chinese title; an empty value clears it                                       |
+| `--description-zh <text>` | Chinese description; an empty value clears it                                 |
+| `--hashtag <tag>`         | Replace the hashtags; repeat or comma-separate, `#` optional, any language    |
+| `--clear-hashtags`        | Remove every hashtag                                                          |
+| `--link <link>`           | Replace the links; each is `url`, `url\|title` or `url\|title\|Chinese title` |
+| `--clear-links`           | Remove every link                                                             |
+| `--json`                  | Output machine-readable JSON                                                  |
+
+At least one change is required. Hashtags and links replace the whole list, so
+pass the ones you want to keep; `--hashtag` with `--clear-hashtags` (or `--link`
+with `--clear-links`) is rejected. Hashtags may hold letters and numbers of any
+script plus `_` and `-`, up to 50 characters and 30 per video; links must be
+`http` or `https`, up to 10 per video. A link title defaults to its host.
+
+### `videos subtitle`
+
+```bash
+rawback videos subtitle upload --id <id> --language <en|zh> --file <path>
+rawback videos subtitle view --id <id> --language <en|zh> [--format srt|vtt|text] [--output <path>]
+rawback videos subtitle delete --id <id> --language <en|zh>
+```
+
+A video has at most one uploaded subtitle per language (`en`, `zh`); uploading
+again replaces it. `upload` takes an SRT or WebVTT file, UTF-8, up to 1 MiB, and
+the server rejects one whose cues do not parse. `view` prints SRT by default,
+WebVTT with `--format vtt`, or the words alone with `--format text`, to stdout or
+to `--output`. These are separate from the server's generated transcript. All
+three accept `--json`.
+
+### `videos audio`
+
+```bash
+rawback videos audio upload --id <id> --language <en|zh> --file <path> [--label <text>]
+rawback videos audio delete --id <id> --language <en|zh>
+```
+
+Attaches an audio-only file — narration, a dub, the soundtrack — to a completed
+video, one per language; uploading again replaces it. It is played and
+downloaded on its own and never mixed into the video. MP3, M4A, AAC, WAV, FLAC,
+Ogg, Opus and WebM are accepted, up to 2 GiB; the file is streamed to a
+presigned URL and charged against the account's storage once confirmed.
+`delete` releases that storage. Both accept `--json`.
 
 ### `videos delete`
 
@@ -807,8 +868,8 @@ description clears it.
 rawback videos delete --id <id>
 ```
 
-Deletes the video and its poster frame and releases the storage against the
-account quota. This cannot be undone.
+Deletes the video with its poster frame, subtitles and audio attachments, and
+releases the storage against the account quota. This cannot be undone.
 
 ## `rawback dream`
 
