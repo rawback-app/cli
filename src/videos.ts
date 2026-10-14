@@ -8,6 +8,7 @@ import {
   type PrepareVideoOptions,
   RawbackHttpError,
   UpdateVideoDocument,
+  type UpdateVideoInput,
   VIDEO_MIME_TYPES,
   VideoService,
   VideoToolError,
@@ -23,6 +24,7 @@ import {
 } from './command.ts'
 import { videoListDocument } from './features/videos/view.ts'
 import { findBundledFfmpegPath, findBundledFfprobePath } from './upload-identity.ts'
+import { parseHashtags, parseVideoLink } from './video-media.ts'
 
 export interface VideoCommandDependencies extends ReadCommandDependencies {
   /**
@@ -90,7 +92,9 @@ function serializeVideo(video: Video) {
   return {
     id: video.id,
     title: video.title,
+    titleZh: video.titleZh ?? null,
     description: video.description ?? null,
+    hashtags: video.hashtags,
     filename: video.filename,
     sizeBytes: video.sizeBytes,
     mimeType: video.mimeType,
@@ -105,9 +109,13 @@ function serializeVideo(video: Video) {
 }
 
 export interface VideoListOptions {
+  /** Keep videos carrying any of these hashtags. */
+  hashtag?: Array<string | number>
   json?: boolean
   page: number
   pageSize: number
+  /** Titles and descriptions in either language, hashtags, file names, transcripts. */
+  search?: string
 }
 
 export async function runVideoList(
@@ -115,6 +123,15 @@ export async function runVideoList(
   dependencies: VideoCommandDependencies = {},
 ): Promise<void> {
   validatePagination(options.page, options.pageSize)
+  const hashtags = parseHashtags(options.hashtag)
+  const search = options.search?.trim()
+  if (search !== undefined && search.length > 0 && search.length < 2) {
+    throw new Error('--search needs at least 2 characters')
+  }
+  const filter =
+    hashtags.length > 0 || search
+      ? { ...(hashtags.length > 0 ? { hashtags } : {}), ...(search ? { search } : {}) }
+      : undefined
 
   const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
@@ -123,7 +140,10 @@ export async function runVideoList(
       const client = await createCommandClient(dependencies)
       return client.graphql.query({
         query: VideosDocument,
-        variables: { pagination: { page: options.page, pageSize: options.pageSize } },
+        variables: {
+          pagination: { page: options.page, pageSize: options.pageSize },
+          ...(filter ? { filter } : {}),
+        },
       })
     },
     !options.json,
@@ -307,18 +327,50 @@ export async function runVideoUpload(
 
 export interface VideoUpdateOptions {
   id: number
+  clearHashtags?: boolean
+  clearLinks?: boolean
   description?: string
+  descriptionZh?: string
+  /** Replaces the hashtag list; each value may hold several, comma-separated. */
+  hashtag?: Array<string | number>
   json?: boolean
+  /** Replaces the link list; each is `url`, `url|title` or `url|title|中文 title`. */
+  link?: string[]
   title?: string
+  titleZh?: string
+}
+
+/** The UpdateVideoInput an update command sends; exported for tests. */
+export function updateVideoInput(options: VideoUpdateOptions): UpdateVideoInput {
+  if (options.hashtag !== undefined && options.clearHashtags) {
+    throw new Error('--hashtag and --clear-hashtags cannot be used together')
+  }
+  if (options.link !== undefined && options.clearLinks) {
+    throw new Error('--link and --clear-links cannot be used together')
+  }
+  const input: UpdateVideoInput = {
+    ...(options.title !== undefined ? { title: options.title } : {}),
+    ...(options.description !== undefined ? { description: options.description } : {}),
+    ...(options.titleZh !== undefined ? { titleZh: options.titleZh } : {}),
+    ...(options.descriptionZh !== undefined ? { descriptionZh: options.descriptionZh } : {}),
+    ...(options.hashtag !== undefined ? { hashtags: parseHashtags(options.hashtag) } : {}),
+    ...(options.clearHashtags ? { hashtags: [] } : {}),
+    ...(options.link !== undefined ? { links: options.link.map(parseVideoLink) } : {}),
+    ...(options.clearLinks ? { links: [] } : {}),
+  }
+  if (Object.keys(input).length === 0) {
+    throw new Error(
+      'Provide at least one of --title, --description, --title-zh, --description-zh, --hashtag, --clear-hashtags, --link or --clear-links',
+    )
+  }
+  return input
 }
 
 export async function runVideoUpdate(
   options: VideoUpdateOptions,
   dependencies: VideoCommandDependencies = {},
 ): Promise<void> {
-  if (options.title === undefined && options.description === undefined) {
-    throw new Error('Provide --title and/or --description')
-  }
+  const input = updateVideoInput(options)
 
   const ui = commandOutput(dependencies)
   const result = await ui.withActivity(
@@ -327,13 +379,7 @@ export async function runVideoUpdate(
       const client = await createCommandClient(dependencies)
       return client.graphql.mutate({
         mutation: UpdateVideoDocument,
-        variables: {
-          id: options.id,
-          input: {
-            ...(options.title !== undefined ? { title: options.title } : {}),
-            ...(options.description !== undefined ? { description: options.description } : {}),
-          },
-        },
+        variables: { id: options.id, input },
       })
     },
     !options.json,

@@ -281,6 +281,35 @@ describe('video command help and validation', () => {
     expect(result.stdout).toBe('')
     expect(result.stderr).toContain('--id must be a positive integer')
   })
+  test('documents the bilingual text, hashtag and link options of update', () => {
+    const update = runCli('videos', 'update', '--help')
+    expect(update.exitCode).toBe(0)
+    for (const option of [
+      '--title-zh',
+      '--description-zh',
+      '--hashtag',
+      '--clear-hashtags',
+      '--link',
+      '--clear-links',
+    ])
+      expect(update.stdout).toContain(option)
+  })
+  test('documents subtitle and audio commands', () => {
+    const subtitle = runCli('videos', 'subtitle', 'view', '--help')
+    expect(subtitle.exitCode).toBe(0)
+    for (const option of ['--language', '--format', '--output'])
+      expect(subtitle.stdout).toContain(option)
+    const audio = runCli('videos', 'audio', 'upload', '--help')
+    expect(audio.exitCode).toBe(0)
+    for (const option of ['--language', '--file', '--label']) expect(audio.stdout).toContain(option)
+    const get = runCli('videos', 'get', '--help')
+    expect(get.exitCode).toBe(0)
+  })
+  test('rejects an unknown subtitle language before any request', () => {
+    const result = runCli('videos', 'subtitle', 'delete', '--id', '7', '--language', 'fr')
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('--language must be en or zh')
+  })
   test('requires a nonempty original file', () => {
     const missing = runCli('videos', 'repair', '--id', '7')
     expect(missing.exitCode).toBe(1)

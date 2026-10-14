@@ -266,9 +266,19 @@ rawback videos list
 rawback videos upload --file ~/Movies/hike.mp4
 rawback videos upload --file ~/Movies/hike.mp4 --thumbnail ~/Pictures/poster.jpg
 rawback videos repair --id 7 --file ~/Movies/hike.mp4
-rawback videos update --id 7 --title "Hike, day two"
+rawback videos get 7
+rawback videos update --id 7 --title "Hike, day two" --title-zh "徒步第二天"
+rawback videos update --id 7 --hashtag hiking,徒步 --link "https://example.com/route|Route|路线"
+rawback videos subtitle upload --id 7 --language zh --file ~/Movies/hike.zh.srt
+rawback videos audio upload --id 7 --language en --file ~/Music/narration.m4a --label Narration
+rawback videos list --hashtag hiking
 rawback videos delete --id 7
 ```
+
+A video's title and description are English by default, with an optional
+Chinese copy. Each video can also carry hashtags, external links, one uploaded
+subtitle per language (SRT or WebVTT) and one audio-only attachment per
+language, played and downloaded on its own.
 
 Supported containers are MP4, M4V, MOV, WebM, MKV, AVI, MPEG, 3GP, and TS, up
 to 100 GB. The file is sent in parts to presigned URLs and read from disk on

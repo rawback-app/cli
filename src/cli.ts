@@ -851,6 +851,16 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'items per page (1-100)',
                   type: 'number',
                 })
+                .option('hashtag', {
+                  array: true,
+                  describe: 'only videos with any of these hashtags (repeat or comma-separate)',
+                  type: 'string',
+                })
+                .option('search', {
+                  describe:
+                    'match titles and descriptions in either language, hashtags, file names and transcripts',
+                  type: 'string',
+                })
                 .option('json', {
                   default: false,
                   describe: 'output machine-readable JSON',
@@ -864,8 +874,30 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   json: args.json,
                   page: args.page,
                   pageSize: args.pageSize,
+                  ...(args.hashtag !== undefined ? { hashtag: args.hashtag } : {}),
+                  ...(args.search !== undefined ? { search: args.search } : {}),
                 }),
               )
+            },
+          )
+          .command(
+            ['get <id>', 'view <id>'],
+            'show a video with its text, hashtags, links, subtitles and audio',
+            (get) =>
+              get
+                .positional('id', {
+                  describe: 'video ID',
+                  type: 'number',
+                })
+                .option('json', {
+                  default: false,
+                  describe: 'output machine-readable JSON',
+                  type: 'boolean',
+                }),
+            async (args) => {
+              if (process.exitCode !== undefined && process.exitCode !== 0) return
+              const { runVideoGet } = await import('./video-media.ts')
+              await runCommand(() => runVideoGet({ id: args.id!, json: args.json }))
             },
           )
           .command(
@@ -965,7 +997,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
           )
           .command(
             'update',
-            'change a video title or description',
+            "change a video's text (English, optional Chinese), hashtags or links",
             (update) =>
               update
                 .option('id', {
@@ -974,12 +1006,39 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   type: 'number',
                 })
                 .option('title', {
-                  describe: 'new title',
+                  describe: 'new English (default) title',
                   type: 'string',
                 })
                 .option('description', {
-                  describe: 'new description',
+                  describe: 'new English (default) description; empty clears it',
                   type: 'string',
+                })
+                .option('title-zh', {
+                  describe: 'new Chinese title; empty clears it',
+                  type: 'string',
+                })
+                .option('description-zh', {
+                  describe: 'new Chinese description; empty clears it',
+                  type: 'string',
+                })
+                .option('hashtag', {
+                  array: true,
+                  describe: 'replace the hashtags (repeat or comma-separate; the # is optional)',
+                  type: 'string',
+                })
+                .option('clear-hashtags', {
+                  describe: 'remove every hashtag',
+                  type: 'boolean',
+                })
+                .option('link', {
+                  array: true,
+                  describe:
+                    'replace the links; each is "url", "url|title" or "url|title|Chinese title"',
+                  type: 'string',
+                })
+                .option('clear-links', {
+                  describe: 'remove every link',
+                  type: 'boolean',
                 })
                 .option('json', {
                   default: false,
@@ -995,9 +1054,208 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   json: args.json,
                   ...(args.title !== undefined ? { title: args.title } : {}),
                   ...(args.description !== undefined ? { description: args.description } : {}),
+                  ...(args.titleZh !== undefined ? { titleZh: args.titleZh } : {}),
+                  ...(args.descriptionZh !== undefined
+                    ? { descriptionZh: args.descriptionZh }
+                    : {}),
+                  ...(args.hashtag !== undefined ? { hashtag: args.hashtag } : {}),
+                  ...(args.clearHashtags !== undefined
+                    ? { clearHashtags: args.clearHashtags }
+                    : {}),
+                  ...(args.link !== undefined ? { link: args.link } : {}),
+                  ...(args.clearLinks !== undefined ? { clearLinks: args.clearLinks } : {}),
                 }),
               )
             },
+          )
+          .command(
+            'subtitle',
+            "upload, view, or delete a video's subtitles (one per language: en, zh)",
+            (subtitle) =>
+              subtitle
+                .command(
+                  'upload',
+                  "upload an SRT or WebVTT file, replacing that language's subtitles",
+                  (upload) =>
+                    upload
+                      .option('id', { demandOption: true, describe: 'video id', type: 'number' })
+                      .option('language', {
+                        demandOption: true,
+                        describe: 'subtitle language: en or zh',
+                        type: 'string',
+                      })
+                      .option('file', {
+                        coerce: expandHomePath,
+                        demandOption: true,
+                        describe: 'SRT or WebVTT file, UTF-8, up to 1 MiB',
+                        type: 'string',
+                      })
+                      .option('json', {
+                        default: false,
+                        describe: 'output machine-readable JSON',
+                        type: 'boolean',
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runVideoSubtitleUpload } = await import('./video-media.ts')
+                    await runCommand(() =>
+                      runVideoSubtitleUpload({
+                        id: args.id,
+                        language: args.language,
+                        file: args.file,
+                        json: args.json,
+                      }),
+                    )
+                  },
+                )
+                .command(
+                  'view',
+                  "print or save a video's subtitles",
+                  (view) =>
+                    view
+                      .option('id', { demandOption: true, describe: 'video id', type: 'number' })
+                      .option('language', {
+                        demandOption: true,
+                        describe: 'subtitle language: en or zh',
+                        type: 'string',
+                      })
+                      .option('format', {
+                        choices: ['srt', 'vtt', 'text'] as const,
+                        default: 'srt' as const,
+                        describe: 'SRT, WebVTT, or the words alone',
+                      })
+                      .option('output', {
+                        coerce: expandHomePath,
+                        describe: 'write to this file instead of stdout',
+                        type: 'string',
+                      })
+                      .option('json', {
+                        default: false,
+                        describe: 'output machine-readable JSON',
+                        type: 'boolean',
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runVideoSubtitleView } = await import('./video-media.ts')
+                    await runCommand(() =>
+                      runVideoSubtitleView({
+                        id: args.id,
+                        language: args.language,
+                        format: args.format,
+                        json: args.json,
+                        ...(args.output !== undefined ? { output: args.output } : {}),
+                      }),
+                    )
+                  },
+                )
+                .command(
+                  'delete',
+                  "delete a video's subtitles in one language",
+                  (remove) =>
+                    remove
+                      .option('id', { demandOption: true, describe: 'video id', type: 'number' })
+                      .option('language', {
+                        demandOption: true,
+                        describe: 'subtitle language: en or zh',
+                        type: 'string',
+                      })
+                      .option('json', {
+                        default: false,
+                        describe: 'output machine-readable JSON',
+                        type: 'boolean',
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runVideoSubtitleDelete } = await import('./video-media.ts')
+                    await runCommand(() =>
+                      runVideoSubtitleDelete({
+                        id: args.id,
+                        language: args.language,
+                        json: args.json,
+                      }),
+                    )
+                  },
+                )
+                .demandCommand(1, 'Choose a subtitle command: upload, view, or delete')
+                .strict(),
+            () => {},
+          )
+          .command(
+            'audio',
+            "upload or delete a video's audio-only attachment (one per language: en, zh)",
+            (audio) =>
+              audio
+                .command(
+                  'upload',
+                  "attach an audio file, replacing that language's audio",
+                  (upload) =>
+                    upload
+                      .option('id', { demandOption: true, describe: 'video id', type: 'number' })
+                      .option('language', {
+                        demandOption: true,
+                        describe: 'audio language: en or zh',
+                        type: 'string',
+                      })
+                      .option('file', {
+                        coerce: expandHomePath,
+                        demandOption: true,
+                        describe: 'MP3, M4A, AAC, WAV, FLAC, Ogg, Opus or WebM, up to 2 GiB',
+                        type: 'string',
+                      })
+                      .option('label', {
+                        describe: 'display label, e.g. "Director\'s commentary"',
+                        type: 'string',
+                      })
+                      .option('json', {
+                        default: false,
+                        describe: 'output machine-readable JSON',
+                        type: 'boolean',
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runVideoAudioUpload } = await import('./video-media.ts')
+                    await runCommand(() =>
+                      runVideoAudioUpload({
+                        id: args.id,
+                        language: args.language,
+                        file: args.file,
+                        json: args.json,
+                        ...(args.label !== undefined ? { label: args.label } : {}),
+                      }),
+                    )
+                  },
+                )
+                .command(
+                  'delete',
+                  "delete a video's audio in one language and release its storage",
+                  (remove) =>
+                    remove
+                      .option('id', { demandOption: true, describe: 'video id', type: 'number' })
+                      .option('language', {
+                        demandOption: true,
+                        describe: 'audio language: en or zh',
+                        type: 'string',
+                      })
+                      .option('json', {
+                        default: false,
+                        describe: 'output machine-readable JSON',
+                        type: 'boolean',
+                      }),
+                  async (args) => {
+                    if (process.exitCode !== undefined && process.exitCode !== 0) return
+                    const { runVideoAudioDelete } = await import('./video-media.ts')
+                    await runCommand(() =>
+                      runVideoAudioDelete({
+                        id: args.id,
+                        language: args.language,
+                        json: args.json,
+                      }),
+                    )
+                  },
+                )
+                .demandCommand(1, 'Choose an audio command: upload or delete')
+                .strict(),
+            () => {},
           )
           .command(
             'delete',
@@ -1025,7 +1283,10 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
               )
             },
           )
-          .demandCommand(1, 'Choose a videos command: list, upload, repair, update, or delete')
+          .demandCommand(
+            1,
+            'Choose a videos command: list, get, upload, repair, update, subtitle, audio, or delete',
+          )
           .strict(),
       () => {},
     )
