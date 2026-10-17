@@ -236,6 +236,8 @@ describe('rawback photos upload CLI', () => {
     expect(result.stdout).toContain('--concurrency')
     expect(result.stdout).toContain('parallel SFTP transfers')
     expect(result.stdout).toContain('--dry-run')
+    expect(result.stdout).toContain('--recheck')
+    expect(result.stdout).toContain('ask the server about every')
   })
 
   test('requires an upload path before running preflight', () => {

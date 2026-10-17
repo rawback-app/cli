@@ -675,6 +675,11 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   describe: 'show upload count, size, and estimated time without uploading',
                   type: 'boolean',
                 })
+                .option('recheck', {
+                  default: false,
+                  describe: 'ask the server about every file; ignore local upload history',
+                  type: 'boolean',
+                })
                 .check((args) => {
                   if (
                     !Number.isInteger(args.concurrency) ||
@@ -693,6 +698,7 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
                   concurrency: args.concurrency,
                   dryRun: args.dryRun,
                   path: args.path,
+                  recheck: args.recheck,
                 }),
               )
             },

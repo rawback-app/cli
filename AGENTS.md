@@ -128,8 +128,8 @@ platform support that the release configuration does not provide.
 
 ## Gotchas
 
-- `~/.rawback/{config.yml,credentials.json,upload-state.json,cameras.json}` and
-  `~/.rawback/logs/` are shared with the Desktop app at runtime. Changing a
+- `~/.rawback/{config.yml,credentials.json,upload-state.json,upload-ledger.jsonl,cameras.json}`
+  and `~/.rawback/logs/` are shared with the Desktop app at runtime. Changing a
   file's shape here breaks Desktop, and the contract is owned by `@rawback/sdk`,
   not by this repo. `rawback logs purge` clears Desktop's log too, by design.
 - `@rawback/sdk` and `@rawback/ccapi-js` are pinned to exact versions. Bumping

@@ -2,7 +2,7 @@ import { formatBytes, formatDuration } from '../../ui/format.ts'
 import { type UiDocument } from '../../ui/model.ts'
 
 export function uploadDryRunDocument(input: {
-  completed: number
+  alreadyUploaded: number
   estimatedSeconds: number
   existingRemote: number
   files: number
@@ -18,7 +18,7 @@ export function uploadDryRunDocument(input: {
         fields: [
           { label: 'Files', value: input.files },
           { label: 'Total size', value: formatBytes(input.totalBytes) },
-          { label: 'Completed', value: input.completed },
+          { label: 'Already uploaded', value: input.alreadyUploaded },
           { label: 'Remote', value: input.existingRemote },
           { label: 'Estimated time', value: formatDuration(input.estimatedSeconds) },
           {
@@ -34,8 +34,12 @@ export function uploadDryRunDocument(input: {
 
 export function uploadSummaryDocument(input: {
   cancelled: boolean
+  /** Uploaded photos the server confirmed holding. */
+  confirmed: number
   failedFiles: number
   totalBytes: number
+  /** Uploaded photos the server was asked about and did not have. */
+  unconfirmed: number
 }): UiDocument {
   const tone = input.cancelled || input.failedFiles > 0 ? 'warning' : 'success'
   return {
@@ -54,6 +58,8 @@ export function uploadSummaryDocument(input: {
         type: 'fields',
         fields: [
           { label: 'Transferred', value: formatBytes(input.totalBytes) },
+          { label: 'Confirmed', value: input.confirmed },
+          ...(input.unconfirmed > 0 ? [{ label: 'Unconfirmed', value: input.unconfirmed }] : []),
           { label: 'Failed', value: input.failedFiles },
         ],
       },

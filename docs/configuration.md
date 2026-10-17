@@ -360,7 +360,7 @@ rawback photos upload --path /path/to/photos --dry-run
 
 The dry run authenticates, validates configuration and account quota, scans the
 input, and checks exact remote upload identities. It does not open an SFTP connection or
-modify upload state. Its time estimate uses matching local upload
+modify upload state or the upload ledger. Its time estimate uses matching local upload
 history when available and otherwise uses a clearly labeled 10 Mbps fallback.
 
 Start the upload after reviewing the totals:
@@ -370,12 +370,12 @@ rawback photos upload --path /path/to/photos --concurrency 4
 ```
 
 Transfer concurrency defaults to `4` and accepts integers from `1` through `16`. All
+workers share one SFTP connection.
 
 While an upload is running in an interactive terminal, the CLI shows aggregate
 bytes and files, transfer speed, ETA, and up to four active filenames. When
 stdout is redirected, it emits line-oriented file status and a final summary
 instead of terminal animation.
-workers share one SFTP connection.
 
 Before connecting, the CLI verifies:
 
@@ -404,14 +404,40 @@ Supported image extensions are `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.tif`,
 and `.x3f`. Matching is case-insensitive. Directory scanning skips symbolic
 links and unrelated file types, but fails if it finds no supported files.
 
+## Upload acknowledgements
+
+A successful SFTP transfer does not say whether Rawback stored the photo, found
+it to be a duplicate, or failed to record it. After the transfer, the CLI asks
+the server which uploaded photos it now holds (matching filename and capture
+time), and the final summary reports them as **Confirmed**. A photo the server
+does not have is reported as **Unconfirmed** and is uploaded again next time.
+
+Every acknowledged file is remembered in `~/.rawback/upload-ledger.jsonl`, which
+Rawback Desktop reads and writes too, for the signed-in account on the current
+environment's API host. A later run — from either app — skips a remembered
+file before reading its metadata or asking the server:
+
+- A file is matched by canonical path, size, and modification time; a photo
+  confirmed at another path (a moved folder, a second copy) is matched by
+  filename and capture time.
+- Photos the server confirmed, and photos without a capture time (which the
+  server can neither confirm nor deduplicate), are skipped outright.
+- A photo whose confirmation request failed is checked with the server again
+  instead, without re-reading its metadata.
+
+Pass `--recheck` to ignore the ledger and the resume state and ask the server
+about every file; what it learns is still recorded.
+
 ## Resume state and interruption
 
-Completed uploads are recorded in the portable `~/.rawback/upload-state.json`
+Uploads in progress are recorded in the portable `~/.rawback/upload-state.json`
 shared with Rawback Desktop. On first use, the CLI imports its legacy
-`upload-progress.sqlite` records and retains that database for rollback. A later
-run skips a completed file only when its canonical path, size, and modification
-time still match. Incomplete files restart from the beginning because the SFTP
-transport does not append partial content.
+`upload-progress.sqlite` records and retains that database for rollback. A
+completed file recorded there before the upload ledger existed is skipped only
+when its canonical path, size, and modification time still match and it has no
+capture time; other photos are checked with the server once and remembered in
+the ledger from then on. Incomplete files restart from the beginning because
+the SFTP transport does not append partial content.
 
 On the first `Ctrl-C`, the CLI stops scheduling new files and lets active uploads
 finish. Press `Ctrl-C` again to disconnect immediately. Re-run the same command

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { chmod, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { chmod, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
-import type { UploadIdentityExtractor } from '@rawback/sdk'
+import { UploadLedger, uploadLedgerScope, type UploadIdentityExtractor } from '@rawback/sdk'
 
 import type { RawbackClient } from '../src/client.ts'
 import type {
@@ -85,11 +85,24 @@ function operationName(query: unknown): string {
   return document.definitions[0]?.name?.value ?? ''
 }
 
+const API_HOST = 'https://api.rawback.app'
+const SCOPE = uploadLedgerScope({ apiHost: API_HOST, accountId: 1 })
+
+/**
+ * A server holding the photos named in `remote`. Pass a `Set` to share it with
+ * a {@link RecordingTransport}, which adds what it uploads — the gateway
+ * recording a photo before it answers the close.
+ */
 function fakeClient(
-  remote: string[] = [],
-  options: { credentials?: boolean; enabled?: boolean; duplicateQueryFails?: boolean } = {},
+  remote: string[] | Set<string> = [],
+  options: {
+    credentials?: boolean
+    enabled?: boolean
+    duplicateQueryFails?: boolean
+    identityQueries?: string[][]
+  } = {},
 ): RawbackClient {
-  const remoteSet = new Set(remote)
+  const remoteSet = remote instanceof Set ? remote : new Set(remote)
   return {
     config: {},
     credentials:
@@ -118,6 +131,7 @@ function fakeClient(
         }
         if (options.duplicateQueryFails) return { error: new Error('query unavailable') }
         const identities = request.variables?.identities ?? []
+        options.identityQueries?.push(identities.map(({ originalFilename }) => originalFilename))
         return {
           data: {
             existingUploadIdentities: identities
@@ -127,7 +141,7 @@ function fakeClient(
         }
       },
     },
-    http: {},
+    http: { apiHost: API_HOST },
   } as unknown as RawbackClient
 }
 
@@ -146,7 +160,10 @@ class RecordingTransport implements UploadTransport {
   maxActive = 0
   uploads: string[] = []
 
-  constructor(private readonly fail = new Set<string>()) {}
+  constructor(
+    private readonly fail = new Set<string>(),
+    private readonly library?: Set<string>,
+  ) {}
 
   async connect(): Promise<void> {
     this.connected += 1
@@ -165,6 +182,7 @@ class RecordingTransport implements UploadTransport {
       onProgress(information.size)
       await Bun.sleep(15)
       if (this.fail.has(basename(remotePath))) throw new Error('rejected by test server')
+      this.library?.add(basename(remotePath))
     } finally {
       this.active -= 1
     }
@@ -301,10 +319,13 @@ describe('upload command', () => {
       },
     )
 
-    expect(lines[0]).toContain('Files           1')
-    expect(lines[0]).toContain('Remote          1')
+    expect(lines[0]).toContain('Files             1')
+    expect(lines[0]).toContain('Remote            1')
     expect(lines[0]).toContain('10 Mbps fallback')
     await expect(Bun.file(statePath).stat()).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(Bun.file(join(directory, 'upload-ledger.jsonl')).stat()).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
   })
 
   test('uses configured metadata concurrency during upload review', async () => {
@@ -415,5 +436,263 @@ describe('upload command', () => {
 
     expect(transport.uploads.sort()).toEqual(['bad.jpg', 'good.jpg'])
     expect(errors.some((message) => message.includes('Failed bad.jpg'))).toBe(true)
+  })
+})
+
+async function readLedger(path: string): Promise<UploadLedger> {
+  const ledger = new UploadLedger({ path })
+  await ledger.load()
+  return ledger
+}
+
+function countingExtractor(seen: string[]): UploadIdentityExtractor {
+  return async (candidates, options) => {
+    seen.push(...candidates.map(({ originalFilename }) => originalFilename))
+    return identityExtractor(candidates, options)
+  }
+}
+
+describe('upload acknowledgements', () => {
+  test('confirms uploads and skips them next time without reading metadata or asking', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'one.jpg'), 'one')
+    await Bun.write(join(directory, 'two.jpg'), 'two')
+    const library = new Set<string>()
+    const transport = new RecordingTransport(new Set(), library)
+    const lines: string[] = []
+    const base = {
+      configPath,
+      statePath: join(directory, 'upload-state.json'),
+      stdout: (message: string) => lines.push(message),
+      transportFactory: factoryFor(transport),
+    }
+
+    await runUpload(
+      { concurrency: 2, dryRun: false, path: directory },
+      { ...base, client: fakeClient(library), identityExtractor },
+    )
+
+    expect(transport.uploads.sort()).toEqual(['one.jpg', 'two.jpg'])
+    expect(lines.at(-1)).toContain('Confirmed    2')
+    const ledger = await readLedger(join(directory, 'upload-ledger.jsonl'))
+    expect(ledger.size).toBe(2)
+    expect(ledger.findByIdentity(SCOPE, { name: 'one.jpg', capturedAt })).toMatchObject({
+      ack: 'server',
+      source: 'upload',
+      imageId: expect.any(Number),
+    })
+
+    const extracted: string[] = []
+    const identityQueries: string[][] = []
+    await runUpload(
+      { concurrency: 2, dryRun: false, path: directory },
+      {
+        ...base,
+        client: fakeClient(library, { identityQueries }),
+        identityExtractor: countingExtractor(extracted),
+      },
+    )
+
+    expect(transport.uploads).toHaveLength(2)
+    expect(extracted).toEqual([])
+    expect(identityQueries).toEqual([])
+    expect(lines.at(-1)).toContain('Nothing to upload')
+  })
+
+  test('uploads again a photo the server did not record', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'lost.jpg'), 'lost')
+    const transport = new RecordingTransport()
+    const warnings: string[] = []
+    const dependencies = {
+      client: fakeClient(),
+      configPath,
+      identityExtractor,
+      statePath: join(directory, 'upload-state.json'),
+      stderr: (message: string) => warnings.push(message),
+      stdout: () => undefined,
+      transportFactory: factoryFor(transport),
+    }
+
+    await runUpload({ concurrency: 1, dryRun: false, path: directory }, dependencies)
+    expect(warnings.some((message) => message.includes('did not confirm 1 uploaded photo'))).toBe(
+      true,
+    )
+    expect((await readLedger(join(directory, 'upload-ledger.jsonl'))).size).toBe(0)
+
+    await runUpload({ concurrency: 1, dryRun: false, path: directory }, dependencies)
+    expect(transport.uploads).toEqual(['lost.jpg', 'lost.jpg'])
+  })
+
+  test('asks the server again about a photo whose confirmation failed', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'photo.jpg'), 'photo')
+    const library = new Set<string>()
+    const transport = new RecordingTransport(new Set(), library)
+    const warnings: string[] = []
+    const base = {
+      configPath,
+      statePath: join(directory, 'upload-state.json'),
+      stderr: (message: string) => warnings.push(message),
+      stdout: () => undefined,
+      transportFactory: factoryFor(transport),
+    }
+
+    await runUpload(
+      { concurrency: 1, dryRun: false, path: directory },
+      { ...base, client: fakeClient(library, { duplicateQueryFails: true }), identityExtractor },
+    )
+    expect(warnings.some((message) => message.includes('could not confirm'))).toBe(true)
+    expect(
+      (await readLedger(join(directory, 'upload-ledger.jsonl'))).findByIdentity(SCOPE, {
+        name: 'photo.jpg',
+        capturedAt,
+      })?.ack,
+    ).toBe('transfer')
+
+    const extracted: string[] = []
+    const identityQueries: string[][] = []
+    await runUpload(
+      { concurrency: 1, dryRun: false, path: directory },
+      {
+        ...base,
+        client: fakeClient(library, { identityQueries }),
+        identityExtractor: countingExtractor(extracted),
+      },
+    )
+
+    // The capture time comes from the ledger; the server is asked, and has it.
+    expect(extracted).toEqual([])
+    expect(identityQueries).toEqual([['photo.jpg']])
+    expect(transport.uploads).toEqual(['photo.jpg'])
+    expect(
+      (await readLedger(join(directory, 'upload-ledger.jsonl'))).findByIdentity(SCOPE, {
+        name: 'photo.jpg',
+        capturedAt,
+      }),
+    ).toMatchObject({ ack: 'server', source: 'remote' })
+  })
+
+  test('recognises a moved photo by identity and records its new path', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    const card = join(directory, 'card')
+    const archive = join(directory, 'archive')
+    await Bun.write(join(card, 'photo.jpg'), 'photo')
+    await Bun.write(join(archive, 'photo.jpg'), 'photo')
+    const library = new Set<string>()
+    const transport = new RecordingTransport(new Set(), library)
+    const identityQueries: string[][] = []
+    const dependencies = {
+      client: fakeClient(library, { identityQueries }),
+      configPath,
+      identityExtractor,
+      statePath: join(directory, 'upload-state.json'),
+      stdout: () => undefined,
+      transportFactory: factoryFor(transport),
+    }
+
+    await runUpload({ concurrency: 1, dryRun: false, path: card }, dependencies)
+    identityQueries.splice(0)
+    await runUpload({ concurrency: 1, dryRun: false, path: archive }, dependencies)
+
+    expect(transport.uploads).toEqual(['photo.jpg'])
+    expect(identityQueries).toEqual([])
+    const ledger = await readLedger(join(directory, 'upload-ledger.jsonl'))
+    expect(
+      ledger.findByFile(SCOPE, {
+        canonicalPath: await realpath(join(archive, 'photo.jpg')),
+        size: 5,
+        mtimeMs: (await Bun.file(join(archive, 'photo.jpg')).stat()).mtimeMs,
+      }),
+    ).toMatchObject({ ack: 'server' })
+  })
+
+  test('--recheck ignores the ledger and asks the server about every file', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'photo.jpg'), 'photo')
+    const library = new Set<string>()
+    const transport = new RecordingTransport(new Set(), library)
+    const extracted: string[] = []
+    const identityQueries: string[][] = []
+    const dependencies = {
+      client: fakeClient(library, { identityQueries }),
+      configPath,
+      identityExtractor: countingExtractor(extracted),
+      statePath: join(directory, 'upload-state.json'),
+      stdout: () => undefined,
+      transportFactory: factoryFor(transport),
+    }
+
+    await runUpload({ concurrency: 1, dryRun: false, path: directory }, dependencies)
+    extracted.splice(0)
+    identityQueries.splice(0)
+    await runUpload({ concurrency: 1, dryRun: false, path: directory, recheck: true }, dependencies)
+
+    expect(extracted).toEqual(['photo.jpg'])
+    expect(identityQueries).toEqual([['photo.jpg']])
+    expect(transport.uploads).toEqual(['photo.jpg'])
+  })
+
+  test('remembers a photo without a capture time once its upload succeeds', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'export.png'), 'png')
+    const transport = new RecordingTransport()
+    const noCaptureTime: UploadIdentityExtractor = async (candidates) => ({
+      identities: [],
+      uncheckedClientKeys: candidates.map(({ clientKey }) => clientKey),
+      failedClientKeys: [],
+    })
+    const dependencies = {
+      client: fakeClient(),
+      configPath,
+      identityExtractor: noCaptureTime,
+      // A fresh state file each run: the ledger alone has to remember it.
+      stdout: () => undefined,
+      transportFactory: factoryFor(transport),
+      ledgerPath: join(directory, 'ledger.jsonl'),
+    }
+
+    await runUpload(
+      { concurrency: 1, dryRun: false, path: directory },
+      { ...dependencies, statePath: join(directory, 'first.json') },
+    )
+    await runUpload(
+      { concurrency: 1, dryRun: false, path: directory },
+      { ...dependencies, statePath: join(directory, 'second.json') },
+    )
+
+    expect(transport.uploads).toEqual(['export.png'])
+    expect((await readLedger(join(directory, 'ledger.jsonl'))).size).toBe(1)
+  })
+
+  test('keeps uploading when the ledger cannot be read', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = await writeConfig(directory)
+    await Bun.write(join(directory, 'photo.jpg'), 'photo')
+    const transport = new RecordingTransport()
+    const warnings: string[] = []
+
+    await runUpload(
+      { concurrency: 1, dryRun: false, path: join(directory, 'photo.jpg') },
+      {
+        client: fakeClient(),
+        configPath,
+        identityExtractor,
+        ledgerPath: directory,
+        statePath: join(directory, 'upload-state.json'),
+        stderr: (message: string) => warnings.push(message),
+        stdout: () => undefined,
+        transportFactory: factoryFor(transport),
+      },
+    )
+
+    expect(transport.uploads).toEqual(['photo.jpg'])
+    expect(warnings.some((message) => message.includes('could not be read'))).toBe(true)
   })
 })
