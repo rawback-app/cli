@@ -2,9 +2,9 @@ import { lstat, readdir, realpath } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 
 import {
-  ExistingUploadIdentitiesDocument,
   UploadPreflightDocument,
   extractUploadIdentities,
+  matchUploadIdentities,
   type UploadIdentityExtractor,
   type UploadPreflightQuery,
 } from '@rawback/sdk'
@@ -32,6 +32,7 @@ import {
 } from './sftp-client.ts'
 import { formatBytes } from './ui/format.ts'
 import { findBundledExiftoolPath } from './upload-identity.ts'
+import { ledgerPathFor, UploadAcknowledgements } from './upload-ledger.ts'
 import { DEFAULT_UPLOAD_STATE_PATH, UploadState, type UploadStateFile } from './upload-state.ts'
 
 export const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
@@ -63,10 +64,14 @@ export interface UploadCommandOptions {
   concurrency: number
   dryRun: boolean
   path: string
+  /** Ignore what this computer remembers uploading and ask the server about every file. */
+  recheck?: boolean
 }
 
 export interface UploadCommandDependencies extends ReadCommandDependencies {
   client?: RawbackClient
+  /** Defaults to `upload-ledger.jsonl` beside the upload state. */
+  ledgerPath?: string
   sleep?: (milliseconds: number) => Promise<void>
   statePath?: string
   transportFactory?: UploadTransportFactory
@@ -85,12 +90,15 @@ export interface UploadFile {
 
 interface UploadPreflight {
   account: string
+  /** Part of the ledger scope, with the numeric user id. */
+  apiHost: string
   client: RawbackClient
   endpoint: string
   files: UploadFile[]
   password: string
   quotaBytes: number
   usedBytes: number
+  userId: number | string
   username: string
 }
 
@@ -99,7 +107,6 @@ interface UploadFailure {
   file: UploadFile
 }
 
-const REMOTE_QUERY_BATCH_SIZE = 200
 const FALLBACK_BYTES_PER_SECOND = 10_000_000 / 8
 
 function canonicalEndpoint(value: string): string {
@@ -261,48 +268,43 @@ async function preflight(
 
   return {
     account: account.slug,
+    apiHost: client.http.apiHost,
     client,
     endpoint: canonicalEndpoint(sftp.endpoint),
     files: await scanUploadPath(options.path),
     password: sftp.password,
     quotaBytes: Number(account.storageQuotaBytes),
     usedBytes: Number(account.storageUsedBytes),
+    userId: account.id,
     username: sftp.username,
   }
 }
 
+/** The server's image id for each file it already holds, keyed by client key. */
 async function remoteIdentities(
   client: RawbackClient,
   files: UploadFile[],
   dependencies: UploadCommandDependencies,
-): Promise<Set<string>> {
-  const result = new Set<string>()
+): Promise<Map<string, number>> {
   const candidates = files.filter(
     (file): file is UploadFile & { capturedAt: string; clientKey: string } =>
       Boolean(file.capturedAt && file.clientKey),
   )
   try {
-    for (let index = 0; index < candidates.length; index += REMOTE_QUERY_BATCH_SIZE) {
-      const identities = candidates.slice(index, index + REMOTE_QUERY_BATCH_SIZE).map((file) => ({
+    return await matchUploadIdentities(
+      client.graphql,
+      candidates.map((file) => ({
         clientKey: file.clientKey,
         originalFilename: file.basename,
         capturedAt: file.capturedAt,
-      }))
-      const response = await client.graphql.query({
-        query: ExistingUploadIdentitiesDocument,
-        variables: { identities },
-      })
-      if (response.error) throw response.error
-      if (!response.data) throw new Error('Remote duplicate check did not return image data')
-      for (const match of response.data.existingUploadIdentities) result.add(match.clientKey)
-    }
+      })),
+    )
   } catch {
     commandOutput(dependencies).warning(
       'Remote duplicate checking is unavailable; continuing with SFTP verification.',
     )
-    result.clear()
+    return new Map()
   }
-  return result
 }
 
 async function identifyFiles(
@@ -310,6 +312,7 @@ async function identifyFiles(
   dependencies: UploadCommandDependencies,
   metadataConcurrency?: number,
 ): Promise<UploadFile[]> {
+  if (files.length === 0) return []
   const sidecarPath = await findBundledExiftoolPath()
   const extractor = dependencies.identityExtractor ?? extractUploadIdentities
   const keyed = files.map((file) => ({ file, clientKey: crypto.randomUUID() }))
@@ -398,6 +401,7 @@ async function uploadRound(
   dependencies: UploadCommandDependencies,
   progress: UploadProgressController,
   shouldStop: () => boolean,
+  uploaded: UploadFile[],
 ): Promise<{ failures: UploadFailure[]; uploadedBytes: number }> {
   const failures: UploadFailure[] = []
   let uploadedBytes = 0
@@ -414,6 +418,7 @@ async function uploadRound(
           progress.update(file, bytes)
         })
         state.setFileStatus(persisted, 'completed')
+        uploaded.push(file)
         uploadedBytes += file.size
         progress.complete(file)
       } catch (error) {
@@ -459,21 +464,50 @@ export async function runUpload(
   const state = options.dryRun
     ? await UploadState.openReadonly(statePath)
     : await UploadState.open(statePath)
+  const acks = await UploadAcknowledgements.open({
+    path: dependencies.ledgerPath ?? ledgerPathFor(statePath),
+    apiHost: preflightResult.apiHost,
+    accountId: preflightResult.userId,
+    warn: (message) => ui.warning(message),
+  })
 
   try {
-    const identified = collapseLocalIdentities(
-      await identifyFiles(preflightResult.files, dependencies, environment.metadata?.concurrency),
-    )
-    const locallyCompleted = new Set(
-      state
-        ? identified
-            .filter((file) => state.isCompleted(stateFile(preflightResult, file)))
-            .map((file) => file.canonicalPath)
-        : [],
-    )
-    const localPending = identified.filter((file) => !locallyCompleted.has(file.canonicalPath))
+    // What this computer already uploaded is settled before any metadata is
+    // read, so re-selecting a mostly uploaded card costs a stat per file.
+    const review = options.recheck
+      ? { skipped: [], recheck: [], unknown: preflightResult.files }
+      : acks.review(preflightResult.files)
+    let alreadyUploaded = review.skipped.length
+    const identified: UploadFile[] = [...review.recheck]
+    for (const file of await identifyFiles(
+      review.unknown,
+      dependencies,
+      environment.metadata?.concurrency,
+    )) {
+      if (!options.recheck && acks.skipByIdentity(file)) {
+        alreadyUploaded += 1
+      } else if (
+        // The upload-state resume record predates the ledger. Like a transfer
+        // acknowledgement, it is only trusted for photos without a capture
+        // time; the rest go to the server's check, and are recorded from there.
+        !options.recheck &&
+        !file.capturedAt &&
+        state?.isCompleted(stateFile(preflightResult, file))
+      ) {
+        acks.record(file, 'transfer', 'upload')
+        alreadyUploaded += 1
+      } else {
+        identified.push(file)
+      }
+    }
+    const localPending = collapseLocalIdentities(identified)
     const remote = await remoteIdentities(preflightResult.client, localPending, dependencies)
-    const pending = localPending.filter((file) => !file.clientKey || !remote.has(file.clientKey))
+    const pending: UploadFile[] = []
+    for (const file of localPending) {
+      const imageId = file.clientKey ? remote.get(file.clientKey) : undefined
+      if (imageId === undefined) pending.push(file)
+      else acks.record(file, 'server', 'remote', imageId)
+    }
     const pendingBytes = pending.reduce((sum, file) => sum + file.size, 0)
     const remainingQuota = Math.max(0, preflightResult.quotaBytes - preflightResult.usedBytes)
     if (pendingBytes > remainingQuota) {
@@ -492,7 +526,7 @@ export async function runUpload(
       const source = estimate?.source ?? '10 Mbps fallback'
       ui.document(
         uploadDryRunDocument({
-          completed: locallyCompleted.size,
+          alreadyUploaded,
           estimatedSeconds: pendingBytes / rate,
           existingRemote: remote.size,
           files: pending.length,
@@ -505,8 +539,9 @@ export async function runUpload(
     }
 
     if (!state) throw new Error('Unable to open upload progress database')
+    await acks.flush()
     if (pending.length === 0) {
-      ui.info('Nothing to upload; all supported files are already complete or remote.')
+      ui.info('Nothing to upload; all supported files are already uploaded or remote.')
       return
     }
 
@@ -548,6 +583,7 @@ export async function runUpload(
       let totalUploaded = 0
       const progress = new UploadProgressController(pendingBytes, pending.length, ui)
       const permanentFailures: UploadFailure[] = []
+      const uploaded: UploadFile[] = []
       for (let round = 0; round < 3 && remaining.length > 0 && !interrupted; round += 1) {
         const result = await uploadRound(
           remaining,
@@ -558,6 +594,7 @@ export async function runUpload(
           dependencies,
           progress,
           () => interrupted,
+          uploaded,
         )
         totalUploaded += result.uploadedBytes
         const reconnectable = result.failures.filter(({ error }) => isConnectionFailure(error))
@@ -580,6 +617,12 @@ export async function runUpload(
         )
       }
       await progress.finish()
+      const confirmation = await acks.acknowledge(preflightResult.client.graphql, uploaded)
+      if (confirmation.unconfirmed > 0) {
+        ui.warning(
+          `Rawback did not confirm ${confirmation.unconfirmed} uploaded photo${confirmation.unconfirmed === 1 ? '' : 's'}; ${confirmation.unconfirmed === 1 ? 'it' : 'they'} will be uploaded again next time.`,
+        )
+      }
       for (const failure of permanentFailures) {
         state.setFileStatus(
           stateFile(preflightResult, failure.file),
@@ -597,8 +640,10 @@ export async function runUpload(
       ui.document(
         uploadSummaryDocument({
           cancelled: interrupted,
+          confirmed: confirmation.confirmed,
           failedFiles: permanentFailures.length,
           totalBytes: totalUploaded,
+          unconfirmed: confirmation.unconfirmed,
         }),
       )
       if (interrupted) throw new Error('Upload cancelled')

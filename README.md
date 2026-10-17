@@ -473,13 +473,14 @@ anything is written.
 
 Rawback stores local state under `~/.rawback/`:
 
-| File                | Purpose                                                        |
-| ------------------- | -------------------------------------------------------------- |
-| `credentials.json`  | Access and refresh tokens per environment, from `rawback auth` |
-| `config.yml`        | Environments, optional hosts, metadata workers, and SFTP       |
-| `upload-state.json` | Shared upload queue, history, and trusted host keys            |
-| `cameras.json`      | Saved Canon cameras, shared with Rawback Desktop               |
-| `logs/`             | Rolling JSON diagnostics, shared with Rawback Desktop          |
+| File                  | Purpose                                                        |
+| --------------------- | -------------------------------------------------------------- |
+| `credentials.json`    | Access and refresh tokens per environment, from `rawback auth` |
+| `config.yml`          | Environments, optional hosts, metadata workers, and SFTP       |
+| `upload-state.json`   | Shared upload queue, history, and trusted host keys            |
+| `upload-ledger.jsonl` | Files already in your library, shared with Rawback Desktop     |
+| `cameras.json`        | Saved Canon cameras, shared with Rawback Desktop               |
+| `logs/`               | Rolling JSON diagnostics, shared with Rawback Desktop          |
 
 `cameras.json` is shared with the Rawback desktop app, so both can reach the same
 camera without pairing twice. It holds a camera password only when you pass

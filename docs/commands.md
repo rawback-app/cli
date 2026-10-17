@@ -670,6 +670,7 @@ rawback photos upload --path <file-or-directory> [options]
 | `--path <path>`          | Required image/RAW file or recursively scanned directory    | —       |
 | `--concurrency <number>` | Parallel SFTP transfers; integer from 1 through 16          | `4`     |
 | `--dry-run`              | Report pending/skipped files, bytes, and estimated duration | `false` |
+| `--recheck`              | Ignore local upload history; ask the server about each file | `false` |
 
 Upload setup and safety behavior are covered in
 [Configuration and uploads](configuration.md). Unsupported files are skipped
@@ -678,6 +679,13 @@ supported files. Exact duplicates use the filename plus the locally extracted
 EXIF capture time; duplicate-check failures do not block the SFTP upload.
 Local EXIF workers are controlled separately by `metadata.concurrency` in the
 shared configuration file.
+
+After the transfer, the server is asked which uploaded photos it now holds; the
+summary reports them as Confirmed, and any it does not have as Unconfirmed (they
+upload again next time). Acknowledged files are remembered in
+`~/.rawback/upload-ledger.jsonl`, shared with Rawback Desktop, so the next run
+skips them before reading metadata; see
+[Upload acknowledgements](configuration.md#upload-acknowledgements).
 
 ## `rawback spots`
 
