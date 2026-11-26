@@ -1,4 +1,3 @@
-import { RawbackGraphqlError } from '@rawback/sdk'
 import { AuthStatusDocument, type AuthStatusQuery } from '@rawback/sdk'
 
 import { type RawbackClient, createRawbackClient } from './client.ts'
@@ -19,6 +18,7 @@ import {
   readCredentials,
   writeCredentials,
 } from './credentials.ts'
+import { isSessionRejected } from './explain-error.ts'
 import { authStatusDocument } from './features/auth/view.ts'
 import {
   DEFAULT_API_HOST,
@@ -130,14 +130,6 @@ function createClient(
   })
 }
 
-function isUnauthorizedError(error: unknown): boolean {
-  if (!(error instanceof RawbackGraphqlError)) return false
-  return error.errors.some((item) => {
-    const code = item.extensions?.code
-    return code === 401 || code === '401' || code === 'UNAUTHENTICATED'
-  })
-}
-
 async function queryStatus(
   environment: ResolvedEnvironment,
   credentials: Credentials | null,
@@ -151,7 +143,7 @@ async function queryStatus(
   const result = await client.graphql.query({ query: AuthStatusDocument })
 
   if (result.error) {
-    if (isUnauthorizedError(result.error)) {
+    if (isSessionRejected(result.error)) {
       return { kind: 'invalid' }
     }
     throw result.error
