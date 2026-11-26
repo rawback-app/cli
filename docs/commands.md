@@ -42,14 +42,18 @@ A failed command prints what went wrong on standard error, followed by a
 status. Failures of a request to the API carry its trace ID, which identifies
 the request in the server's logs; quote it when reporting a problem.
 
-| Failure                                           | Hint                                               |
-| ------------------------------------------------- | -------------------------------------------------- |
-| The session expired and could not be refreshed    | Run `rawback auth --force` (with `--env` if given) |
-| The API could not be reached                      | Check the connection and `rawback config view`     |
-| The API answered 404, or not with an API response | Check the API host with `rawback config view`      |
-| The API is rate-limiting                          | Wait a minute and try again                        |
-| The API failed (HTTP 5xx)                         | Try again; report the trace ID if it persists      |
-| The account must confirm its email address first  | Open the confirmation link Rawback emailed         |
+| Failure                                              | Hint                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| The session expired and could not be refreshed       | Run `rawback auth --force` (with `--env` when one was given)              |
+| The API could not be reached                         | Check your internet connection and the API host (`rawback config view`)   |
+| The connection dropped before a reply came           | Try again, but first check whether a change you were making was made      |
+| The API's TLS certificate was not trusted            | A proxy that intercepts HTTPS may be in the way; check the API host       |
+| The API answered 404, or with something not its JSON | Check the API host with `rawback config view`; a proxy may be in the way  |
+| The API refused the request (HTTP 403, no message)   | Report it with the trace ID; signing in again may also help               |
+| The request timed out (HTTP 408)                     | Check your internet connection, then try again                            |
+| The API is rate-limiting (HTTP 429)                  | Wait a minute, then try again                                             |
+| The API failed (HTTP 5xx)                            | Usually temporary; try again, and report the trace ID if it keeps failing |
+| The account must confirm its email address first     | Open the confirmation link Rawback emailed you, then try again            |
 
 Errors the server explains itself (a missing album, a suspended account) keep
 the server's message.

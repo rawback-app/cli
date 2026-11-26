@@ -4382,7 +4382,10 @@ export function createProgram(version: string, output = new CommandOutput()): Ar
     )
     .strict()
     .fail((message, error) => {
-      output.error(error ? describeError(error) : message, "Run 'rawback --help' for usage.")
+      // Validation errors get the usage hint; anything else that lands here
+      // (a handler rejecting outside `runCommand`) keeps its own hint.
+      const explained = error ? explainError(error) : { message, hint: undefined }
+      output.error(explained.message, explained.hint ?? "Run 'rawback --help' for usage.")
       process.exitCode = 1
     })
 }

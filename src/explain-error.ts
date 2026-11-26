@@ -44,19 +44,21 @@ const UNAUTHENTICATED_CODES = new Set<unknown>([401, '401', 'UNAUTHENTICATED'])
 /** Runtime error codes for a request that never reached the server. */
 const UNREACHABLE_CODES = new Set([
   'ConnectionRefused',
-  'ConnectionClosed',
   'FailedToOpenSocket',
   'ECONNREFUSED',
-  'ECONNRESET',
   'ENOTFOUND',
   'EAI_AGAIN',
   'EHOSTUNREACH',
   'ENETUNREACH',
-  'ETIMEDOUT',
   'ERR_PROXY_TUNNEL',
   'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_SOCKET',
 ])
+
+/**
+ * Runtime error codes for a connection that dropped, possibly after the
+ * request was sent: a change may have been made even though no reply came.
+ */
+const LOST_CODES = new Set(['ConnectionClosed', 'ECONNRESET', 'ETIMEDOUT', 'UND_ERR_SOCKET'])
 
 /** Runtime error codes for a server whose TLS certificate was not trusted. */
 const CERTIFICATE_CODES = new Set([
@@ -174,23 +176,36 @@ function signInCommand(): string {
     : `rawback --env ${environment} auth --force`
 }
 
-/** The runtime's network error code, looking through `cause` wrappers. */
+function isNetworkCode(code: string): boolean {
+  return UNREACHABLE_CODES.has(code) || LOST_CODES.has(code) || CERTIFICATE_CODES.has(code)
+}
+
+function urlOf(value: unknown): URL | undefined {
+  if (typeof value !== 'string') return undefined
+  try {
+    return new URL(value)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The runtime's network error code and the URL it was for, looking through
+ * `cause` wrappers: a wrapper may carry the code while the error it wraps
+ * carries the URL, so each is taken from the first level that has it.
+ */
 function networkCodeOf(error: FailureShape): { code: string; url: URL | undefined } | undefined {
+  let code: string | undefined
+  let url: URL | undefined
   let current: FailureShape | undefined = error
   for (let depth = 0; current !== undefined && depth < 4; depth += 1) {
-    const code = nonEmpty(current.code)
-    if (code && (UNREACHABLE_CODES.has(code) || CERTIFICATE_CODES.has(code))) {
-      let url: URL | undefined
-      try {
-        url = typeof current.path === 'string' ? new URL(current.path) : undefined
-      } catch {
-        url = undefined
-      }
-      return { code, url }
-    }
+    const candidate = nonEmpty(current.code)
+    if (code === undefined && candidate !== undefined && isNetworkCode(candidate)) code = candidate
+    url ??= urlOf(current.path)
+    if (code !== undefined && url !== undefined) break
     current = current.cause === undefined ? undefined : shapeOf(current.cause)
   }
-  return undefined
+  return code === undefined ? undefined : { code, url }
 }
 
 /**
@@ -206,6 +221,12 @@ function explainNetworkFailure(error: FailureShape): ErrorExplanation | undefine
     return {
       message: `Could not verify the TLS certificate of the Rawback API at ${host} (${failure.code}).`,
       hint: `A proxy that intercepts HTTPS may be in the way. ${CHECK_API_HOST}`,
+    }
+  }
+  if (LOST_CODES.has(failure.code)) {
+    return {
+      message: `The connection to the Rawback API at ${host} was lost (${failure.code}).`,
+      hint: 'Check your internet connection, then try again. If you were changing something, check whether the change was made before repeating it.',
     }
   }
   return {
@@ -243,7 +264,9 @@ function explainHttpFailure(error: FailureShape): ErrorExplanation | undefined {
   if (status === 403) {
     return {
       message: 'The Rawback API refused this request for this account (HTTP 403).',
-      hint: `Sign in again with '${signInCommand()}'. If it still fails, report it with the trace ID.`,
+      // Signing in again fixes a failed account lookup, but not a firewall or
+      // an IP block, which look the same, and it replaces working credentials.
+      hint: `If it keeps happening, report it with the trace ID. Signing in again with '${signInCommand()}' may also help.`,
     }
   }
   if (status === 404) {
@@ -253,8 +276,11 @@ function explainHttpFailure(error: FailureShape): ErrorExplanation | undefined {
     }
   }
   if (status < 300) {
-    // A 2xx with no GraphQL data: the body was not the API's JSON at all, which
-    // is what a proxy, a captive portal or the wrong host sends.
+    // GraphQL errors without a message are the server's answer, just a terse
+    // one: the original message stands.
+    if (graphqlErrorsOf(error).length > 0) return undefined
+    // A 2xx with no GraphQL data or errors: the body was not the API's JSON at
+    // all, which is what a proxy, a captive portal or the wrong host sends.
     return {
       message: `The server answered, but not with a Rawback API response (HTTP ${status}).`,
       hint: `A proxy or captive portal may be in the way. ${CHECK_API_HOST}`,
