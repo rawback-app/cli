@@ -205,4 +205,45 @@ describe('explainError', () => {
       `The Rawback API failed to answer (HTTP 502). Trace ID: ${TRACE}.`,
     )
   })
+
+  test('leaves a camera that answers 401 or 500 to its own message', () => {
+    // `CCAPIError` from @rawback/ccapi-js carries a numeric status too.
+    for (const status of [401, 500]) {
+      const camera = Object.assign(new Error('Unauthorized: the camera refused the password'), {
+        name: 'CCAPIError',
+        status,
+      })
+      expect(isSessionRejected(camera)).toBe(false)
+      expect(explainError(camera)).toEqual({
+        message: 'Unauthorized: the camera refused the password',
+      })
+    }
+  })
+
+  test('treats GraphQL UNAUTHENTICATED as the session even with a reason', () => {
+    const error = graphqlFailure(200, [
+      {
+        message: 'token expired',
+        extensions: { code: 'UNAUTHENTICATED', reason: 'token_expired' },
+      },
+    ])
+    expect(isSessionRejected(error)).toBe(true)
+    expect(explainError(error).hint).toBe("Run 'rawback auth --force' to sign in again.")
+  })
+
+  test('says a 408 timed out rather than rate-limited', () => {
+    expect(explainError(graphqlFailure(408))).toEqual({
+      message: `The request to the Rawback API timed out (HTTP 408). Trace ID: ${TRACE}.`,
+      hint: 'Check your internet connection, then try again.',
+    })
+  })
+
+  test('explains a gateway error page by its status', () => {
+    const error = new JsonResponseError(502, 'https://api.rawback.app/api/v1/x', '<html>502</html>')
+    expect(explainError(error)).toEqual({
+      message: 'The Rawback API failed to answer (HTTP 502).',
+      hint: 'This is usually temporary; try again in a moment. If it keeps failing, report it with the trace ID.',
+    })
+    expect(isSessionRejected(new JsonResponseError(401, '', '<html>'))).toBe(false)
+  })
 })

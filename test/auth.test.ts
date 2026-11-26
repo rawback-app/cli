@@ -689,7 +689,7 @@ describe('auth commands', () => {
       paths.credentialsPath,
     )
 
-    expect(runAuthStatus({ ...paths, fetch: expiredSessionFetch() })).rejects.toThrow(
+    await expect(runAuthStatus({ ...paths, fetch: expiredSessionFetch() })).rejects.toThrow(
       "Authentication has expired. Run 'rawback auth --force' to sign in again.",
     )
   })

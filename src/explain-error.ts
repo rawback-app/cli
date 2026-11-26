@@ -80,7 +80,20 @@ function nonEmpty(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
 
+/**
+ * The SDK's errors for a request to the Rawback API. Only these have their
+ * status read: the camera library's `CCAPIError` carries a `status` too, and a
+ * camera's 401 must not read as an expired Rawback session. The SDK sets each
+ * `name` explicitly, so it survives the minified release build.
+ */
+const API_ERRORS = new Set<unknown>([
+  'RawbackGraphqlError',
+  'RawbackHttpError',
+  'JsonResponseError',
+])
+
 function httpStatusOf(error: FailureShape): number | undefined {
+  if (!API_ERRORS.has(error.name)) return undefined
   const { status } = error
   return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
     ? status
@@ -125,6 +138,7 @@ function serverMessageOf(error: FailureShape): string | undefined {
       .find((message) => message !== undefined)
   }
   if (error.name === 'RawbackHttpError') return nonEmpty(envelopeOf(error).msg)
+  if (error.name === 'JsonResponseError') return undefined
   return nonEmpty(error.message)
 }
 
@@ -136,14 +150,20 @@ function serverMessageOf(error: FailureShape): string | undefined {
  *
  * The API answers an expired or revoked token with HTTP 401 and a REST
  * envelope — not GraphQL's shape, even on `/api/v2/graphql` — so the status is
- * what identifies it. A 401 that names a reason is about something else (a
- * wrong password, say) and keeps the server's message.
+ * what identifies it. An HTTP 401 that names a reason is about something else
+ * (a wrong password, say) and keeps the server's message; a GraphQL
+ * `UNAUTHENTICATED` error means the session whatever reason it adds.
  */
 export function isSessionRejected(error: unknown): boolean {
   const shape = shapeOf(error)
-  if (reasonOf(shape) !== undefined) return false
-  if (httpStatusOf(shape) === 401) return true
-  return graphqlErrorsOf(shape).some((item) => UNAUTHENTICATED_CODES.has(item.extensions?.code))
+  if (graphqlErrorsOf(shape).some((item) => UNAUTHENTICATED_CODES.has(item.extensions?.code))) {
+    return true
+  }
+  return (
+    shape.name !== 'JsonResponseError' &&
+    httpStatusOf(shape) === 401 &&
+    reasonOf(shape) === undefined
+  )
 }
 
 /** `rawback auth --force`, aimed at the environment the command ran against. */
@@ -207,10 +227,16 @@ function explainHttpFailure(error: FailureShape): ErrorExplanation | undefined {
       hint: TRY_AGAIN_LATER,
     }
   }
-  if (status === 429 || status === 408) {
+  if (status === 429) {
     return {
-      message: server ?? `The Rawback API is receiving too many requests (HTTP ${status}).`,
+      message: server ?? 'The Rawback API is receiving too many requests (HTTP 429).',
       hint: 'Wait a minute, then try again.',
+    }
+  }
+  if (status === 408) {
+    return {
+      message: server ?? 'The request to the Rawback API timed out (HTTP 408).',
+      hint: 'Check your internet connection, then try again.',
     }
   }
   if (server !== undefined) return undefined
@@ -255,10 +281,16 @@ function explainFailure(error: unknown): ErrorExplanation {
     }
   }
   if (shape.name === 'JsonResponseError') {
-    return {
-      message: original,
-      hint: `A proxy or captive portal may be in the way. ${CHECK_API_HOST}`,
-    }
+    // An error page from the API's own gateway (a 502, a 429) says more by its
+    // status than by not being JSON.
+    const status = httpStatusOf(shape)
+    const byStatus = status !== undefined && status >= 300 ? explainHttpFailure(shape) : undefined
+    return (
+      byStatus ?? {
+        message: original,
+        hint: `A proxy or captive portal may be in the way. ${CHECK_API_HOST}`,
+      }
+    )
   }
   return explainNetworkFailure(shape) ?? explainHttpFailure(shape) ?? { message: original }
 }

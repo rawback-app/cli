@@ -17,10 +17,10 @@ interface HeaderBag {
 export function traceIdOf(error: unknown): string | undefined {
   const failure = error as { headers?: HeaderBag; traceId?: unknown } | null | undefined
   const headers = failure?.headers
-  if (typeof headers?.get !== 'function') return undefined
-  // The SDK's errors fall back to the ID they sent when the response carries
-  // none: a gateway's error page or a proxy that strips the header, which are
-  // the failures that most need something to quote.
+  const echoed = typeof headers?.get === 'function' ? headers.get(TRACE_ID_HEADER)?.trim() : ''
+  // The SDK's errors fall back to the ID they sent (their `traceId` getter)
+  // when the response carries none: a gateway's error page or a proxy that
+  // strips the header, which are the failures that most need something to quote.
   const sent = typeof failure?.traceId === 'string' ? failure.traceId.trim() : ''
-  return headers.get(TRACE_ID_HEADER)?.trim() || sent || undefined
+  return echoed || sent || undefined
 }
