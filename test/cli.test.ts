@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -202,6 +202,54 @@ describe('describeError', () => {
   test('passes through errors without a trace ID', () => {
     expect(describeError(new Error('plain failure'))).toBe('plain failure')
     expect(describeError('not an error')).toBe('not an error')
+  })
+})
+
+describe('rawback failure hints', () => {
+  test('tells the user to sign in again when the session has expired', async () => {
+    // The API's real answer to an expired session, refresh included: HTTP 401
+    // with a REST envelope, which the SDK can only call "GraphQL request failed".
+    const server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch(request) {
+        const headers = { 'x-trace-id': '07aef34d367806fbbef36b76e86a6582' }
+        const msg = new URL(request.url).pathname.endsWith('/auth/refresh')
+          ? 'invalid refresh token'
+          : 'token has expired'
+        return Response.json({ code: 401, data: null, msg }, { status: 401, headers })
+      },
+    })
+    try {
+      const home = emptyHome()
+      mkdirSync(join(home, '.rawback'), { recursive: true })
+      writeFileSync(
+        join(home, '.rawback', 'config.yml'),
+        `apiHost: http://127.0.0.1:${server.port}\n`,
+      )
+      writeFileSync(
+        join(home, '.rawback', 'credentials.json'),
+        JSON.stringify({ version: 2, token: 'expired', refreshToken: 'expired' }),
+        { mode: 0o600 },
+      )
+      const child = Bun.spawn([process.execPath, 'run', entrypoint, 'memory'], {
+        env: { ...process.env, HOME: home, NO_COLOR: '1' },
+        stderr: 'pipe',
+        stdout: 'pipe',
+      })
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ])
+
+      expect(exitCode).toBe(1)
+      expect(stderr).toContain('Your Rawback session has expired or was signed out.')
+      expect(stderr).toContain('07aef34d367806fbbef36b76e86a6582')
+      expect(stderr).toContain("Hint: Run 'rawback auth --force' to sign in again.")
+      expect(stderr).not.toContain('GraphQL request failed')
+    } finally {
+      await server.stop(true)
+    }
   })
 })
 

@@ -4,21 +4,17 @@ import yargs from 'yargs'
 import type { Argv } from 'yargs'
 
 import { setSelectedEnvironment } from './environment.ts'
+import { explainError } from './explain-error.ts'
 import { LOG_LEVEL_CHOICES, setSelectedLogLevel } from './log-level.ts'
 import { expandHomePath } from './paths.ts'
-import { traceIdOf } from './trace.ts'
 import { CommandOutput } from './ui/output.tsx'
 
 /**
- * Appends the trace ID of a failed request so the user can quote it — the same
- * ID identifies the request in the server's traces. Messages that already
- * embed it (the device authorization errors) are left alone.
+ * The one-line description of a failed command, trace ID included. See
+ * `explainError` for the hint that goes with it.
  */
 export function describeError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  const traceID = traceIdOf(error)
-  if (!traceID || message.includes(traceID)) return message
-  return `${message} Trace ID: ${traceID}.`
+  return explainError(error).message
 }
 
 async function runCommand(
@@ -42,7 +38,8 @@ async function runCommand(
       process.exitCode = 130
       return
     }
-    output.error(describeError(error))
+    const { message, hint } = explainError(error)
+    output.error(message, hint)
     process.exitCode = 1
   }
 }

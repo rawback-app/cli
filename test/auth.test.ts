@@ -663,6 +663,68 @@ describe('auth commands', () => {
     ).rejects.toThrow('Authentication has expired')
   })
 
+  /**
+   * What the API really sends for an expired session, on `/api/v2/graphql`
+   * too: HTTP 401 with a REST envelope rather than GraphQL's `errors`. The
+   * refresh is refused the same way once the refresh token has expired.
+   */
+  function expiredSessionFetch(onRequest?: (url: string) => Response | undefined) {
+    return createFetch((url) => {
+      const handled = onRequest?.(url)
+      if (handled) return handled
+      if (url.endsWith('/api/v1/auth/refresh')) {
+        return Response.json(
+          { code: 401, data: null, msg: 'invalid refresh token' },
+          { status: 401 },
+        )
+      }
+      return Response.json({ code: 401, data: null, msg: 'token has expired' }, { status: 401 })
+    })
+  }
+
+  test('reports an expired session from the HTTP 401 the API sends', async () => {
+    const paths = await temporaryPaths()
+    await writeCredentials(
+      { token: 'expired-token', refreshToken: 'expired-refresh' },
+      paths.credentialsPath,
+    )
+
+    await expect(runAuthStatus({ ...paths, fetch: expiredSessionFetch() })).rejects.toThrow(
+      "Authentication has expired. Run 'rawback auth --force' to sign in again.",
+    )
+  })
+
+  test('signs in again without --force when the API sends HTTP 401', async () => {
+    const paths = await temporaryPaths()
+    await writeCredentials(
+      { token: 'expired-token', refreshToken: 'expired-refresh' },
+      paths.credentialsPath,
+    )
+    const warnings: string[] = []
+
+    await runAuth(
+      {},
+      {
+        ...paths,
+        prompts: unexpectedPrompts(),
+        open: async () => 0,
+        stderr: (message) => warnings.push(message),
+        stdout() {},
+        fetch: expiredSessionFetch((url) => {
+          if (url.endsWith('/token')) return deviceApproved()
+          if (url.endsWith('/api/v1/auth/device/sessions')) return deviceCreated()
+          return undefined
+        }),
+      },
+    )
+
+    expect(warnings.join('\n')).toContain('Stored credentials are expired or invalid')
+    expect(await readCredentials(paths.credentialsPath)).toEqual({
+      token: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+  })
+
   test('does not retry a device-session rate limit response', async () => {
     const paths = await temporaryPaths()
     let requests = 0

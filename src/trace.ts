@@ -15,7 +15,12 @@ interface HeaderBag {
  * startup path — worth ~240ms on `rawback --help`.
  */
 export function traceIdOf(error: unknown): string | undefined {
-  const headers = (error as { headers?: HeaderBag } | null | undefined)?.headers
-  if (typeof headers?.get !== 'function') return undefined
-  return headers.get(TRACE_ID_HEADER)?.trim() || undefined
+  const failure = error as { headers?: HeaderBag; traceId?: unknown } | null | undefined
+  const headers = failure?.headers
+  const echoed = typeof headers?.get === 'function' ? headers.get(TRACE_ID_HEADER)?.trim() : ''
+  // The SDK's errors fall back to the ID they sent (their `traceId` getter)
+  // when the response carries none: a gateway's error page or a proxy that
+  // strips the header, which are the failures that most need something to quote.
+  const sent = typeof failure?.traceId === 'string' ? failure.traceId.trim() : ''
+  return echoed || sent || undefined
 }

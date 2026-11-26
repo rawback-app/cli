@@ -35,6 +35,25 @@ Options that take a local file or directory expand a leading `~` to your home
 directory, so `--path=~/Pictures` works even though most shells leave a tilde
 after `=` unexpanded. `~user` forms are not expanded.
 
+### Errors
+
+A failed command prints what went wrong on standard error, followed by a
+`Hint:` line when there is something to do about it, and exits with a nonzero
+status. Failures of a request to the API carry its trace ID, which identifies
+the request in the server's logs; quote it when reporting a problem.
+
+| Failure                                           | Hint                                               |
+| ------------------------------------------------- | -------------------------------------------------- |
+| The session expired and could not be refreshed    | Run `rawback auth --force` (with `--env` if given) |
+| The API could not be reached                      | Check the connection and `rawback config view`     |
+| The API answered 404, or not with an API response | Check the API host with `rawback config view`      |
+| The API is rate-limiting                          | Wait a minute and try again                        |
+| The API failed (HTTP 5xx)                         | Try again; report the trace ID if it persists      |
+| The account must confirm its email address first  | Open the confirmation link Rawback emailed         |
+
+Errors the server explains itself (a missing album, a suspended account) keep
+the server's message.
+
 ## `rawback auth [status]`
 
 Sign in through the browser:
@@ -43,8 +62,10 @@ Sign in through the browser:
 rawback auth
 ```
 
-If a valid session already exists, the command asks before replacing it.
-`--force` skips both the current-session check and replacement confirmation.
+If a valid session already exists, the command asks before replacing it. An
+expired session, one whose refresh token the API also refuses, is replaced
+without asking. `--force` skips both the current-session check and replacement
+confirmation.
 
 | Option    | Description                                                       |
 | --------- | ----------------------------------------------------------------- |
