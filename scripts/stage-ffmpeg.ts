@@ -21,8 +21,11 @@ import { basename, join } from 'node:path'
  * the slowest thing in the release by an order of magnitude, and one of them
  * silently moved behind an anti-bot interstitial that answers every download
  * with a few kilobytes of HTML under a 200. macOS has no equivalent CDN-hosted
- * build, so it stays on the two established hosts — bounded by the timeout and
- * archive checks below rather than trusted.
+ * build, so both architectures come from osxexperts.net — bounded by the
+ * timeout and archive checks below rather than trusted. The URLs are pinned to
+ * a version because osxexperts keeps superseded builds online; evermeet.cx,
+ * which used to serve Intel, retired its unversioned "latest release" redirect
+ * with a 410, and its versioned files sit behind a far slower mirror.
  */
 const outputRoot = join(import.meta.dir, '..', '.release-artifacts', 'ffmpeg')
 
@@ -66,8 +69,8 @@ const TARGETS: Target[] = [
     executables: ['ffmpeg', 'ffprobe'],
     platform: 'darwin',
     urls: [
-      'https://evermeet.cx/ffmpeg/getrelease/zip',
-      'https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip',
+      'https://www.osxexperts.net/ffmpeg80intel.zip',
+      'https://www.osxexperts.net/ffprobe80intel.zip',
     ],
   },
   {
