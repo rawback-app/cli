@@ -143,10 +143,15 @@ describe('explainError', () => {
     expect(notJson.hint).toContain("'rawback config view'")
   })
 
-  test('suggests signing in again for a bare 403', () => {
+  test('leads a bare 403 with reporting it, not with signing in again', () => {
     expect(explainError(graphqlFailure(403)).hint).toBe(
-      "Sign in again with 'rawback auth --force'. If it still fails, report it with the trace ID.",
+      "If it keeps happening, report it with the trace ID. Signing in again with 'rawback auth --force' may also help.",
     )
+  })
+
+  test('keeps the message of GraphQL errors that have none of their own', () => {
+    const error = graphqlFailure(200, [{ extensions: { code: 'INTERNAL' } }])
+    expect(explainError(error)).toEqual({ message: `GraphQL request failed Trace ID: ${TRACE}.` })
   })
 
   test('names the status of any other refusal', () => {
@@ -160,6 +165,30 @@ describe('explainError', () => {
       message: 'Could not connect to the Rawback API at http://localhost:23164 (ECONNREFUSED).',
       hint: "Check your internet connection. Run 'rawback config view' to check which API host this environment uses.",
     })
+  })
+
+  test('says a dropped connection was lost, since the change may have been made', () => {
+    const error = Object.assign(new Error('The socket connection was closed unexpectedly'), {
+      code: 'ECONNRESET',
+      path: 'https://api.rawback.app/api/v2/graphql',
+    })
+    expect(explainError(error)).toEqual({
+      message:
+        'The connection to the Rawback API at https://api.rawback.app was lost (ECONNRESET).',
+      hint: 'Check your internet connection, then try again. If you were changing something, check whether the change was made before repeating it.',
+    })
+  })
+
+  test('takes the URL from a wrapped error when the wrapper has only the code', () => {
+    const error = Object.assign(
+      new Error('request failed', {
+        cause: { path: 'https://api.rawback.app/api/v1/photos' },
+      }),
+      { code: 'ECONNREFUSED' },
+    )
+    expect(explainError(error).message).toBe(
+      'Could not connect to the Rawback API at https://api.rawback.app (ECONNREFUSED).',
+    )
   })
 
   test('finds a network code behind a wrapping error', () => {
