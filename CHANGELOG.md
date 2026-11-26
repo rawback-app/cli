@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.17](https://github.com/rawback-app/cli/compare/v1.0.16...v1.0.17) (2026-11-26)
+
+
+### Bug Fixes
+
+* **release:** fetch Intel macOS ffmpeg from osxexperts after evermeet's 410 ([#96](https://github.com/rawback-app/cli/issues/96)) ([a9c4ebe](https://github.com/rawback-app/cli/commit/a9c4ebe5979022204da43f33becae8c5d8a1f586))
+
 ## [1.0.16](https://github.com/rawback-app/cli/compare/v1.0.15...v1.0.16) (2026-11-26)
 
 
