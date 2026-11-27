@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.18](https://github.com/rawback-app/cli/compare/v1.0.17...v1.0.18) (2026-11-27)
+
+
+### Miscellaneous
+
+* install shelltime agy and cursor hooks ([#98](https://github.com/rawback-app/cli/issues/98)) ([ecc2112](https://github.com/rawback-app/cli/commit/ecc2112408dbf68b0ac806d87ac0de4aa530c5d0))
+
 ## [1.0.17](https://github.com/rawback-app/cli/compare/v1.0.16...v1.0.17) (2026-11-26)
 
 
